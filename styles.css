@@ -374,3 +374,42 @@ button { font-family: inherit; cursor: pointer; }
 }
 .now-divider.night { color: var(--anim); }
 .now-divider.night::before, .now-divider.night::after { background: var(--anim); }
+
+/* ---- Leaflet map ---- */
+.map-wrap { display: flex; flex-direction: column; position: relative; }
+#leafletMap {
+  height: calc(100vh - 210px - var(--safe-top) - var(--safe-bottom));
+  min-height: 320px;
+  background: #0a0d12;
+  border-top: 1px solid var(--line);
+}
+.leaflet-container { background: #0a0d12; font-family: var(--mono); }
+.leaflet-control-attribution {
+  background: rgba(13,17,23,.7) !important; color: var(--muted) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a { color: var(--muted) !important; }
+.leaflet-bar a {
+  background: var(--card) !important; color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+.geo-pin {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(13,17,23,.92); border: 2px solid var(--green);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.5);
+}
+.geo-self {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--green); border: 3px solid #fff;
+  box-shadow: 0 0 12px rgba(63,185,80,.8);
+}
+.locate-btn {
+  position: absolute; right: 12px; bottom: 18px; z-index: 800;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+.point-event {
+  font-size: 0.85rem; padding: 6px 0; border-top: 1px solid var(--line);
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; cursor: pointer;
+}
+.pe-time { font-family: var(--mono); color: var(--amber-2); font-weight: 700; }

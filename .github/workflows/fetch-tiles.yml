@@ -1,0 +1,26 @@
+name: Fetch OSM tiles for offline map
+
+# Одноразово (и при смене bbox): вежливо скачать тайлы фестивальной зоны
+# и закоммитить в assets/tiles/. Песочница разработки не имеет доступа к OSM.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch tiles (politely)
+        run: python3 scripts/fetch_tiles.py
+      - name: Commit tiles
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/tiles/
+          git diff --cached --quiet || { git commit -m "Офлайн-тайлы OSM фестивальной зоны (z13-18)"; git push; }

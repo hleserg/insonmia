@@ -30,14 +30,14 @@ jobs:
       - name: Build data/program.json from the site export
         run: python3 scripts/scrape_site.py build
 
-      - name: Refresh data/map.json from Google My Maps (non-fatal)
-        run: python3 scripts/scrape_site.py map || echo "map refresh failed — keeping previous map.json"
+      - name: Refresh data/geo.json from Google My Maps (non-fatal)
+        run: python3 scripts/scrape_site.py map || echo "map refresh failed — keeping previous geo.json"
 
       - name: Commit if changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/program.json data/map.json
+          git add data/program.json data/geo.json tests/fixtures/festival_map.kml
           if git diff --cached --quiet; then
             echo "Programme unchanged — nothing to commit."
           else
