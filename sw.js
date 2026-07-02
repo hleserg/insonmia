@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v2';
+const CACHE = 'insomnia-2026-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   'app.js',
   'vendor/xlsx.full.min.js',
   'data/program.json',
+  'data/map.json',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -36,7 +37,7 @@ self.addEventListener('fetch', (event) => {
 
   // Network-first for the program data so "check for update" works online,
   // with cache fallback when offline.
-  if (url.pathname.endsWith('data/program.json')) {
+  if (url.pathname.endsWith('data/program.json') || url.pathname.endsWith('data/map.json')) {
     event.respondWith(
       fetch(req).then(async (res) => {
         if (!res.ok) {

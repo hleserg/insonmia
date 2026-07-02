@@ -12,6 +12,7 @@ const LS = {
 
 const state = {
   program: null,
+  map: null,          // data/map.json: слои карты + матчинг площадок
   view: 'now',
   day: null,          // ISO date string
   type: 'all',        // all | program | animation
@@ -81,7 +82,21 @@ async function loadProgram() {
   return res.json();
 }
 
+async function loadMap() {
+  try {
+    const res = await fetch('data/map.json', { cache: 'no-cache' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
 function eventById(id) { return state.program.events.find(e => e.id === id); }
+function venuePoint(venue) {
+  return state.map && state.map.venuePoints ? state.map.venuePoints[venue] : null;
+}
+function gmapsUrl(pt) {
+  return `https://www.google.com/maps/search/?api=1&query=${pt.lat},${pt.lng}`;
+}
 
 /* ---------- rendering ---------- */
 function eventTypeLabel(t) { return t === 'animation' ? 'Анимация' : 'Программа'; }
@@ -168,11 +183,62 @@ function render() {
   $('#favBadge').textContent = liveFavCount();
   const content = $('#content');
   content.innerHTML = '';
-  $('#filters').classList.toggle('hidden', state.view === 'favorites');
+  $('#filters').classList.toggle('hidden', state.view === 'favorites' || state.view === 'map');
 
   if (state.view === 'now') return renderNow(content);
   if (state.view === 'schedule') return renderSchedule(content);
   if (state.view === 'favorites') return renderFavorites(content);
+  if (state.view === 'map') return renderMap(content);
+}
+
+function renderMap(root) {
+  if (!state.map || !state.map.layers || !state.map.layers.length) {
+    root.appendChild(emptyState('🗺', 'Карта ещё не загружена. Обновите программу онлайн — и она появится офлайн.'));
+    return;
+  }
+  const q = state.query.toLowerCase();
+  const head = document.createElement('div');
+  head.className = 'update-banner';
+  head.innerHTML = `<span>🗺 ${escapeHtml(state.map.title || 'Карта фестиваля')}</span>`;
+  const openBtn = document.createElement('a');
+  openBtn.className = 'map-link';
+  openBtn.href = state.map.mapUrl;
+  openBtn.target = '_blank';
+  openBtn.rel = 'noopener';
+  openBtn.textContent = 'открыть в Google Maps';
+  head.appendChild(openBtn);
+  root.appendChild(head);
+
+  state.map.layers.forEach(layer => {
+    let pts = layer.points;
+    if (q) pts = pts.filter(p => p.name.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q));
+    if (!pts.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'map-layer';
+    wrap.appendChild(groupLabel(`${layer.name} (${pts.length})`));
+    // туалеты и прочие безымянные дубли — компактно нумеруем
+    const nameCount = {};
+    pts.forEach(p => { nameCount[p.name] = (nameCount[p.name] || 0) + 1; });
+    const seen = {};
+    pts.forEach(p => {
+      let label = p.name;
+      if (nameCount[p.name] > 1) {
+        seen[p.name] = (seen[p.name] || 0) + 1;
+        label = `${p.name} №${seen[p.name]}`;
+      }
+      const el = document.createElement('div');
+      el.className = 'map-point';
+      el.innerHTML = `
+        <div class="map-point-name">
+          <span>${escapeHtml(label)}</span>
+          <a class="map-link" target="_blank" rel="noopener" href="${gmapsUrl(p)}">📍 маршрут</a>
+        </div>
+        ${p.desc ? `<div class="map-point-desc">${escapeHtml(p.desc)}</div>` : ''}
+      `;
+      wrap.appendChild(el);
+    });
+    root.appendChild(wrap);
+  });
 }
 
 function renderNow(root) {
@@ -189,7 +255,7 @@ function renderNow(root) {
 
   if (first && n < first) {
     const days = Math.ceil((first - n) / 86400000);
-    root.appendChild(banner(`🌙 До старта фестиваля ${days} дн. Загляните во вкладку «Программа».`));
+    root.appendChild(banner(`$ sleep ${days}d && ./фестиваль — до старта ${days} дн. 🌙`));
   } else if (last && n > last) {
     root.appendChild(banner('Фестиваль завершён. Спасибо, что были с нами! ✨'));
   }
@@ -210,7 +276,7 @@ function renderNow(root) {
   }
 
   if (!live.length && !soon.length) {
-    root.appendChild(emptyState('🌙', 'Сейчас ничего не идёт и впереди тоже пусто.'));
+    root.appendChild(emptyState('🌙', '$ ps aux | grep событие → пусто. Спокойной ночи.'));
   }
 }
 
@@ -222,7 +288,7 @@ function renderSchedule(root) {
     .sort(sortByStart);
 
   if (!evs.length) {
-    root.appendChild(emptyState('🔍', 'Нет событий по этому фильтру.'));
+    root.appendChild(emptyState('🔍', '$ grep: ничего не найдено по фильтру.'));
     return;
   }
 
@@ -358,6 +424,13 @@ function openDetail(id) {
   const timeStr = e.end ? `${e.start}–${e.end}` : e.start;
   const dt = new Date(e.date + 'T00:00:00');
   const dateStr = `${WD[dt.getDay()]}, ${dt.getDate()} ${MON[dt.getMonth()]} 2026`;
+  const pt = venuePoint(e.venue);
+  const vinfo = state.program.venueInfo
+    ? state.program.venueInfo[e.venue] || state.program.venueInfo[(e.venue || '').split(' / ')[0]]
+    : null;
+  const filmItems = (e.filmDetails && e.filmDetails.length)
+    ? e.filmDetails.map(f => `<li><div class="film-title">${escapeHtml(f.title)}</div>${f.plot ? `<div class="film-plot">${escapeHtml(f.plot)}</div>` : ''}</li>`).join('')
+    : (e.films || []).map(f => `<li><div class="film-title">${escapeHtml(f)}</div></li>`).join('');
   const body = $('#sheetBody');
   body.innerHTML = `
     <div class="detail-time">${dateStr} · ${timeStr}</div>
@@ -366,12 +439,23 @@ function openDetail(id) {
       <span class="tag">📍 ${escapeHtml(e.venue || '—')}</span>
       ${e.age ? `<span class="tag">${escapeHtml(e.age)}</span>` : ''}
       <span class="tag">${eventTypeLabel(e.type)}</span>
+      ${pt ? `<a class="tag" target="_blank" rel="noopener" href="${gmapsUrl(pt)}">🧭 на карте</a>` : ''}
     </div>
     ${e.description ? `<div class="detail-desc">${escapeHtml(e.description)}</div>` : ''}
-    ${e.films && e.films.length ? `
-      <div class="detail-films">
-        <h4>В программе (${e.films.length}):</h4>
-        <ul>${e.films.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+    ${filmItems ? `
+      <div class="detail-section detail-films">
+        <h4>ls фильмы/ (${(e.filmDetails || e.films).length})</h4>
+        <ul>${filmItems}</ul>
+      </div>` : ''}
+    ${e.participants && e.participants.length ? `
+      <div class="detail-section">
+        <h4>кто ведёт</h4>
+        ${e.participants.map(p => `<div class="participant"><div class="p-name">${escapeHtml(p.name)}</div>${p.bio ? `<div class="p-bio">${escapeHtml(p.bio)}</div>` : ''}</div>`).join('')}
+      </div>` : ''}
+    ${vinfo ? `
+      <div class="detail-section">
+        <h4>о площадке</h4>
+        <div class="venue-about">${escapeHtml(vinfo)}</div>
       </div>` : ''}
     <div class="detail-actions">
       <button class="btn ${fav ? 'ghost' : ''}" id="detailFav">${fav ? '★ В избранном' : '☆ Напомнить и добавить'}</button>
@@ -392,10 +476,10 @@ function toggleFav(id) {
   if (state.favs.has(id)) {
     state.favs.delete(id);
     cancelNotification(id);
-    toast('Убрано из избранного');
+    toast('> seat released.');
   } else {
     state.favs.add(id);
-    toast('Добавлено. Напомним за ' + state.lead + ' мин ⏰');
+    toast('> seat acquired. напомним за ' + state.lead + ' мин ⏰');
     scheduleNotification(id);
   }
   saveFavs();
@@ -418,7 +502,7 @@ async function requestNotifications() {
   if (perm === 'granted') {
     // (re)schedule all current favorites
     state.favs.forEach(scheduleNotification);
-    toast('Уведомления включены ✅');
+    toast('> уведомления: ok ✅');
     return true;
   }
   toast('Уведомления отклонены');
@@ -508,6 +592,118 @@ function updateNotifStatus() {
 /* ---------- import / update ---------- */
 // Normalize a parsed workbook (SheetJS) into our program shape.
 // Mirrors scripts/convert_xlsx.py.
+const EXPORT_URL = 'https://insomniafest.ru/export/program/2026';
+const MSK_OFFSET = 3 * 3600;      // фестиваль живёт по Москве (UTC+3)
+const ROLLOVER = 9;               // час<9 — ещё «вчерашний» фестивальный день
+
+function mskParts(ts) {
+  const d = new Date((Number(ts) + MSK_OFFSET) * 1000);
+  const pad = x => String(x).padStart(2, '0');
+  return {
+    y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, day: d.getUTCDate(),
+    h: d.getUTCHours(), mi: d.getUTCMinutes(),
+    hhmm: `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`,
+    iso: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`,
+    utcms: d.getTime(),
+  };
+}
+function festDateOf(ts) {
+  const d = new Date((Number(ts) + MSK_OFFSET - ROLLOVER * 3600) * 1000);
+  const pad = x => String(x).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+function unescapeHtmlEntities(s) {
+  const el = document.createElement('textarea');
+  el.innerHTML = String(s || '');
+  return el.value;
+}
+function cleanText(v) {
+  return normalizeText(unescapeHtmlEntities(v));
+}
+
+// Зеркало convert_export() из scripts/scrape_site.py — чтобы кнопка
+// «Обновить программу» могла разобрать экспорт сайта прямо в браузере.
+function exportToProgram(data) {
+  const events = [];
+  const venueInfo = {};
+  const mkEnd = (startTs, endTs) => {
+    if (!String(endTs || '').match(/^\d+$/)) return null;
+    const s = mskParts(startTs);
+    const e = mskParts(endTs);
+    // время конца привязываем к дате начала (+1 день для послеполуночных)
+    let endMs = Date.UTC(s.y, s.mo - 1, s.day, e.h, e.mi);
+    const startMs = Date.UTC(s.y, s.mo - 1, s.day, s.h, s.mi);
+    if (endMs <= startMs) endMs += 86400000;
+    if (endMs - startMs > 16 * 3600000) return null;
+    return new Date(endMs);
+  };
+  const pushEvent = (kind, title, venue, startTs, endTs, extra) => {
+    title = cleanText(title);
+    venue = cleanText(venue);
+    if (!title || !String(startTs || '').match(/^\d+$/)) return;
+    const s = mskParts(startTs);
+    const endD = mkEnd(startTs, endTs);
+    const pad = x => String(x).padStart(2, '0');
+    const date = festDateOf(startTs);
+    const ev = {
+      id: fnv1a([kind, date, s.hhmm, venue, title].join('|')),
+      type: kind, date, start: s.hhmm,
+      end: endD ? `${pad(endD.getUTCHours())}:${pad(endD.getUTCMinutes())}` : null,
+      startISO: s.iso,
+      endISO: endD ? `${endD.getUTCFullYear()}-${pad(endD.getUTCMonth() + 1)}-${pad(endD.getUTCDate())}T${pad(endD.getUTCHours())}:${pad(endD.getUTCMinutes())}:00` : null,
+      venue, title,
+      description: extra.description || '', films: extra.films || [], age: cleanText(extra.age),
+    };
+    if (extra.filmDetails) ev.filmDetails = extra.filmDetails;
+    if (extra.participants) ev.participants = extra.participants;
+    events.push(ev);
+  };
+  (data.places || []).forEach(place => {
+    const base = normalizeVenue(unescapeHtmlEntities(place.placeName));
+    const pdesc = cleanText(place.placeDescription);
+    if (base && pdesc) venueInfo[base] = pdesc;
+    (place.placeEvents || []).forEach(e => {
+      const loc = cleanText(e.eventLocationPlace);
+      const venue = loc && loc.toLowerCase() !== 'none' ? `${base} / ${loc}` : base;
+      const participants = Array.isArray(e.eventParticipants)
+        ? e.eventParticipants.map(p => ({ name: cleanText(p.participantName), bio: cleanText(p.participantBio) })).filter(p => p.name)
+        : [];
+      pushEvent('program', e.eventTitle, venue, e.eventStart, e.eventEnd, {
+        description: cleanText(e.eventDescription), age: e.eventAge,
+        participants: participants.length ? participants : undefined,
+      });
+    });
+  });
+  (data.screens || []).forEach(screen => {
+    const sname = normalizeVenue(unescapeHtmlEntities(screen.screenName));
+    (screen.screenPrograms || []).forEach(pr => {
+      const films = [];
+      const filmDetails = [];
+      (Array.isArray(pr.programFilms) ? pr.programFilms : []).forEach(f => {
+        const t = cleanText(f.title);
+        if (!t) return;
+        films.push(t);
+        filmDetails.push({ title: t, plot: cleanText(f.plot) });
+      });
+      pushEvent('animation', pr.programTitle, sname, pr.programStart, pr.programEnd, {
+        age: pr.programAge, films, filmDetails: filmDetails.length ? filmDetails : undefined,
+      });
+    });
+  });
+  events.sort((a, b) => (a.startISO || '').localeCompare(b.startISO || '') || a.venue.localeCompare(b.venue));
+  const dates = [...new Set(events.map(e => e.date))].sort();
+  const monthsGen = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  const days = dates.map(d => {
+    const dt = new Date(d + 'T00:00:00');
+    return { date: d, label: `${dt.getDate()} ${monthsGen[dt.getMonth()]}` };
+  });
+  return {
+    festival: 'Бессонница 2026', year: YEAR, source: EXPORT_URL, version: 2,
+    days, venues: [...new Set(events.map(e => e.venue).filter(Boolean))].sort(),
+    venueInfo, events, importedAt: new Date().toISOString(),
+  };
+}
+
 const MONTHS_RU = { 'января':1,'февраля':2,'марта':3,'апреля':4,'мая':5,'июня':6,'июля':7,'августа':8,'сентября':9,'октября':10,'ноября':11,'декабря':12 };
 const NIGHT_ROLLOVER_HOUR = 9;
 const YEAR = 2026;
@@ -660,6 +856,11 @@ function applyImportedProgram(program, msg, persist = true) {
   render();
 }
 
+async function refreshMapQuiet() {
+  const m = await loadMap();
+  if (m) { state.map = m; if (state.view === 'map') render(); }
+}
+
 function resetData() {
   localStorage.removeItem(LS.program);
   localStorage.removeItem(LS.notified);
@@ -758,8 +959,37 @@ function wireUI() {
       // cancel & reschedule triggers
       state.favs.forEach(async id => { await cancelNotification(id); scheduleNotification(id); });
     }
-    toast(`Напоминать за ${state.lead} мин`);
+    toast(`> напомним за ${state.lead} мин`);
     if (state.view === 'favorites') render();
+  });
+
+  // обновление: сайт напрямую (если CORS пустит) -> сервер приложения
+  $('#btnUpdateFromSite').addEventListener('click', async () => {
+    const st = $('#importStatus');
+    st.textContent = '$ curl insomniafest.ru/export… ';
+    let done = false;
+    try {
+      const res = await fetch(EXPORT_URL, { cache: 'no-cache' });
+      if (res.ok) {
+        const program = exportToProgram(await res.json());
+        if (program.events.length > 100) {
+          applyImportedProgram(program, `> обновлено с сайта: ${program.events.length} событий`);
+          done = true;
+        }
+      }
+    } catch { /* CORS или офлайн — падаем на сервер приложения */ }
+    if (done) { refreshMapQuiet(); return; }
+    st.textContent = '$ сайт недоступен напрямую → пробую сервер приложения…';
+    try {
+      const res = await fetch('data/program.json', { cache: 'reload' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const p = await res.json();
+      applyImportedProgram({ ...p, importedAt: new Date().toISOString() },
+        `> обновлено с сервера: ${p.events.length} событий`, false);
+      refreshMapQuiet();
+    } catch {
+      st.textContent = '> офлайн: обновить не вышло, показываю сохранённую программу.';
+    }
   });
 
   // import
@@ -771,18 +1001,6 @@ function wireUI() {
   $('#btnImportUrl').addEventListener('click', () => {
     const url = $('#urlInput').value.trim();
     if (url) importFromUrl(url);
-  });
-  $('#btnRefreshBundled').addEventListener('click', async () => {
-    $('#importStatus').textContent = 'Проверяю обновление…';
-    try {
-      const res = await fetch('data/program.json', { cache: 'reload' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const p = await res.json();
-      applyImportedProgram({ ...p, importedAt: new Date().toISOString() },
-        `Обновлено с сервера: ${p.events.length} событий`, false);
-    } catch (err) {
-      $('#importStatus').textContent = 'Нет соединения с сервером (офлайн).';
-    }
   });
   $('#btnResetData').addEventListener('click', resetData);
 
@@ -820,6 +1038,7 @@ async function boot() {
     return;
   }
   state.day = pickDefaultDay();
+  state.map = await loadMap();
   wireUI();
   render();
   tick();

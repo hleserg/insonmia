@@ -251,15 +251,150 @@ def build(from_file=None):
           f"{len(payload['days'])} days -> {OUT}")
 
 
+MAP_OUT = ROOT / "data" / "map.json"
+MAP_VIEW_URL = "https://www.google.com/maps/d/viewer?mid=1ImxgvK4d6XoIuTXzKlhjGs2Cdv4MrNg"
+# слои без точечной пользы в списке (линии дорог)
+MAP_SKIP_LAYERS = {"Дороги"}
+# ручные алиасы: имя площадки в программе -> имя точки на карте
+VENUE_ALIASES = {
+    "harmonystan": "гармонистан",
+    "детский шатер запуска": "детский шатер",
+}
+_TS_RE = re.compile(r"^\s*\d{1,2}\.\d{1,2}\.\d{4}[ T]\d{1,2}:\d{2}(:\d{2})?\s*$")
+
+
+def _norm_words(name):
+    """(stems, full_words) for fuzzy venue<->placemark matching."""
+    s = clean_text(name).lower().replace("ё", "е")
+    s = re.sub(r"[«»\"()\u2018\u2019\u201c\u201d'’“”.,!?:;/·—–-]", " ", s)
+    s = VENUE_ALIASES.get(s.strip(), s)
+    full = [w for w in s.split() if w and w not in ("2026", "и", "у", "в")]
+    return set(w[:5] for w in full), set(full)
+
+
+def _clean_pm_desc(desc):
+    """Placemark descriptions are mostly editor timestamps — drop those,
+    keep real text; strip CDATA and tags, keep bare https links as text."""
+    if not desc:
+        return ""
+    s = re.sub(r"^<!\[CDATA\[|\]\]>$", "", desc.strip())
+    s = s.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
+    s = re.sub(r"<[^>]+>", "", s)
+    s = clean_text(s)
+    lines = [ln for ln in s.split("\n") if ln.strip() and not _TS_RE.match(ln)]
+    return "\n".join(lines).strip()
+
+
+def parse_kml(kml_text):
+    layers = []
+    for chunk in re.split(r"<Folder>", kml_text)[1:]:
+        m = re.search(r"<name>(.*?)</name>", chunk, re.S)
+        lname = clean_text(re.sub(r"^<!\[CDATA\[|\]\]>$", "", m.group(1).strip())) if m else ""
+        if not lname or lname in MAP_SKIP_LAYERS:
+            continue
+        points = []
+        for pm in re.findall(r"<Placemark>(.*?)</Placemark>", chunk, re.S):
+            if "<Point>" not in pm:
+                continue  # линии/полигоны в списке не нужны
+            nm = re.search(r"<name>(.*?)</name>", pm, re.S)
+            name = clean_text(re.sub(r"^<!\[CDATA\[|\]\]>$", "", nm.group(1).strip())) if nm else ""
+            if not name:
+                continue
+            dm = re.search(r"<description>(.*?)</description>", pm, re.S)
+            desc = _clean_pm_desc(dm.group(1)) if dm else ""
+            cm = re.search(r"<Point>.*?<coordinates>\s*([\d.,\s-]+?)\s*</coordinates>", pm, re.S)
+            if not cm:
+                continue
+            lng, lat = cm.group(1).split(",")[:2]
+            points.append({
+                "name": normalize_venue(name),
+                "desc": desc,
+                "lat": round(float(lat), 6),
+                "lng": round(float(lng), 6),
+            })
+        if points:
+            layers.append({"name": lname, "points": points})
+    return layers
+
+
+def match_venues(layers, venues):
+    """Match programme venue names to map points; returns {venue: point}.
+
+    Правила уверенного матча (score >= 1):
+      - стемы точки полностью покрыты кандидатом (или наоборот, если у
+        кандидата >= 2 слов);
+      - однословный кандидат матчится только ПОЛНЫМ словом (иначе
+        «Беседошная» прилипает к «беседке»).
+    Бонус за совпадение целых слов разруливает ничьи.
+    """
+    all_points = [p for l in layers for p in l["points"]]
+    result = {}
+    for venue in venues:
+        parts = [v.strip() for v in venue.split("/") if v.strip()]
+        candidates = [venue] + parts[::-1]  # полное имя, затем суб-площадка, затем база
+        best, best_score = None, 0.0
+        for cand in candidates:
+            cw, cfull = _norm_words(normalize_venue(cand))
+            if not cw:
+                continue
+            for p in all_points:
+                pw, pfull = _norm_words(p["name"])
+                if not pw:
+                    continue
+                inter = len(cw & pw)
+                if not inter:
+                    continue
+                confident = (
+                    inter == len(pw)
+                    or (inter == len(cw) and len(cw) >= 2)
+                    or (len(cfull) == 1 and cfull & pfull)
+                )
+                score = (1.0 if confident else inter / max(len(cw), len(pw)))                     + inter * 0.01 + len(cfull & pfull) * 0.1
+                if score > best_score:
+                    best, best_score = p, score
+            if best_score >= 1.0:
+                break
+        if best and best_score >= 1.0:
+            result[venue] = {"lat": best["lat"], "lng": best["lng"], "point": best["name"]}
+    return result
+
+
+def build_map(from_file=None):
+    if from_file:
+        kml = Path(from_file).read_text(encoding="utf-8")
+        print(f"read KML from {from_file}: {len(kml)} bytes")
+    else:
+        kml, status = fetch(MAP_KML_URL)
+        print(f"[{status}] KML: {len(kml)} bytes")
+    layers = parse_kml(kml)
+    n_points = sum(len(l["points"]) for l in layers)
+    if n_points < 30:
+        sys.exit(f"map sanity check failed: only {n_points} points — refusing to overwrite")
+    venues = []
+    if OUT.exists():
+        venues = json.loads(OUT.read_text(encoding="utf-8")).get("venues", [])
+    venue_points = match_venues(layers, venues)
+    payload = {
+        "title": "Карта «Бессонницы—2026»",
+        "mapUrl": MAP_VIEW_URL,
+        "layers": layers,
+        "venuePoints": venue_points,
+    }
+    MAP_OUT.parent.mkdir(parents=True, exist_ok=True)
+    MAP_OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    matched = len(venue_points)
+    print(f"wrote {n_points} points in {len(layers)} layers; venue match: {matched}/{len(venues)} -> {MAP_OUT}")
+    unmatched = [v for v in venues if v not in venue_points]
+    if unmatched:
+        print("unmatched venues:", "; ".join(unmatched))
+
+
 def recon_map():
-    """Fetch the festival's Google My Maps KML (layers, placemarks, coords,
-    descriptions) so the offline map section can be built from it."""
     out = ROOT / "debug_html"
     out.mkdir(exist_ok=True)
     body, status = fetch(MAP_KML_URL)
     (out / "festival_map.kml").write_text(body, encoding="utf-8")
     print(f"[{status}] KML: {len(body)} bytes")
-    print(body[:3000])
 
 
 def recon():
@@ -278,13 +413,15 @@ def recon():
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["build", "recon", "map"], nargs="?", default="build")
+    ap.add_argument("mode", choices=["build", "recon", "map", "map-recon"], nargs="?", default="build")
     ap.add_argument("--from", dest="from_file", default=None,
                     help="read export JSON from a local file instead of the network")
     args = ap.parse_args()
     if args.mode == "build":
         build(args.from_file)
     elif args.mode == "map":
+        build_map(args.from_file)
+    elif args.mode == "map-recon":
         recon_map()
     else:
         recon()
