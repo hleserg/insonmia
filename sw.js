@@ -1,10 +1,11 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v9';
+const CACHE = 'insomnia-2026-v10';
 const ASSETS = [
   './',
   'index.html',
   'styles.css',
   'app.js',
+  'core.js',
   'vendor/xlsx.full.min.js',
   'data/program.json',
   'data/geo.json',

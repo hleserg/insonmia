@@ -26,7 +26,8 @@ python3 -m http.server 8099
 node /tmp/drive.cjs   # see "Testing" below — drive scripts are written ad hoc
 ```
 
-There is no bundler, linter, or test framework: vanilla JS + Python stdlib.
+`npm test` runs the unit suite (node:test, zero deps) over `core.js` — the pure
+time/geo logic shared by browser and node — in 4 timezones. No bundler/linter.
 Verification is done by driving the served app with Playwright (mock the clock
 with `page.clock.install({time: new Date('2026-07-09T23:20:00')})` to test the
 festival-night "live" states) and by sanity-checking the regenerated JSON
@@ -69,8 +70,11 @@ Two independent halves share one contract — `data/program.json`:
 - **Time model (app.js):** ALL comparisons via epoch ms — `e._startMs/_endMs`
   (from naive-MSK `startISO` via `epochFromISO`) vs `getNow()`. Never compare
   local Date objects/strings: device may be in any timezone. `getNow()` also
-  serves the `?now=` time simulation (sessionStorage-backed, sim bar UI).
-  Display times via `mskOf(ms)`.
+  serves the `?now=` time simulation — PROD-DISABLED behind `const DEV = false`
+  in app.js (flip for debugging; prod silently ignores ?now=/?mockgeo= and
+  clears their sessionStorage keys). Pure logic lives in `core.js` (loaded
+  first; `window.InsomniaCore` in browser, `require('./core.js')` in tests) —
+  change logic THERE, keep app.js wrappers thin. Display times via `mskOf(ms)`.
 - **Venue placeholder:** the site names one stage with keyboard-mash text
   (`тстцтсттсцтс`); `normalize_venue` in all three converters maps any all-`тсц`
   string to `Сцена (уточняется)`.
