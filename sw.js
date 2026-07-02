@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v10';
+const CACHE = 'insomnia-2026-v11';
 const ASSETS = [
   './',
   'index.html',
@@ -55,8 +55,9 @@ self.addEventListener('fetch', (event) => {
           if (res.ok) {
             const copy = res.clone();
             // кэшируем под каноническим АБСОЛЮТНЫМ URL без параметра
-            // (относительный путь в подпапке GitHub Pages удваивал префикс)
-            caches.open(CACHE).then((c) => c.put(url.origin + url.pathname, copy));
+            // (относительный путь в подпапке GitHub Pages удваивал префикс);
+            // отказ записи (квота) не должен ронять ответ
+            caches.open(CACHE).then((c) => c.put(url.origin + url.pathname, copy)).catch(() => {});
           }
           return res;
         })
@@ -76,7 +77,7 @@ self.addEventListener('fetch', (event) => {
           return cached || res;
         }
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         return res;
       } catch {
         const cached = await caches.match(req);
@@ -93,7 +94,7 @@ self.addEventListener('fetch', (event) => {
     caches.match(req, { ignoreSearch: true }).then((cached) => cached || fetch(req).then((res) => {
       if (res.ok) {
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
       }
       return res;
     }).catch(async () => {

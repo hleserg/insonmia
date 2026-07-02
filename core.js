@@ -32,13 +32,13 @@
   }
 
   function statusOf(e, nowMs) {
+    // все случаи nowMs >= start уже разобраны первыми тремя ветками
     const s = e._startMs, en = e._endMs;
     if (s != null && en != null && nowMs >= s && nowMs < en) return 'live';
     if (s != null && en != null && nowMs >= en) return 'past';
     if (s != null && en == null && nowMs >= s) return 'past';
     const mins = s != null ? (s - nowMs) / 60000 : Infinity;
     if (mins > 0 && mins <= 30) return 'soon';
-    if (s != null && nowMs >= s) return 'past';
     return 'upcoming';
   }
 
