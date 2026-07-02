@@ -125,15 +125,16 @@
     });
   }
 
-  function createGeoWatcher(geolocation, onFix, throttleMs = 10000) {
-    // жизненный цикл watchPosition c троттлингом; clearWatch ровно один раз
+  function createGeoWatcher(geolocation, onFix, throttleMs = 10000, clock = Date.now) {
+    // жизненный цикл watchPosition c троттлингом; clearWatch ровно один раз;
+    // clock инжектируется — тесты проверяют троттлинг детерминированно
     let watchId = null;
-    let lastAt = 0;
+    let lastAt = -Infinity;
     return {
       start() {
         if (!geolocation || watchId != null) return;
         watchId = geolocation.watchPosition(pos => {
-          const t = Date.now();
+          const t = clock();
           if (t - lastAt < throttleMs) return;
           lastAt = t;
           onFix({ lat: pos.coords.latitude, lng: pos.coords.longitude });

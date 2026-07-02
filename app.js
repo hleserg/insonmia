@@ -215,8 +215,8 @@ function render() {
 function renderNow(root) {
   const n = getNow();
   const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
-  const live = evs.filter(e => statusOf(e) === 'live');
-  const upcoming = evs.filter(e => e._startMs > n);
+  const live = window.InsomniaCore.getCurrent(evs, n);
+  const upcoming = window.InsomniaCore.getUpcoming(evs, n); // без горизонта: все будущие
 
   const first = evs[0] ? evs[0]._startMs : null;
   const lastEv = evs[evs.length - 1];
