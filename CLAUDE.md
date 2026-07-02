@@ -104,6 +104,30 @@ Two independent halves share one contract — `data/program.json`:
   rewriting when content (minus meta) is unchanged — no cron commit churn.
   The app shows a quiet «Расписание обновлено» toast when the version changes.
 
+### Notifications & install gate
+
+- Reminder delivery is two-tier: OS-scheduled **Notification Triggers**
+  (`swReg.showNotification({showTrigger})`) when the browser supports them,
+  else the in-app poller `pollNotifications()` (runs on `tick()` every 30s
+  while the app is open). Dedup ids live in localStorage `insomnia.notified`;
+  during time simulation the poller uses an **in-memory** set instead, so sim
+  never poisons real reminders. OS triggers always schedule against real
+  event epochs regardless of simulation. Lead time 5–60 min (`leadSelect`).
+- **Install gate**: in a browser tab (`!isStandalone()`), tapping ⭐ does NOT
+  save — it opens the `#installGate` modal (deliberately on every tap, no
+  "don't show again"), reusing the `beforeinstallprompt` deferred event or
+  showing per-OS instructions. Favourites persist only in standalone mode.
+  Playwright tests emulate standalone via the `navigator.standalone` init
+  script (see Commands).
+
+### Data sanity thresholds (build refuses to overwrite on breach)
+
+- programme: ≥50 daytime AND ≥10 animation events (both `scrape_site.py`
+  and the in-app direct-update button use the same gate);
+- geo: ≥30 points; KML response must contain `<kml` and ≥50 `<Placemark>`
+  before the fixture is even written (Google can serve consent HTML as 200);
+- basemap: ≥10 objects.
+
 ### Map / geo
 
 - `scripts/build_geo.py` converts the My Maps KML (fixture
