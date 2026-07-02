@@ -94,7 +94,7 @@
       <div class="sheet-titlebar">
         <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
         <div class="sheet-titlebar-label">~/событие</div>
-        <button class="icon-btn" data-close aria-label="Закрыть" style="min-width:34px;height:34px;font-size:.9rem;">✕</button>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
       </div>
       <div id="sheetBody" class="sheet-body"></div>
     </div>
@@ -107,7 +107,7 @@
       <div class="sheet-titlebar">
         <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
         <div class="sheet-titlebar-label">~/настройки</div>
-        <button class="icon-btn" data-close aria-label="Закрыть" style="min-width:34px;height:34px;font-size:.9rem;">✕</button>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
       </div>
       <div class="sheet-body">
 
@@ -174,7 +174,7 @@
       <div class="sheet-titlebar">
         <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
         <div class="sheet-titlebar-label">~/установка</div>
-        <button class="icon-btn" data-close aria-label="Закрыть" style="min-width:34px;height:34px;font-size:.9rem;">✕</button>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
       </div>
       <div class="sheet-body">
         <div class="gate-star">☆ → ★</div>
@@ -189,8 +189,9 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <!-- xlsx.full.min.js НЕ грузим на старте: 861 КБ подтягиваются лениво
+       из прекэша при первом импорте Excel (см. ensureXLSX в app.js) -->
   <script src="core.js" defer></script>
-  <script src="vendor/xlsx.full.min.js" defer></script>
   <script src="vendor/leaflet.js" defer></script>
   <script src="map.js" defer></script>
   <script src="app.js" defer></script>

@@ -821,8 +821,22 @@ function workbookToProgram(workbooks) {
   return { festival: 'Бессонница 2026', year: YEAR, version: (state.program?.version || 1) + 1, days, venues, events, importedAt: new Date().toISOString() };
 }
 
+// SheetJS (861 КБ) грузится лениво — только при реальном импорте Excel.
+// Офлайн это тоже работает: vendor/xlsx.full.min.js лежит в прекэше SW.
+function ensureXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/xlsx.full.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('модуль чтения Excel не загрузился'));
+    document.head.appendChild(s);
+  });
+}
+
 async function importFromFiles(fileList) {
-  if (!window.XLSX) { toast('Библиотека чтения Excel не загрузилась'); return; }
+  try { await ensureXLSX(); }
+  catch (err) { toast('Ошибка: ' + err.message); return; }
   const files = Array.from(fileList);
   const workbooks = [];
   for (const f of files) {
@@ -841,6 +855,7 @@ async function importFromFiles(fileList) {
 async function importFromUrl(url) {
   $('#importStatus').textContent = 'Загрузка…';
   try {
+    await ensureXLSX();
     const res = await fetch(url, { cache: 'no-cache' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const buf = await res.arrayBuffer();

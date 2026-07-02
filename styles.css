@@ -111,7 +111,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .tab {
   flex: 1; background: transparent; border: none; color: var(--muted);
-  padding: 10px 2px 11px; font-size: 0.85rem; font-weight: 600;
+  padding: 12px 2px 13px; font-size: 0.85rem; font-weight: 600;
   font-family: var(--mono);
   border-bottom: 2px solid transparent;
   display: inline-flex; align-items: center; justify-content: center; gap: 5px;
@@ -119,6 +119,13 @@ button { font-family: inherit; cursor: pointer; }
 }
 .tab.active { color: var(--green); border-bottom-color: var(--green); }
 .tab.active::before { content: "./"; opacity: 0.7; }
+/* на узких экранах пять вкладок с "./"-префиксом шире 360px и заставляют
+   страницу скроллиться вбок — префикс убираем, ряд ужимаем */
+@media (max-width: 400px) {
+  .tabs { gap: 2px; padding: 6px 6px 0; }
+  .tab { font-size: 0.8rem; }
+  .tab.active::before { content: none; }
+}
 .badge {
   background: var(--amber); color: #1c1503; font-size: 0.7rem; font-weight: 700;
   min-width: 17px; height: 17px; padding: 0 5px; border-radius: 6px;
@@ -143,13 +150,16 @@ button { font-family: inherit; cursor: pointer; }
 .chip-row::-webkit-scrollbar { display: none; }
 .chip {
   flex: 0 0 auto; background: var(--card); border: 1px solid var(--line); color: var(--muted);
-  border-radius: 999px; padding: 6px 12px; font-size: 0.8rem; white-space: nowrap;
+  border-radius: 999px; padding: 0 14px; min-height: var(--tap); font-size: 0.8rem; white-space: nowrap;
   font-family: var(--mono);
+  display: inline-flex; align-items: center;
 }
 .chip.active { color: var(--green); border-color: var(--green-dim); background: var(--card-2); }
 
 /* ---- Content ---- */
-.content { padding: 8px 14px calc(24px + var(--safe-bottom)); }
+/* min-height: сетка приезжает после загрузки данных — без резерва высоты
+   подмена плейсхолдера двигала всю страницу (CLS) */
+.content { padding: 8px 14px calc(24px + var(--safe-bottom)); min-height: 72vh; }
 .loading, .empty {
   text-align: center; color: var(--muted); padding: 40px 20px;
   font-family: var(--mono); font-size: 0.9rem;
@@ -190,12 +200,12 @@ button { font-family: inherit; cursor: pointer; }
   font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .live-tag {
-  background: var(--green); color: #04260f; border-radius: 5px; font-size: 0.66rem;
+  background: var(--green); color: #04260f; border-radius: 5px; font-size: 0.74rem;
   padding: 1px 6px; font-weight: 800; font-family: var(--mono);
 }
 .live-tag::before { content: "> "; }
 .soon-tag {
-  background: var(--amber); color: #1c1503; border-radius: 5px; font-size: 0.66rem;
+  background: var(--amber); color: #1c1503; border-radius: 5px; font-size: 0.74rem;
   padding: 1px 6px; font-weight: 800; font-family: var(--mono);
 }
 .event-title { font-weight: 650; margin: 3px 0 2px; font-size: 0.98rem; }
@@ -228,7 +238,7 @@ button { font-family: inherit; cursor: pointer; }
 .map-point-desc { font-size: 0.83rem; color: var(--muted); margin-top: 4px; white-space: pre-wrap; }
 .map-link {
   flex: 0 0 auto; font-family: var(--mono); font-size: 0.78rem; color: var(--green);
-  text-decoration: none; border: 1px solid var(--green-dim); border-radius: 8px; padding: 5px 9px;
+  text-decoration: none; border: 1px solid var(--green-dim); border-radius: 8px; padding: 11px 12px;
   white-space: nowrap;
 }
 .map-link:active { background: var(--card-2); }
@@ -265,7 +275,10 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
   padding: 4px 10px; font-size: 0.8rem; font-family: var(--mono);
 }
-.detail-meta a.tag { color: var(--green); text-decoration: none; border-color: var(--green-dim); }
+.detail-meta a.tag {
+  color: var(--green); text-decoration: none; border-color: var(--green-dim);
+  padding: 10px 12px; /* ссылка — тап-таргет, обычные теги остаются компактными */
+}
 .detail-desc { font-size: 0.95rem; line-height: 1.55; white-space: pre-wrap; }
 .detail-section { margin-top: 14px; }
 .detail-section h4 {
@@ -349,7 +362,11 @@ button { font-family: inherit; cursor: pointer; }
 }
 .footer-manifest::before { content: "$ "; color: var(--green); }
 .footer-legal { font-size: 0.75rem; color: var(--muted); margin: 4px 0; line-height: 1.5; }
-.footer-legal a { color: var(--green); text-decoration: none; }
+/* тап-зона ссылки ~44px; паддинг компенсирован маржином, вёрстка не едет */
+.footer-legal a {
+  color: var(--green); text-decoration: none;
+  display: inline-block; padding: 15px 8px; margin: -13px -6px;
+}
 
 /* ---- Sim bar / update bar ---- */
 .sim-bar {
@@ -393,6 +410,10 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--card) !important; color: var(--text) !important;
   border-color: var(--line) !important;
 }
+/* зум-кнопки: штатные 30px Leaflet малы для пальца в темноте */
+.leaflet-touch .leaflet-bar a, .leaflet-bar a {
+  width: 42px; height: 42px; line-height: 42px; font-size: 20px;
+}
 .geo-pin {
   width: 28px; height: 28px; border-radius: 50%;
   background: rgba(13,17,23,.92); border: 2px solid var(--green);
@@ -409,7 +430,7 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 4px 16px rgba(0,0,0,.5);
 }
 .point-event {
-  font-size: 0.85rem; padding: 6px 0; border-top: 1px solid var(--line);
+  font-size: 0.85rem; padding: 12px 0; border-top: 1px solid var(--line);
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap; cursor: pointer;
 }
 .pe-time { font-family: var(--mono); color: var(--amber-2); font-weight: 700; }
