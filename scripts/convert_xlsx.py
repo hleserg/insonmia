@@ -38,7 +38,7 @@ MONTHS = {
 }
 YEAR = 2026
 # Hour threshold: times earlier than this belong to the following calendar day.
-NIGHT_ROLLOVER_HOUR = 9
+NIGHT_ROLLOVER_HOUR = 6
 
 
 def parse_sheet_date(sheet_name, title_cell):

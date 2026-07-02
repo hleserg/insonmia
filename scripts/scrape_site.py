@@ -41,9 +41,9 @@ PROGRAM_APP_URL = "https://insomniafest.ru/?js=_js/programApp.v.1782814175"
 YEAR = 2026
 # Festival runs on Moscow time (UTC+3, no DST).
 MSK = timezone(timedelta(hours=3))
-# Times with an hour earlier than this belong to the previous festival day
-# (a 00:30 screening is part of the preceding evening's night block).
-NIGHT_ROLLOVER_HOUR = 9
+# Фестивальные сутки: 06:00 -> 05:59 следующего дня. Всё до 06:00 утра
+# относится к фестивальному дню предыдущей календарной даты.
+NIGHT_ROLLOVER_HOUR = 6
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -221,6 +221,10 @@ def convert_export(data):
     return {
         # the export's title is a generic page title («Программа (2026)»)
         "festival": f"Бессонница {YEAR}",
+        "meta": {
+            "version": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": "insomniafest.ru",
+        },
         "year": YEAR,
         "source": EXPORT_URL,
         "version": 2,
@@ -246,6 +250,19 @@ def build(from_file=None):
         sys.exit(f"sanity check failed: {n_places} programme / {n_anim} animation "
                  "events — refusing to overwrite data/program.json")
     OUT.parent.mkdir(parents=True, exist_ok=True)
+    # meta.version — время выгрузки; чтобы cron не коммитил только из-за неё,
+    # не перезаписываем файл, если контент (без meta) не изменился
+    if OUT.exists():
+        try:
+            prev = json.loads(OUT.read_text(encoding="utf-8"))
+            prev_cmp = {k: v for k, v in prev.items() if k != "meta"}
+            new_cmp = {k: v for k, v in payload.items() if k != "meta"}
+            if "meta" in prev and prev_cmp == new_cmp:
+                print(f"programme unchanged ({len(payload['events'])} events) — keeping "
+                      f"existing {OUT} (version {prev.get('meta', {}).get('version')})")
+                return
+        except (json.JSONDecodeError, OSError):
+            pass
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n",
                    encoding="utf-8")
     print(f"wrote {len(payload['events'])} events "

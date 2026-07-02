@@ -21,6 +21,7 @@ const state = {
   lead: 15,
   deferredInstall: null,
   swReg: null,
+  sim: null,          // {anchor, setAt} — симуляция времени (?now=)
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -40,12 +41,42 @@ function fnv1a(str) {
   return h.toString(16).padStart(8, '0');
 }
 
-function parseISO(s) { return s ? new Date(s.replace(' ', 'T')) : null; }
-function now() { return new Date(); }
+/* ---------- время: единая модель ----------
+   Всё расписание — в московском времени (UTC+3, без DST). Сравнения — только
+   по эпохам (мс UTC), никогда по локальным строкам часов: телефон может быть
+   в любой таймзоне. getNow() — единственный источник «сейчас» (поддерживает
+   симуляцию ?now=). Фестивальные сутки: 06:00 → 05:59 следующего дня. */
+const MSK_MS = 3 * 3600 * 1000;
+const DAY_CUTOFF = 6;
+const pad2 = x => String(x).padStart(2, '0');
 
-function fmtClock(d) {
-  return `${WD[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} · ` +
-    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+function epochFromISO(iso) {
+  // наивная московская ISO-строка -> эпоха
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - MSK_MS;
+}
+function mskOf(ms) {
+  // компоненты московского времени для эпохи
+  const d = new Date(ms + MSK_MS);
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), day: d.getUTCDate(),
+           h: d.getUTCHours(), mi: d.getUTCMinutes(), dow: d.getUTCDay() };
+}
+function getNow() {
+  if (state.sim) return state.sim.anchor + (Date.now() - state.sim.setAt);
+  return Date.now();
+}
+function getFestivalDay(ms) {
+  const p = mskOf(ms - DAY_CUTOFF * 3600 * 1000);
+  return `${p.y}-${pad2(p.mo + 1)}-${pad2(p.day)}`;
+}
+function fmtClock(ms) {
+  const p = mskOf(ms);
+  return `${WD[p.dow]} ${p.day} ${MON[p.mo]} · ${pad2(p.h)}:${pad2(p.mi)} мск`;
+}
+function fmtSim(ms) {
+  const p = mskOf(ms);
+  return `${p.day} ${MON[p.mo]}, ${pad2(p.h)}:${pad2(p.mi)}`;
 }
 
 function toast(msg, ms = 2600) {
@@ -69,6 +100,18 @@ function getNotified() {
 function setNotified(set) { localStorage.setItem(LS.notified, JSON.stringify([...set])); }
 
 /* ---------- data loading ---------- */
+function decorateProgram(p) {
+  (p.events || []).forEach(e => {
+    e._startMs = epochFromISO(e.startISO);
+    e._endMs = epochFromISO(e.endISO);
+    e._festDay = e._startMs != null ? getFestivalDay(e._startMs) : e.date;
+  });
+  // дни пересчитываем из событий (фестивальный день вычисляется, не хранится)
+  const days = [...new Set((p.events || []).map(e => e._festDay).filter(Boolean))].sort();
+  p._days = days;
+  return p;
+}
+
 async function loadProgram() {
   // Prefer a user-imported/updated program, else the bundled file.
   const stored = localStorage.getItem(LS.program);
@@ -102,15 +145,23 @@ function gmapsUrl(pt) {
 function eventTypeLabel(t) { return t === 'animation' ? 'Анимация' : 'Программа'; }
 
 function statusOf(e) {
-  const s = parseISO(e.startISO), en = parseISO(e.endISO);
-  const n = now();
-  if (s && en && n >= s && n < en) return 'live';
-  if (s && en && n >= en) return 'past';
-  if (s && !en && n >= s) return 'past';
-  const mins = s ? (s - n) / 60000 : Infinity;
+  const s = e._startMs, en = e._endMs;
+  const n = getNow();
+  if (s != null && en != null && n >= s && n < en) return 'live';
+  if (s != null && en != null && n >= en) return 'past';
+  if (s != null && en == null && n >= s) return 'past';
+  const mins = s != null ? (s - n) / 60000 : Infinity;
   if (mins > 0 && mins <= 30) return 'soon';
-  if (s && n >= s) return 'past';
+  if (s != null && n >= s) return 'past';
   return 'upcoming';
+}
+
+function nightInfo(e) {
+  // событие «после полуночи» (00:00–05:59 мск) — ночь предыдущего фест-дня
+  if (e._startMs == null) return null;
+  const p = mskOf(e._startMs);
+  if (p.h >= DAY_CUTOFF) return null;
+  return { marker: `🌙 ночь на ${WD[p.dow]}` };
 }
 
 function eventCard(e) {
@@ -121,12 +172,14 @@ function eventCard(e) {
   el.dataset.id = e.id;
 
   const timeStr = e.end ? `${e.start}–${e.end}` : e.start;
+  const night = nightInfo(e);
   let tag = '';
   if (st === 'live') tag = '<span class="live-tag">сейчас</span>';
   else if (st === 'soon') {
-    const mins = Math.max(1, Math.round((parseISO(e.startISO) - now()) / 60000));
+    const mins = Math.max(1, Math.round((e._startMs - getNow()) / 60000));
     tag = `<span class="soon-tag">через ${mins} мин</span>`;
   }
+  if (night) tag += ` <span class="night-tag">${night.marker}</span>`;
 
   const desc = e.description || (e.films && e.films.length ? e.films.join(', ') : '');
   el.innerHTML = `
@@ -245,16 +298,14 @@ function renderMap(root) {
 }
 
 function renderNow(root) {
-  const n = now();
-  const evs = filteredEvents().filter(e => e.startISO).sort(sortByStart);
+  const n = getNow();
+  const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
   const live = evs.filter(e => statusOf(e) === 'live');
-  const upcoming = evs.filter(e => {
-    const s = parseISO(e.startISO);
-    return s && s > n;
-  });
+  const upcoming = evs.filter(e => e._startMs > n);
 
-  const first = evs[0] ? parseISO(evs[0].startISO) : null;
-  const last = evs.length ? parseISO(evs[evs.length - 1].endISO || evs[evs.length - 1].startISO) : null;
+  const first = evs[0] ? evs[0]._startMs : null;
+  const lastEv = evs[evs.length - 1];
+  const last = lastEv ? (lastEv._endMs || lastEv._startMs) : null;
 
   if (first && n < first) {
     const days = Math.ceil((first - n) / 86400000);
@@ -273,7 +324,7 @@ function renderNow(root) {
     root.appendChild(groupLabel('⏭ Далее'));
     let lastDay = null;
     soon.forEach(e => {
-      if (e.date !== lastDay) { lastDay = e.date; root.appendChild(dayHeading(e.date)); }
+      if (e._festDay !== lastDay) { lastDay = e._festDay; root.appendChild(dayHeading(e._festDay)); }
       root.appendChild(eventCard(e));
     });
   }
@@ -287,7 +338,7 @@ function renderSchedule(root) {
   buildDayStrip();
   if (!state.day) state.day = pickDefaultDay();
   const evs = filteredEvents()
-    .filter(e => e.date === state.day)
+    .filter(e => e._festDay === state.day)
     .sort(sortByStart);
 
   if (!evs.length) {
@@ -295,15 +346,19 @@ function renderSchedule(root) {
     return;
   }
 
-  const n = now();
-  // Only show the "now" divider on a day that actually straddles the moment.
-  const hasPast = evs.some(e => parseISO(e.startISO) <= n);
-  const hasFuture = evs.some(e => parseISO(e.startISO) > n);
+  const n = getNow();
+  // Разделитель «сейчас» — только если день реально пересекает момент.
+  const hasPast = evs.some(e => e._startMs <= n);
+  const hasFuture = evs.some(e => e._startMs > n);
   const showDivider = hasPast && hasFuture;
   let injectedNow = false;
+  let injectedNight = false;
   evs.forEach(e => {
-    const s = parseISO(e.startISO);
-    if (showDivider && !injectedNow && s && s > n) {
+    if (!injectedNight && nightInfo(e)) {
+      root.appendChild(nightDivider());
+      injectedNight = true;
+    }
+    if (showDivider && !injectedNow && e._startMs > n) {
       root.appendChild(nowDivider());
       injectedNow = true;
     }
@@ -313,7 +368,7 @@ function renderSchedule(root) {
 
 function renderFavorites(root) {
   const favs = state.program.events
-    .filter(e => state.favs.has(e.id) && e.startISO)
+    .filter(e => state.favs.has(e.id) && e._startMs != null)
     .sort(sortByStart);
 
   if (!favs.length && state.favs.size === favs.length) {
@@ -321,14 +376,13 @@ function renderFavorites(root) {
     return;
   }
 
-  const n = now();
-  const showDivider = favs.some(e => parseISO(e.startISO) <= n) && favs.some(e => parseISO(e.startISO) > n);
+  const n = getNow();
+  const showDivider = favs.some(e => e._startMs <= n) && favs.some(e => e._startMs > n);
   let lastDay = null;
   let injectedNow = false;
   favs.forEach(e => {
-    if (e.date !== lastDay) { lastDay = e.date; root.appendChild(dayHeading(e.date)); }
-    const s = parseISO(e.startISO);
-    if (showDivider && !injectedNow && s && s > n) { root.appendChild(nowDivider()); injectedNow = true; }
+    if (e._festDay !== lastDay) { lastDay = e._festDay; root.appendChild(dayHeading(e._festDay)); }
+    if (showDivider && !injectedNow && e._startMs > n) { root.appendChild(nowDivider()); injectedNow = true; }
     root.appendChild(eventCard(e));
   });
 
@@ -361,7 +415,7 @@ function renderFavorites(root) {
 }
 
 function sortByStart(a, b) {
-  return (a.startISO || '').localeCompare(b.startISO || '') || (a.venue || '').localeCompare(b.venue || '');
+  return (a._startMs ?? Infinity) - (b._startMs ?? Infinity) || (a.venue || '').localeCompare(b.venue || '');
 }
 
 function groupLabel(text) {
@@ -373,8 +427,14 @@ function groupLabel(text) {
 function dayHeading(iso) {
   const d = document.createElement('div');
   d.className = 'time-group-label';
-  const dt = new Date(iso + 'T00:00:00');
-  d.textContent = `${WD[dt.getDay()]}, ${dt.getDate()} ${MON[dt.getMonth()]}`;
+  const p = mskOf(epochFromISO(iso + 'T12:00') );
+  d.textContent = `${WD[p.dow]}, ${p.day} ${MON[p.mo]}`;
+  return d;
+}
+function nightDivider() {
+  const d = document.createElement('div');
+  d.className = 'now-divider night';
+  d.textContent = '🌙 после полуночи';
   return d;
 }
 function nowDivider() {
@@ -400,21 +460,21 @@ function emptyState(icon, text) {
 function buildDayStrip() {
   const strip = $('#dayStrip');
   strip.innerHTML = '';
-  state.program.days.forEach(day => {
-    const dt = new Date(day.date + 'T00:00:00');
+  (state.program._days || []).forEach(date => {
+    const p = mskOf(epochFromISO(date + 'T12:00'));
     const btn = document.createElement('button');
-    btn.className = 'day-btn' + (day.date === state.day ? ' active' : '');
-    btn.innerHTML = `<span class="dow">${WD[dt.getDay()]}</span><span>${dt.getDate()} ${MON[dt.getMonth()]}</span>`;
-    btn.addEventListener('click', () => { state.day = day.date; render(); });
+    btn.className = 'day-btn' + (date === state.day ? ' active' : '');
+    btn.innerHTML = `<span class="dow">${WD[p.dow]}</span><span>${p.day} ${MON[p.mo]}</span>`;
+    btn.addEventListener('click', () => { state.day = date; render(); });
     strip.appendChild(btn);
   });
 }
 
 function pickDefaultDay() {
-  const today = now().toISOString().slice(0, 10);
-  const days = state.program.days.map(d => d.date);
+  // активный фестивальный день: в 02:00 ночи пн это ещё «вс»
+  const today = getFestivalDay(getNow());
+  const days = state.program._days || [];
   if (days.includes(today)) return today;
-  // pick the first festival day that is >= today, else the first day
   const future = days.find(d => d >= today);
   return future || days[0];
 }
@@ -424,9 +484,10 @@ function openDetail(id) {
   const e = eventById(id);
   if (!e) return;
   const fav = state.favs.has(id);
-  const timeStr = e.end ? `${e.start}–${e.end}` : e.start;
-  const dt = new Date(e.date + 'T00:00:00');
-  const dateStr = `${WD[dt.getDay()]}, ${dt.getDate()} ${MON[dt.getMonth()]} 2026`;
+  const night = nightInfo(e);
+  const timeStr = (e.end ? `${e.start}–${e.end}` : e.start) + (night ? ` · ${night.marker}` : '');
+  const p = mskOf(epochFromISO(e._festDay + 'T12:00'));
+  const dateStr = `${WD[p.dow]}, ${p.day} ${MON[p.mo]} 2026`;
   const pt = venuePoint(e.venue);
   const vinfo = state.program.venueInfo
     ? state.program.venueInfo[e.venue] || state.program.venueInfo[(e.venue || '').split(' / ')[0]]
@@ -533,8 +594,8 @@ function supportsTrigger() {
 async function scheduleNotification(id) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const e = eventById(id);
-  if (!e || !e.startISO) return;
-  const when = parseISO(e.startISO).getTime() - state.lead * 60000;
+  if (!e || e._startMs == null) return;
+  const when = e._startMs - state.lead * 60000; // всегда реальное время события
   if (when <= Date.now()) return; // too late / already started
   const { title, body } = notifText(e);
 
@@ -572,13 +633,13 @@ function pollNotifications() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (supportsTrigger()) return; // OS triggers already cover it
   const notified = getNotified();
-  const t = Date.now();
+  const t = getNow(); // симуляция позволяет тестировать напоминания
   let changed = false;
   state.favs.forEach(id => {
     if (notified.has(id)) return;
     const e = eventById(id);
-    if (!e || !e.startISO) return;
-    const start = parseISO(e.startISO).getTime();
+    if (!e || e._startMs == null) return;
+    const start = e._startMs;
     const fireAt = start - state.lead * 60000;
     if (t >= fireAt && t < start) {
       const { title, body } = notifText(e);
@@ -606,12 +667,30 @@ function updateNotifStatus() {
   $('#btnEnableNotif').textContent = p === 'granted' ? 'Уведомления включены ✓' : 'Разрешить уведомления';
 }
 
+/* ---------- версия данных ---------- */
+function fmtDataVersion(iso) {
+  const ms = Date.parse(iso);
+  if (!ms) return iso || '—';
+  const p = mskOf(ms);
+  return `${p.day} ${['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][p.mo]}, ${pad2(p.h)}:${pad2(p.mi)}`;
+}
+
+function noteDataVersion(p, { quietFirstRun = false } = {}) {
+  const v = p && p.meta && p.meta.version;
+  const el = $('#dataVersion');
+  if (el) el.textContent = v ? `от ${fmtDataVersion(v)}` : '';
+  if (!v) return;
+  const seen = localStorage.getItem('insomnia.seenVersion');
+  if (seen && seen !== v && !quietFirstRun) toast('Расписание обновлено', 2000);
+  if (!seen || seen !== v) localStorage.setItem('insomnia.seenVersion', v);
+}
+
 /* ---------- import / update ---------- */
 // Normalize a parsed workbook (SheetJS) into our program shape.
 // Mirrors scripts/convert_xlsx.py.
 const EXPORT_URL = 'https://insomniafest.ru/export/program/2026';
 const MSK_OFFSET = 3 * 3600;      // фестиваль живёт по Москве (UTC+3)
-const ROLLOVER = 9;               // час<9 — ещё «вчерашний» фестивальный день
+const ROLLOVER = DAY_CUTOFF;      // фестивальные сутки: 06:00 -> 05:59
 
 function mskParts(ts) {
   const d = new Date((Number(ts) + MSK_OFFSET) * 1000);
@@ -717,13 +796,14 @@ function exportToProgram(data) {
   });
   return {
     festival: 'Бессонница 2026', year: YEAR, source: EXPORT_URL, version: 2,
+    meta: { version: new Date().toISOString().slice(0, 19) + 'Z', source: 'insomniafest.ru (direct)' },
     days, venues: [...new Set(events.map(e => e.venue).filter(Boolean))].sort(),
     venueInfo, events, importedAt: new Date().toISOString(),
   };
 }
 
 const MONTHS_RU = { 'января':1,'февраля':2,'марта':3,'апреля':4,'мая':5,'июня':6,'июля':7,'августа':8,'сентября':9,'октября':10,'ноября':11,'декабря':12 };
-const NIGHT_ROLLOVER_HOUR = 9;
+const NIGHT_ROLLOVER_HOUR = DAY_CUTOFF;
 const YEAR = 2026;
 
 function parseSheetDate(sheetName, titleCell) {
@@ -862,13 +942,14 @@ function applyImportedProgram(program, msg, persist = true) {
   // локальная импорт-копия больше не нужна и не должна его перекрывать.
   if (persist) localStorage.setItem(LS.program, JSON.stringify(program));
   else localStorage.removeItem(LS.program);
-  state.program = program;
+  state.program = decorateProgram(program);
   // избранное НЕ чистим: осиротевшие отметки живут в плашке «избранного»
   // и переживают откат/повтор обновления данных
   state.day = null;
   localStorage.removeItem(LS.notified);
   if (Notification && Notification.permission === 'granted') state.favs.forEach(scheduleNotification);
   $('#importStatus').textContent = msg;
+  noteDataVersion(program);
   updateDataInfo();
   toast(msg);
   render();
@@ -883,7 +964,7 @@ function resetData() {
   localStorage.removeItem(LS.program);
   localStorage.removeItem(LS.notified);
   loadProgram().then(p => {
-    state.program = p;
+    state.program = decorateProgram(p);
     const ids = new Set(p.events.map(e => e.id));
     state.favs = new Set([...state.favs].filter(id => ids.has(id)));
     saveFavs();
@@ -912,11 +993,23 @@ async function registerSW() {
       const nw = state.swReg.installing;
       nw && nw.addEventListener('statechange', () => {
         if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-          toast('Доступно обновление приложения — перезапустите');
+          showAppUpdateBanner();
         }
       });
     });
+    if (state.swReg.waiting && navigator.serviceWorker.controller) showAppUpdateBanner();
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (window.__reloadingForUpdate) return;
+      window.__reloadingForUpdate = true;
+      location.reload();
+    });
   } catch (err) { /* offline / unsupported */ }
+}
+
+function showAppUpdateBanner() {
+  const bar = $('#appUpdateBar');
+  if (!bar) return;
+  bar.classList.remove('hidden');
 }
 
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -1056,12 +1149,78 @@ function wireUI() {
     $('#installHint').textContent = 'На iPhone: кнопка «Поделиться» → «На экран Домой».';
   }
 
+  // симуляция времени
+  $('#simMinus').addEventListener('click', () => setSim(getNow() - 3600000));
+  $('#simPlus').addEventListener('click', () => setSim(getNow() + 3600000));
+  $('#simPlusDay').addEventListener('click', () => setSim(getNow() + 86400000));
+  $('#simReset').addEventListener('click', clearSim);
+
+  // обновление приложения
+  $('#appUpdateBtn').addEventListener('click', () => {
+    if (state.swReg && state.swReg.waiting) state.swReg.waiting.postMessage('SKIP_WAITING');
+    $('#appUpdateBar').classList.add('hidden');
+  });
+
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideSheet('#sheet'); hideSheet('#settings'); hideSheet('#installGate'); } });
+}
+
+/* ---------- симуляция времени (?now=2026-07-11T17:00, МСК) ---------- */
+const SIM_KEY = 'insomnia.simNow';
+
+function initSim() {
+  try {
+    const q = new URLSearchParams(location.search).get('now');
+    if (q) {
+      const anchor = epochFromISO(q.length === 16 ? q + ':00' : q);
+      if (anchor != null) {
+        state.sim = { anchor, setAt: Date.now() };
+        sessionStorage.setItem(SIM_KEY, JSON.stringify(state.sim));
+        return;
+      }
+    }
+    const saved = sessionStorage.getItem(SIM_KEY);
+    if (saved) {
+      const s = JSON.parse(saved);
+      if (s && typeof s.anchor === 'number') state.sim = s;
+    }
+  } catch { /* симуляция не критична */ }
+}
+
+function setSim(anchor) {
+  state.sim = { anchor, setAt: Date.now() };
+  sessionStorage.setItem(SIM_KEY, JSON.stringify(state.sim));
+  localStorage.removeItem(LS.notified); // дать напоминаниям сработать заново
+  state.day = pickDefaultDay();
+  updateSimBar();
+  render();
+}
+
+function clearSim() {
+  state.sim = null;
+  sessionStorage.removeItem(SIM_KEY);
+  // убрать ?now= из адреса, чтобы перезагрузка не вернула симуляцию
+  try {
+    const url = new URL(location.href);
+    url.searchParams.delete('now');
+    history.replaceState(null, '', url.pathname + url.search);
+  } catch { /* ignore */ }
+  state.day = pickDefaultDay();
+  updateSimBar();
+  render();
+}
+
+function updateSimBar() {
+  const bar = $('#simBar');
+  if (!bar) return;
+  if (!state.sim) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  $('#simTime').textContent = fmtSim(getNow());
 }
 
 /* ---------- ticking ---------- */
 function tick() {
-  $('#brandClock').textContent = fmtClock(now());
+  $('#brandClock').textContent = fmtClock(getNow());
+  updateSimBar();
   pollNotifications();
   if (state.view === 'now') render(); // keep "now" fresh
 }
@@ -1071,15 +1230,18 @@ async function boot() {
   loadFavs();
   state.lead = parseInt(localStorage.getItem(LS.lead) || '15', 10);
   const leadSel = $('#leadSelect'); if (leadSel) leadSel.value = String(state.lead);
+  initSim();
   try {
-    state.program = await loadProgram();
+    state.program = decorateProgram(await loadProgram());
   } catch (err) {
     $('#content').innerHTML = '<div class="empty"><span class="big">⚠️</span>Не удалось загрузить программу.</div>';
     return;
   }
+  noteDataVersion(state.program, { quietFirstRun: !localStorage.getItem('insomnia.seenVersion') });
   state.day = pickDefaultDay();
   state.map = await loadMap();
   wireUI();
+  updateSimBar();
   render();
   tick();
   setInterval(tick, 30000);

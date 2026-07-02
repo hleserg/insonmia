@@ -53,6 +53,30 @@
 
   <main id="content" class="content"><div class="loading">$ ./программа --загрузка </div></main>
 
+  <footer class="app-footer">
+    <div class="footer-manifest">this is a beta build. expect bugs. running anyway.</div>
+    <p class="footer-legal">Неофициальное фанатское приложение. Данные с insomniafest.ru
+      <span id="dataVersion"></span>. Истина в последней инстанции — инфоцентр и бумажная карта фестиваля.</p>
+    <p class="footer-legal">Баги и спасибо → <a href="https://t.me/skhlebnikov" target="_blank" rel="noopener">@skhlebnikov</a></p>
+  </footer>
+
+  <!-- Плашка симуляции времени (?now=…) -->
+  <div id="simBar" class="sim-bar hidden">
+    <span>⏰ симуляция: <b id="simTime">—</b></span>
+    <span class="sim-actions">
+      <button id="simMinus" class="sim-btn">−1ч</button>
+      <button id="simPlus" class="sim-btn">+1ч</button>
+      <button id="simPlusDay" class="sim-btn">+1д</button>
+      <button id="simReset" class="sim-btn reset">✕ сбросить</button>
+    </span>
+  </div>
+
+  <!-- Баннер обновления приложения -->
+  <div id="appUpdateBar" class="sim-bar update hidden">
+    <span>⬆️ Доступна новая версия</span>
+    <span class="sim-actions"><button id="appUpdateBtn" class="sim-btn">обновить</button></span>
+  </div>
+
   <!-- Event detail sheet -->
   <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
     <div class="sheet-backdrop" data-close></div>
@@ -145,6 +169,7 @@
       <div class="sheet-body">
         <div class="gate-star">☆ → ★</div>
         <p class="gate-text">Избранное живёт в офлайн-приложении. Установи его — и твой маршрут будет работать на поле без интернета.</p>
+        <p class="muted small">this is a beta build · неофициальное фанатское приложение · истина — в инфоцентре</p>
         <button id="gateInstall" class="btn">Установить</button>
         <div id="gateHint" class="muted small hidden"></div>
         <button id="gateLater" class="btn ghost">Позже</button>
