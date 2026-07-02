@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v6';
+const CACHE = 'insomnia-2026-v7';
 const ASSETS = [
   './',
   'index.html',
@@ -49,8 +49,9 @@ self.addEventListener('fetch', (event) => {
         fetch(req).then((res) => {
           if (res.ok) {
             const copy = res.clone();
-            // кэшируем под каноническим URL без параметра
-            caches.open(CACHE).then((c) => c.put(url.pathname.replace(/^\//, ''), copy));
+            // кэшируем под каноническим АБСОЛЮТНЫМ URL без параметра
+            // (относительный путь в подпапке GitHub Pages удваивал префикс)
+            caches.open(CACHE).then((c) => c.put(url.origin + url.pathname, copy));
           }
           return res;
         })
@@ -81,15 +82,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for the app shell.
+  // Cache-first for the app shell. ignoreSearch — чтобы /?now=… находил
+  // кэшированный шелл; навигация офлайн всегда падает на index.html.
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+    caches.match(req, { ignoreSearch: true }).then((cached) => cached || fetch(req).then((res) => {
       if (res.ok) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
       }
       return res;
-    }).catch(() => cached))
+    }).catch(async () => {
+      if (req.mode === 'navigate') {
+        const shell = await caches.match('index.html');
+        if (shell) return shell;
+      }
+      return Response.error();
+    }))
   );
 });
 

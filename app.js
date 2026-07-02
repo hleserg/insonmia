@@ -93,11 +93,17 @@ function loadFavs() {
 }
 function saveFavs() { localStorage.setItem(LS.favs, JSON.stringify([...state.favs])); }
 
+let simNotified = new Set(); // дедуп напоминаний в симуляции — только в памяти
 function getNotified() {
+  if (state.sim) return simNotified;
   try { return new Set(JSON.parse(localStorage.getItem(LS.notified) || '[]')); }
   catch { return new Set(); }
 }
-function setNotified(set) { localStorage.setItem(LS.notified, JSON.stringify([...set])); }
+function setNotified(set) {
+  // симулированное время НЕ отравляет реальный дедуп напоминаний
+  if (state.sim) { simNotified = set; return; }
+  localStorage.setItem(LS.notified, JSON.stringify([...set]));
+}
 
 /* ---------- data loading ---------- */
 function decorateProgram(p) {
@@ -999,7 +1005,10 @@ async function registerSW() {
     });
     if (state.swReg.waiting && navigator.serviceWorker.controller) showAppUpdateBanner();
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (window.__reloadingForUpdate) return;
+      // Перезагружаемся ТОЛЬКО когда обновление запросил пользователь кнопкой.
+      // Первая установка SW (clients.claim) тоже даёт controllerchange —
+      // молча продолжаем без перезагрузки.
+      if (!window.__wantReloadAfterUpdate || window.__reloadingForUpdate) return;
       window.__reloadingForUpdate = true;
       location.reload();
     });
@@ -1157,7 +1166,10 @@ function wireUI() {
 
   // обновление приложения
   $('#appUpdateBtn').addEventListener('click', () => {
-    if (state.swReg && state.swReg.waiting) state.swReg.waiting.postMessage('SKIP_WAITING');
+    if (state.swReg && state.swReg.waiting) {
+      window.__wantReloadAfterUpdate = true;
+      state.swReg.waiting.postMessage('SKIP_WAITING');
+    }
     $('#appUpdateBar').classList.add('hidden');
   });
 
@@ -1189,7 +1201,7 @@ function initSim() {
 function setSim(anchor) {
   state.sim = { anchor, setAt: Date.now() };
   sessionStorage.setItem(SIM_KEY, JSON.stringify(state.sim));
-  localStorage.removeItem(LS.notified); // дать напоминаниям сработать заново
+  simNotified = new Set(); // симуляционный дедуп с чистого листа
   state.day = pickDefaultDay();
   updateSimBar();
   render();
@@ -1197,6 +1209,7 @@ function setSim(anchor) {
 
 function clearSim() {
   state.sim = null;
+  simNotified = new Set();
   sessionStorage.removeItem(SIM_KEY);
   // убрать ?now= из адреса, чтобы перезагрузка не вернула симуляцию
   try {
@@ -1212,6 +1225,7 @@ function clearSim() {
 function updateSimBar() {
   const bar = $('#simBar');
   if (!bar) return;
+  $('#brandClock').textContent = fmtClock(getNow()); // часы — сразу, не ждём tick
   if (!state.sim) { bar.classList.add('hidden'); return; }
   bar.classList.remove('hidden');
   $('#simTime').textContent = fmtSim(getNow());

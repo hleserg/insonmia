@@ -255,14 +255,16 @@ def build(from_file=None):
     if OUT.exists():
         try:
             prev = json.loads(OUT.read_text(encoding="utf-8"))
+            if not isinstance(prev, dict):
+                raise ValueError("previous file is not an object")
             prev_cmp = {k: v for k, v in prev.items() if k != "meta"}
             new_cmp = {k: v for k, v in payload.items() if k != "meta"}
             if "meta" in prev and prev_cmp == new_cmp:
                 print(f"programme unchanged ({len(payload['events'])} events) — keeping "
                       f"existing {OUT} (version {prev.get('meta', {}).get('version')})")
                 return
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError, ValueError):
+            pass  # битый предыдущий файл — просто перезаписываем свежим
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n",
                    encoding="utf-8")
     print(f"wrote {len(payload['events'])} events "
