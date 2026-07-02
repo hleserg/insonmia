@@ -1,0 +1,41 @@
+name: Scrape festival programme (recon)
+
+# Manual trigger only, to avoid any push loops. Fetches the raw programme
+# pages on a GitHub runner (open internet, no CORS) and commits them to
+# debug_html/ so the parser can be built against the real markup.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch programme pages
+        run: python3 scripts/scrape_site.py recon
+
+      - name: Commit fetched HTML
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add debug_html/ || true
+          if git diff --cached --quiet; then
+            echo "No HTML changes to commit."
+          else
+            git commit -m "Recon: fetched festival programme HTML"
+            git push
+          fi
+
+      - name: Upload HTML as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: festival-html
+          path: debug_html/
