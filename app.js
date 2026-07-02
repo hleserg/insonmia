@@ -1,6 +1,11 @@
 /* Бессонница 2026 — офлайн-программа фестиваля.
-   Vanilla PWA: no build step, works fully offline once cached. */
+   Vanilla PWA: no build step, works fully offline once cached.
+   Чистая логика времени/гео — в core.js (грузится первым, тестируется в node). */
 'use strict';
+
+// DEV=true включает симуляцию времени (?now=) и мок-гео (?mockgeo=).
+// В проде выключено: параметры игнорируются молча, плашки не существует.
+const DEV = false;
 
 const LS = {
   favs: 'insomnia.favs',
@@ -45,30 +50,20 @@ function fnv1a(str) {
    по эпохам (мс UTC), никогда по локальным строкам часов: телефон может быть
    в любой таймзоне. getNow() — единственный источник «сейчас» (поддерживает
    симуляцию ?now=). Фестивальные сутки: 06:00 → 05:59 следующего дня. */
-const MSK_MS = 3 * 3600 * 1000;
-const DAY_CUTOFF = 6;
+const {
+  MSK_MS, DAY_CUTOFF, epochFromISO, mskOf,
+} = window.InsomniaCore;
 const pad2 = x => String(x).padStart(2, '0');
 
-function epochFromISO(iso) {
-  // наивная московская ISO-строка -> эпоха
-  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
-  if (!m) return null;
-  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - MSK_MS;
-}
-function mskOf(ms) {
-  // компоненты московского времени для эпохи
-  const d = new Date(ms + MSK_MS);
-  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), day: d.getUTCDate(),
-           h: d.getUTCHours(), mi: d.getUTCMinutes(), dow: d.getUTCDay() };
-}
 function getNow() {
   if (state.sim) return state.sim.anchor + (Date.now() - state.sim.setAt);
   return Date.now();
 }
-function getFestivalDay(ms) {
-  const p = mskOf(ms - DAY_CUTOFF * 3600 * 1000);
-  return `${p.y}-${pad2(p.mo + 1)}-${pad2(p.day)}`;
-}
+function getFestivalDay(ms) { return window.InsomniaCore.getFestivalDay(ms); }
+function statusOf(e) { return window.InsomniaCore.statusOf(e, getNow()); }
+function sortByStart(a, b) { return window.InsomniaCore.sortByStart(a, b); }
+function nightInfo(e) { return window.InsomniaCore.nightInfo(e, WD); }
+
 function fmtClock(ms) {
   const p = mskOf(ms);
   return `${WD[p.dow]} ${p.day} ${MON[p.mo]} · ${pad2(p.h)}:${pad2(p.mi)} мск`;
@@ -106,14 +101,9 @@ function setNotified(set) {
 
 /* ---------- data loading ---------- */
 function decorateProgram(p) {
-  (p.events || []).forEach(e => {
-    e._startMs = epochFromISO(e.startISO);
-    e._endMs = epochFromISO(e.endISO);
-    e._festDay = e._startMs != null ? getFestivalDay(e._startMs) : e.date;
-  });
+  window.InsomniaCore.decorateEvents(p.events || []);
   // дни пересчитываем из событий (фестивальный день вычисляется, не хранится)
-  const days = [...new Set((p.events || []).map(e => e._festDay).filter(Boolean))].sort();
-  p._days = days;
+  p._days = [...new Set((p.events || []).map(e => e._festDay).filter(Boolean))].sort();
   return p;
 }
 
@@ -135,25 +125,7 @@ function eventById(id) { return state.program.events.find(e => e.id === id); }
 /* ---------- rendering ---------- */
 function eventTypeLabel(t) { return t === 'animation' ? 'Анимация' : 'Программа'; }
 
-function statusOf(e) {
-  const s = e._startMs, en = e._endMs;
-  const n = getNow();
-  if (s != null && en != null && n >= s && n < en) return 'live';
-  if (s != null && en != null && n >= en) return 'past';
-  if (s != null && en == null && n >= s) return 'past';
-  const mins = s != null ? (s - n) / 60000 : Infinity;
-  if (mins > 0 && mins <= 30) return 'soon';
-  if (s != null && n >= s) return 'past';
-  return 'upcoming';
-}
 
-function nightInfo(e) {
-  // событие «после полуночи» (00:00–05:59 мск) — ночь предыдущего фест-дня
-  if (e._startMs == null) return null;
-  const p = mskOf(e._startMs);
-  if (p.h >= DAY_CUTOFF) return null;
-  return { marker: `🌙 ночь на ${WD[p.dow]}` };
-}
 
 function eventCard(e) {
   const st = statusOf(e);
@@ -243,8 +215,8 @@ function render() {
 function renderNow(root) {
   const n = getNow();
   const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
-  const live = evs.filter(e => statusOf(e) === 'live');
-  const upcoming = evs.filter(e => e._startMs > n);
+  const live = window.InsomniaCore.getCurrent(evs, n);
+  const upcoming = window.InsomniaCore.getUpcoming(evs, n); // без горизонта: все будущие
 
   const first = evs[0] ? evs[0]._startMs : null;
   const lastEv = evs[evs.length - 1];
@@ -357,9 +329,6 @@ function renderFavorites(root) {
   root.appendChild(info);
 }
 
-function sortByStart(a, b) {
-  return (a._startMs ?? Infinity) - (b._startMs ?? Infinity) || (a.venue || '').localeCompare(b.venue || '');
-}
 
 function groupLabel(text) {
   const d = document.createElement('div');
@@ -1125,6 +1094,11 @@ function wireUI() {
 const SIM_KEY = 'insomnia.simNow';
 
 function initSim() {
+  if (!DEV) {
+    // прод: ?now= игнорируется молча, хвосты сессии вычищаются
+    try { sessionStorage.removeItem(SIM_KEY); } catch { /* ignore */ }
+    return;
+  }
   try {
     const q = new URLSearchParams(location.search).get('now');
     if (q) {

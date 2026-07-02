@@ -1,0 +1,8 @@
+{
+  "name": "insomnia-fest-pwa",
+  "private": true,
+  "description": "Офлайн-PWA программы фестиваля «Бессонница 2026»",
+  "scripts": {
+    "test": "node --test tests/js/*.test.js && TZ=UTC node --test tests/js/*.test.js && TZ=Asia/Novosibirsk node --test tests/js/*.test.js && TZ=America/New_York node --test tests/js/*.test.js && echo 'все таймзоны зелёные'"
+  }
+}

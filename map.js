@@ -57,6 +57,10 @@ async function loadBasemap() {
 }
 
 function initMockGeo() {
+  if (typeof DEV === 'undefined' || !DEV) {
+    try { sessionStorage.removeItem('insomnia.mockgeo'); } catch { /* ignore */ }
+    return;
+  }
   try {
     const q = new URLSearchParams(location.search).get('mockgeo');
     if (q) {
@@ -75,25 +79,9 @@ function initMockGeo() {
   } catch { /* не критично */ }
 }
 
-/* ---------- геометрия ---------- */
-function distanceM(a, b) {
-  // хаверсин, метры
-  const R = 6371000, rad = Math.PI / 180;
-  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
-  const s = Math.sin(dLat / 2) ** 2 +
-    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * R * Math.asin(Math.sqrt(s)));
-}
-function bearingLabel(from, to) {
-  const rad = Math.PI / 180;
-  const y = Math.sin((to.lng - from.lng) * rad) * Math.cos(to.lat * rad);
-  const x = Math.cos(from.lat * rad) * Math.sin(to.lat * rad) -
-    Math.sin(from.lat * rad) * Math.cos(to.lat * rad) * Math.cos((to.lng - from.lng) * rad);
-  const brng = (Math.atan2(y, x) / rad + 360) % 360;
-  const dirs = ['севернее', 'северо-восточнее', 'восточнее', 'юго-восточнее',
-                'южнее', 'юго-западнее', 'западнее', 'северо-западнее'];
-  return dirs[Math.round(brng / 45) % 8];
-}
+/* ---------- геометрия: core.js ---------- */
+const distanceM = (a, b) => window.InsomniaCore.distanceM(a, b);
+const bearingLabel = (a, b) => window.InsomniaCore.bearingLabel(a, b);
 
 /* ---------- Leaflet ---------- */
 function markerIcon(cat) {
@@ -324,51 +312,23 @@ async function locateMe() {
 /* ---------- «рядом» ---------- */
 const NEARBY_RADII = [150, 300, 600, 0]; // 0 = всё
 
+const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
+  typeof navigator !== 'undefined' ? navigator.geolocation : null,
+  pos => {
+    GEO.nearby.pos = pos;
+    if (state.view === 'nearby') render();
+  }, 10000);
+
 function startNearbyWatch() {
   if (GEO.mock) { GEO.nearby.pos = GEO.mock; return; }
-  if (!navigator.geolocation || GEO.nearby.watchId != null) return;
-  GEO.nearby.watchId = navigator.geolocation.watchPosition(pos => {
-    const t = Date.now();
-    if (t - GEO.nearby.timer < 10000) return; // throttle 10с
-    GEO.nearby.timer = t;
-    GEO.nearby.pos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    if (state.view === 'nearby') render();
-  }, () => { /* молча: пустое состояние покажет подсказку */ },
-  { enableHighAccuracy: true, maximumAge: 5000 });
+  nearbyWatcher.start();
 }
 
-function stopNearbyWatch() {
-  if (GEO.nearby.watchId != null && navigator.geolocation) {
-    navigator.geolocation.clearWatch(GEO.nearby.watchId);
-    GEO.nearby.watchId = null;
-  }
-}
+function stopNearbyWatch() { nearbyWatcher.stop(); }
 
 function getNearby(points, events, position, now, radiusM) {
-  // чистая функция: точки в радиусе + события «идёт/скоро 60 мин» на них
   const vp = GEO.data ? GEO.data.venuePoints || {} : {};
-  const withDist = points
-    .map(p => ({ ...p, dist: distanceM(position, p) }))
-    .filter(p => !radiusM || p.dist <= radiusM)
-    .sort((a, b) => a.dist - b.dist);
-  return withDist.map(p => {
-    const venues = Object.keys(vp).filter(v => vp[v].includes(p.id));
-    const evs = events
-      .filter(e => venues.includes(e.venue))
-      .filter(e => {
-        if (e._startMs == null) return false;
-        const st = e._startMs, en = e._endMs;
-        const live = en != null ? (now >= st && now < en) : false;
-        const soon = st > now && st - now <= 60 * 60000;
-        return live || soon;
-      })
-      .sort((a, b) => {
-        const liveA = a._startMs <= now ? 0 : 1;
-        const liveB = b._startMs <= now ? 0 : 1;
-        return liveA - liveB || a._startMs - b._startMs;
-      });
-    return { ...p, events: evs };
-  });
+  return window.InsomniaCore.getNearby(points, events, position, now, radiusM, vp);
 }
 
 function renderNearby(root) {
