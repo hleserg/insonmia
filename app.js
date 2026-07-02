@@ -156,8 +156,16 @@ function filteredEvents() {
   return evs;
 }
 
+function liveFavCount() {
+  // считаем только избранное, которое существует в текущей программе —
+  // после обновления данных часть id может осиротеть
+  let n = 0;
+  state.program.events.forEach(e => { if (state.favs.has(e.id)) n++; });
+  return n;
+}
+
 function render() {
-  $('#favBadge').textContent = state.favs.size;
+  $('#favBadge').textContent = liveFavCount();
   const content = $('#content');
   content.innerHTML = '';
   $('#filters').classList.toggle('hidden', state.view === 'favorites');
@@ -239,7 +247,7 @@ function renderFavorites(root) {
     .filter(e => state.favs.has(e.id) && e.startISO)
     .sort(sortByStart);
 
-  if (!favs.length) {
+  if (!favs.length && state.favs.size === favs.length) {
     root.appendChild(emptyState('☆', 'Пока ничего не выбрано. Нажмите ☆ у события, чтобы добавить и получить напоминание.'));
     return;
   }
@@ -254,6 +262,25 @@ function renderFavorites(root) {
     if (showDivider && !injectedNow && s && s > n) { root.appendChild(nowDivider()); injectedNow = true; }
     root.appendChild(eventCard(e));
   });
+
+  // осиротевшее избранное: события исчезли/изменились при обновлении программы
+  const orphanCount = state.favs.size - favs.length;
+  if (orphanCount > 0) {
+    const orphanNote = document.createElement('div');
+    orphanNote.className = 'update-banner';
+    orphanNote.innerHTML = `<span>⚠️ ${orphanCount} отмеченных событий больше нет в программе (расписание обновилось).</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = 'Убрать';
+    btn.addEventListener('click', () => {
+      const ids = new Set(state.program.events.map(e => e.id));
+      state.favs = new Set([...state.favs].filter(id => ids.has(id)));
+      saveFavs();
+      render();
+    });
+    orphanNote.appendChild(btn);
+    root.appendChild(orphanNote);
+  }
 
   const info = document.createElement('p');
   info.className = 'muted small center';
@@ -512,8 +539,17 @@ function toISO(base, hhmm) {
   const pad = x => String(x).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
 }
+function normalizeText(v) {
+  // зеркалит clean_text() из scripts/scrape_site.py — иначе id разойдутся
+  return String(v || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\u2028/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
 function normalizeVenue(v) {
-  const s = String(v || '').trim();
+  const s = normalizeText(v);
   const letters = s.toLowerCase().replace(/[^а-яёa-z]/g, '');
   if (letters && [...letters].every(ch => 'тсц'.includes(ch))) return 'Сцена (уточняется)';
   return s;
@@ -543,11 +579,11 @@ function workbookToProgram(workbooks) {
       daysMap[dateIso] = { date: dateIso, label: sheetName.trim() };
       for (let i = 2; i < rows.length; i++) {
         const r = rows[i] || [];
-        const timeRaw = String(r[0] || '').trim();
+        const timeRaw = normalizeText(r[0]);
         const place = normalizeVenue(r[1]);
-        const title = String(r[2] || '').trim();
-        const desc = String(r[3] || '').trim();
-        const age = String(r[4] || '').trim();
+        const title = normalizeText(r[2]);
+        const desc = normalizeText(r[3]);
+        const age = normalizeText(r[4]);
         const [start, end] = parseTimeRange(timeRaw);
         if (!start || !title) continue;
         const startISO = toISO(base, start);
@@ -604,9 +640,12 @@ async function importFromUrl(url) {
   }
 }
 
-function applyImportedProgram(program, msg) {
-  if (!program.events.length) { $('#importStatus').textContent = 'В файле не найдено событий.'; return; }
-  localStorage.setItem(LS.program, JSON.stringify(program));
+function applyImportedProgram(program, msg, persist = true) {
+  if (!program.events || !program.events.length) { $('#importStatus').textContent = 'В файле не найдено событий.'; return; }
+  // persist=false — данные пришли из встроенного data/program.json (сервер),
+  // локальная импорт-копия больше не нужна и не должна его перекрывать.
+  if (persist) localStorage.setItem(LS.program, JSON.stringify(program));
+  else localStorage.removeItem(LS.program);
   state.program = program;
   // prune favorites/notified that no longer exist
   const ids = new Set(program.events.map(e => e.id));
@@ -734,12 +773,13 @@ function wireUI() {
     if (url) importFromUrl(url);
   });
   $('#btnRefreshBundled').addEventListener('click', async () => {
-    $('#importStatus').textContent = 'Проверяю встроенный файл…';
+    $('#importStatus').textContent = 'Проверяю обновление…';
     try {
       const res = await fetch('data/program.json', { cache: 'reload' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const p = await res.json();
-      applyImportedProgram({ ...p, importedAt: new Date().toISOString() }, `Обновлено с сервера: ${p.events.length} событий`);
-      localStorage.removeItem(LS.program); // it's the bundled one
+      applyImportedProgram({ ...p, importedAt: new Date().toISOString() },
+        `Обновлено с сервера: ${p.events.length} событий`, false);
     } catch (err) {
       $('#importStatus').textContent = 'Нет соединения с сервером (офлайн).';
     }

@@ -84,9 +84,14 @@ def to_datetime(base_date, hhmm):
 
 
 def clean(v):
+    """Mirrors clean_text() in scrape_site.py (minus HTML unescape — xlsx
+    cells hold literal text): fold NBSP/exotic whitespace so event ids match
+    across the xlsx and site-export pipelines."""
     if v is None:
         return ""
-    return str(v).strip()
+    s = str(v).replace("\xa0", " ").replace(" ", "\n").replace("\r\n", "\n")
+    s = re.sub(r"[ \t]+", " ", s)
+    return s.strip()
 
 
 def normalize_venue(v):

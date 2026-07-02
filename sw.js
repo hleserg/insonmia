@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v1';
+const CACHE = 'insomnia-2026-v2';
 const ASSETS = [
   './',
   'index.html',
@@ -38,7 +38,12 @@ self.addEventListener('fetch', (event) => {
   // with cache fallback when offline.
   if (url.pathname.endsWith('data/program.json')) {
     event.respondWith(
-      fetch(req).then((res) => {
+      fetch(req).then(async (res) => {
+        if (!res.ok) {
+          // сервер ответил ошибкой — не затираем кэш, отдаём офлайн-копию
+          const cached = await caches.match(req);
+          return cached || res;
+        }
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
         return res;
@@ -50,8 +55,10 @@ self.addEventListener('fetch', (event) => {
   // Cache-first for the app shell.
   event.respondWith(
     caches.match(req).then((cached) => cached || fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy));
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+      }
       return res;
     }).catch(() => cached))
   );

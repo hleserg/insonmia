@@ -34,34 +34,42 @@ styles.css            — стили (тёмная «ночная» тема)
 app.js                — вся логика: рендер, избранное, уведомления, импорт Excel
 sw.js                 — service worker (офлайн-кэш + клики по уведомлениям)
 manifest.webmanifest  — манифест PWA (установка на главный экран)
-data/program.json     — программа фестиваля (генерируется из Excel)
+data/program.json     — программа фестиваля (генерируется из экспорта сайта)
 vendor/xlsx.full.min.js — SheetJS, чтение Excel прямо в браузере (для офлайн-импорта)
 icons/                — иконки приложения
-source_xlsx/          — исходные Excel-файлы фестиваля
-scripts/convert_xlsx.py — конвертер Excel → program.json
+source_xlsx/          — исходные Excel-файлы фестиваля (резервный источник)
+scripts/scrape_site.py  — скачивание и конвертация экспорта insomniafest.ru
+scripts/convert_xlsx.py — конвертер Excel → program.json (fallback)
+tests/fixtures/       — снапшот экспорта сайта для офлайн-разработки
+.github/workflows/update-program.yml — автообновление программы по расписанию
 ```
 
 ## Обновление программы, когда фестиваль поменял расписание
 
-Есть три пути — все сохраняют ваши отметки «избранное» (id событий стабильны).
+Все пути сохраняют отметки «избранное» (id событий — детерминированный хеш).
 
-**Способ 1. Прямо в приложении (проще всего для зрителя).**
+**Способ 0. Автоматически (основной).** GitHub Action
+`.github/workflows/update-program.yml` раз в 6 часов скачивает официальный экспорт
+программы `https://insomniafest.ru/export/program/2026`, конвертирует его скриптом
+`scripts/scrape_site.py build` и коммитит `data/program.json`, если данные изменились.
+Зрителю остаётся нажать ⚙️ → «Проверить обновление на сервере» (или просто открыть
+приложение онлайн — service worker подтянет свежий файл сам).
+
+**Способ 1. Прямо в приложении.**
 ⚙️ → «Загрузить из Excel-файла…» и выберите скачанный с сайта `.xlsx`
 (можно выбрать сразу оба файла — программу и анимацию). Или вставьте прямую ссылку на `.xlsx`.
 Парсинг Excel происходит в браузере и работает офлайн.
 
-**Способ 2. Пересобрать встроенные данные (для владельца репозитория).**
-Положите свежие файлы в `source_xlsx/` (`animation.xlsx` — ночные показы, `nonanimation.xlsx` —
-дневная программа) и выполните:
+**Способ 2. Пересобрать встроенные данные вручную.**
 
 ```bash
-pip install -r requirements.txt
-python3 scripts/convert_xlsx.py
-git commit -am "Обновление программы" && git push
+# из экспорта сайта (как это делает Action):
+python3 scripts/scrape_site.py build
+# либо офлайн из фикстуры:
+python3 scripts/scrape_site.py build --from tests/fixtures/export_program_2026.json
+# либо из Excel-файлов в source_xlsx/:
+pip install -r requirements.txt && python3 scripts/convert_xlsx.py
 ```
-
-После публикации зрители получат обновление кнопкой ⚙️ → «Проверить обновление на сервере»
-(или автоматически при следующем онлайн-запуске — service worker подтягивает свежий `program.json`).
 
 ## Публикация (GitHub Pages)
 
