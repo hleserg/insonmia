@@ -23,4 +23,14 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/tiles/
-          git diff --cached --quiet || { git commit -m "Офлайн-тайлы OSM фестивальной зоны (z13-18)"; git push; }
+          if git diff --cached --quiet; then
+            echo "no tile changes"
+          else
+            git commit -m "Офлайн-тайлы OSM фестивальной зоны (z13-18)"
+            for i in 1 2 3; do
+              if git push; then exit 0; fi
+              echo "push rejected (attempt $i) — rebasing and retrying"
+              git pull --rebase
+            done
+            git push
+          fi
