@@ -340,10 +340,14 @@ function groupLabel(text) {
   d.textContent = text;
   return d;
 }
+// части даты 'YYYY-MM-DD' для подписей ({dow, day, mo}); полдень — вдали от границ суток
+function dayParts(iso) {
+  return mskOf(epochFromISO(iso + 'T12:00'));
+}
 function dayHeading(iso) {
   const d = document.createElement('div');
   d.className = 'time-group-label';
-  const p = mskOf(epochFromISO(iso + 'T12:00') );
+  const p = dayParts(iso);
   d.textContent = `${WD[p.dow]}, ${p.day} ${MON[p.mo]}`;
   return d;
 }
@@ -377,7 +381,7 @@ function buildDayStrip() {
   const strip = $('#dayStrip');
   strip.innerHTML = '';
   (state.program._days || []).forEach(date => {
-    const p = mskOf(epochFromISO(date + 'T12:00'));
+    const p = dayParts(date);
     const btn = document.createElement('button');
     btn.className = 'day-btn' + (date === state.day ? ' active' : '');
     btn.innerHTML = `<span class="dow">${WD[p.dow]}</span><span>${p.day} ${MON[p.mo]}</span>`;
@@ -402,7 +406,7 @@ function openDetail(id) {
   const fav = state.favs.has(id);
   const night = nightInfo(e);
   const timeStr = (e.end ? `${e.start}–${e.end}` : e.start) + (night ? ` · ${night.marker}` : '');
-  const p = mskOf(epochFromISO(e._festDay + 'T12:00'));
+  const p = dayParts(e._festDay);
   const dateStr = `${WD[p.dow]}, ${p.day} ${MON[p.mo]} 2026`;
   const geoPts = typeof eventGeoPoints === 'function' ? eventGeoPoints(e) : [];
   const vinfo = state.program.venueInfo
@@ -733,7 +737,7 @@ function exportToProgram(data) {
   };
 }
 
-const MONTHS_RU = { 'января':1,'февраля':2,'марта':3,'апреля':4,'мая':5,'июня':6,'июля':7,'августа':8,'сентября':9,'октября':10,'ноября':11,'декабря':12 };
+const MONTHS_RU = Object.fromEntries(MONTHS_GEN.map((m, i) => [m, i + 1])); // 'июля' -> 7
 const NIGHT_ROLLOVER_HOUR = DAY_CUTOFF;
 const YEAR = 2026;
 
@@ -982,12 +986,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 /* ---------- event wiring ---------- */
 function wireUI() {
-  $$('.tab').forEach(t => t.addEventListener('click', () => {
-    $$('.tab').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    state.view = t.dataset.view;
-    render();
-  }));
+  $$('.tab').forEach(t => t.addEventListener('click', () => switchView(t.dataset.view)));
   $$('#typeChips .chip').forEach(c => c.addEventListener('click', () => {
     $$('#typeChips .chip').forEach(x => x.classList.remove('active'));
     c.classList.add('active');
@@ -1008,11 +1007,9 @@ function wireUI() {
   });
   $('#searchInput').addEventListener('input', (e) => {
     state.query = e.target.value.trim();
-    if (state.query && state.view === 'now') {
-      state.view = 'schedule';
-      $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === 'schedule'));
-    }
-    render();
+    // поиск из «сейчас» переводит на «программу» (switchView сам вызывает render)
+    if (state.query && state.view === 'now') switchView('schedule');
+    else render();
   });
 
   // settings sheet

@@ -427,6 +427,6 @@ function resetMapLayers() {
 function eventGeoPoints(e) {
   if (!GEO.data || !GEO.data.venuePoints) return [];
   const ids = GEO.data.venuePoints[e.venue] || GEO.data.venuePoints[(e.venue || '').split(' / ')[0]] || [];
-  return ids.map(id => GEO.pointById[id] ? GEO.pointById[id].point
-    : GEO.data.points.find(p => p.id === id)).filter(Boolean);
+  // pointById живёт только после постройки карты; в данных — те же объекты
+  return ids.map(id => GEO.data.points.find(p => p.id === id)).filter(Boolean);
 }

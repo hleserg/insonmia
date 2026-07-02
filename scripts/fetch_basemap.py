@@ -81,7 +81,7 @@ def classify(tags):
     return None, False
 
 
-def simplify(coords, tolerance=1e-5):
+def simplify(coords):
     """Простое прореживание Дугласа-Пекера не нужно — хватает шага."""
     if len(coords) <= 40:
         return coords
