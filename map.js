@@ -138,11 +138,7 @@ function ensureMap() {
 
   GEO.layerGroups = groups;
   GEO.map = map;
-  // фильтры: всё вкл, кроме service и авто-дорог
-  if (!GEO.filters) {
-    GEO.filters = new Set(Object.keys(groups)
-      .filter(c => !DEFAULT_OFF.has(c) && c !== 'roads-auto'));
-  }
+  initFilters();
   applyMapFilters();
 
   const lats = GEO.data.points.map(p => p.lat);
@@ -226,6 +222,15 @@ function openPointCard(p) {
 }
 
 /* ---------- вид «карта» ---------- */
+function initFilters() {
+  if (GEO.filters || !GEO.data) return;
+  const cats = new Set(GEO.data.points.map(p => p.category));
+  cats.add('roads-foot');
+  cats.add('roads-auto');
+  GEO.filters = new Set([...cats]
+    .filter(c => !DEFAULT_OFF.has(c) && c !== 'roads-auto'));
+}
+
 function renderMapView() {
   const wrap = $('#mapWrap');
   wrap.classList.remove('hidden');
@@ -234,6 +239,7 @@ function renderMapView() {
     return;
   }
   $('#mapStatus').textContent = '';
+  initFilters();
   buildMapChips();
   // Leaflet требует видимый контейнер
   requestAnimationFrame(() => { ensureMap(); if (GEO.map) GEO.map.invalidateSize(); });
@@ -295,7 +301,7 @@ async function locateMe() {
 const NEARBY_RADII = [150, 300, 600, 0]; // 0 = всё
 
 function startNearbyWatch() {
-  if (GEO.mock) { GEO.nearby.pos = GEO.mock; render(); return; }
+  if (GEO.mock) { GEO.nearby.pos = GEO.mock; return; }
   if (!navigator.geolocation || GEO.nearby.watchId != null) return;
   GEO.nearby.watchId = navigator.geolocation.watchPosition(pos => {
     const t = Date.now();
@@ -357,8 +363,10 @@ function renderNearby(root) {
     root.appendChild(emptyState('🗺', 'Карта не загружена — откройте приложение онлайн один раз.'));
     return;
   }
+  // (пере)запускаем слежение при каждом входе в раздел: покидание вкладки
+  // делает clearWatch, а позиция должна обновляться при возвращении
+  startNearbyWatch();
   if (!GEO.nearby.pos) {
-    startNearbyWatch();
     const st = document.createElement('div');
     st.className = 'empty';
     st.innerHTML = '<span class="big">📡</span>$ gps --wait… Разрешите геолокацию — GPS работает без интернета.';

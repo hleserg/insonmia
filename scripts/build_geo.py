@@ -209,6 +209,9 @@ def build(kml_path=KML_FIXTURE):
             else:
                 unmatched.append(venue)
 
+    if len(points) < 30:
+        sys.exit(f"geo sanity check failed: только {len(points)} точек — "
+                 "отказываюсь перезаписывать data/geo.json")
     payload = {"points": points, "zones": zones, "roads": roads,
                "venuePoints": venue_points}
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n",
@@ -247,8 +250,14 @@ def match_venue(venue, by_key, aliases):
     # 2) точное совпадение нормализованного имени
     if nk in by_key:
         return by_key[nk]
-    # 3) суб-площадка «База / Уточнение» и «База. Уточнение»
+    # 3) точное совпадение суб-части: «Чайный терем / Чайная Пагода» ->
+    #    точка «Чайная Пагода» приоритетнее базовой
     parts = [p.strip() for p in re.split(r"[/.]", venue) if p.strip()]
+    for part in parts[::-1]:
+        pk = norm_key(part)
+        if pk in by_key:
+            return by_key[pk]
+    # 4) fuzzy по стемам
     candidates = [venue] + parts[::-1]
     best, best_score = None, 0.0
     for cand in candidates:

@@ -273,9 +273,14 @@ def build(from_file=None):
 
 
 def refresh_map():
-    """Свежий KML с Google My Maps -> фикстура -> data/geo.json."""
+    """Свежий KML с Google My Maps -> фикстура -> data/geo.json.
+    Валидируем ДО записи: 200-ответ с HTML-страницей согласия/ошибки не
+    должен затирать фикстуру и превращать geo.json в пустышку."""
     body, status = fetch(MAP_KML_URL)
     print(f"[{status}] KML: {len(body)} bytes")
+    if "<kml" not in body[:2000] or body.count("<Placemark>") < 50:
+        sys.exit("KML validation failed: ответ не похож на карту — "
+                 "фикстура и geo.json не тронуты")
     fixture = ROOT / "tests" / "fixtures" / "festival_map.kml"
     fixture.write_text(body, encoding="utf-8")
     import build_geo

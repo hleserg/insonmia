@@ -44,6 +44,26 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data === 'PREFETCH_TILES') {
+    // тайлы могли появиться на сервере ПОСЛЕ установки SW — докачиваем
+    // идемпотентно, не дожидаясь новой версии воркера
+    event.waitUntil((async () => {
+      try {
+        const res = await fetch('assets/tiles/manifest.json', { cache: 'no-cache' });
+        if (!res.ok) return;
+        const list = await res.json();
+        const tc = await caches.open(TILES);
+        const CHUNK = 50;
+        for (let i = 0; i < list.length; i += CHUNK) {
+          await Promise.allSettled(list.slice(i, i + CHUNK).map(async (u) => {
+            if (await tc.match(u)) return;
+            const r = await fetch(u);
+            if (r.ok) await tc.put(u, r);
+          }));
+        }
+      } catch { /* онлайна нет — докачаем в другой раз */ }
+    })());
+  }
 });
 
 self.addEventListener('activate', (event) => {
