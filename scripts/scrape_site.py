@@ -34,6 +34,8 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "program.json"
 
 EXPORT_URL = "https://insomniafest.ru/export/program/2026"
+MAP_KML_URL = ("https://www.google.com/maps/d/kml"
+               "?mid=1ImxgvK4d6XoIuTXzKlhjGs2Cdv4MrNg&forcekml=1")
 PROGRAM_APP_URL = "https://insomniafest.ru/?js=_js/programApp.v.1782814175"
 
 YEAR = 2026
@@ -249,6 +251,17 @@ def build(from_file=None):
           f"{len(payload['days'])} days -> {OUT}")
 
 
+def recon_map():
+    """Fetch the festival's Google My Maps KML (layers, placemarks, coords,
+    descriptions) so the offline map section can be built from it."""
+    out = ROOT / "debug_html"
+    out.mkdir(exist_ok=True)
+    body, status = fetch(MAP_KML_URL)
+    (out / "festival_map.kml").write_text(body, encoding="utf-8")
+    print(f"[{status}] KML: {len(body)} bytes")
+    print(body[:3000])
+
+
 def recon():
     out = ROOT / "debug_html"
     out.mkdir(exist_ok=True)
@@ -265,11 +278,13 @@ def recon():
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["build", "recon"], nargs="?", default="build")
+    ap.add_argument("mode", choices=["build", "recon", "map"], nargs="?", default="build")
     ap.add_argument("--from", dest="from_file", default=None,
                     help="read export JSON from a local file instead of the network")
     args = ap.parse_args()
     if args.mode == "build":
         build(args.from_file)
+    elif args.mode == "map":
+        recon_map()
     else:
         recon()
