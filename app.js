@@ -33,6 +33,8 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 const MON = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
 /* ---------- helpers ---------- */
 function fnv1a(str) {
@@ -51,7 +53,7 @@ function fnv1a(str) {
    в любой таймзоне. getNow() — единственный источник «сейчас» (поддерживает
    симуляцию ?now=). Фестивальные сутки: 06:00 → 05:59 следующего дня. */
 const {
-  MSK_MS, DAY_CUTOFF, epochFromISO, mskOf,
+  DAY_CUTOFF, epochFromISO, mskOf,
 } = window.InsomniaCore;
 const pad2 = x => String(x).padStart(2, '0');
 
@@ -286,7 +288,9 @@ function renderFavorites(root) {
     .filter(e => state.favs.has(e.id) && e._startMs != null)
     .sort(sortByStart);
 
-  if (!favs.length && state.favs.size === favs.length) {
+  // пустое состояние — только если избранного нет ВООБЩЕ:
+  // одни сироты (size > 0, живых 0) должны показать плашку ниже
+  if (!state.favs.size) {
     root.appendChild(emptyState('☆', 'Пока ничего не выбрано. Нажмите ☆ у события, чтобы добавить и получить напоминание.'));
     return;
   }
@@ -323,7 +327,7 @@ function renderFavorites(root) {
   const info = document.createElement('p');
   info.className = 'muted small center';
   info.style.marginTop = '16px';
-  info.textContent = Notification && Notification.permission === 'granted'
+  info.textContent = notifGranted()
     ? `Напоминания включены: за ${state.lead} мин до начала.`
     : 'Включите уведомления в настройках, чтобы получать напоминания.';
   root.appendChild(info);
@@ -507,9 +511,18 @@ async function requestNotifications() {
 function supportsTrigger() {
   return 'Notification' in window && 'showTrigger' in Notification.prototype && !!state.swReg;
 }
+// голый идентификатор Notification кидает ReferenceError там, где API нет
+// (iOS Safari) — проверяем только через 'in window'
+function notifGranted() {
+  return 'Notification' in window && Notification.permission === 'granted';
+}
+
+// Если планирование OS-триггера хоть раз упало, до конца сессии страхует
+// внутренний поллер — иначе напоминания молча исчезают.
+let osTriggerBroken = false;
 
 async function scheduleNotification(id) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!notifGranted()) return;
   const e = eventById(id);
   if (!e || e._startMs == null) return;
   const when = e._startMs - state.lead * 60000; // всегда реальное время события
@@ -517,18 +530,17 @@ async function scheduleNotification(id) {
   const { title, body } = notifText(e);
 
   // Best case: OS-scheduled trigger that fires even when the app is closed.
-  if (supportsTrigger()) {
+  if (supportsTrigger() && !osTriggerBroken) {
     try {
       await state.swReg.showNotification(title, {
         body,
         tag: 'ev-' + id,
         icon: 'icons/icon-192.png',
         badge: 'icons/icon-192.png',
-        data: { id, url: './' },
         showTrigger: new TimestampTrigger(when),
       });
       return;
-    } catch (err) { /* fall back to in-app timer */ }
+    } catch (err) { osTriggerBroken = true; }
   }
   // Fallback handled by the in-app polling scheduler (runs while app is open).
 }
@@ -536,7 +548,9 @@ async function scheduleNotification(id) {
 async function cancelNotification(id) {
   if (!state.swReg) return;
   try {
-    const notes = await state.swReg.getNotifications({ tag: 'ev-' + id, includeTriggered: false });
+    // includeTriggered: true — иначе ЗАПЛАНИРОВАННЫЙ (ещё не показанный)
+    // OS-триггер не найдётся и его нельзя будет отменить
+    const notes = await state.swReg.getNotifications({ tag: 'ev-' + id, includeTriggered: true });
     notes.forEach(n => n.close());
   } catch { /* ignore */ }
   const notified = getNotified();
@@ -547,8 +561,8 @@ async function cancelNotification(id) {
 // In-app safety-net scheduler: while the app is open, poll favorites and fire
 // a notification when we cross the lead-time threshold. Deduped via LS.notified.
 function pollNotifications() {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  if (supportsTrigger()) return; // OS triggers already cover it
+  if (!notifGranted()) return;
+  if (supportsTrigger() && !osTriggerBroken) return; // OS triggers already cover it
   const notified = getNotified();
   const t = getNow(); // симуляция позволяет тестировать напоминания
   let changed = false;
@@ -561,11 +575,17 @@ function pollNotifications() {
     if (t >= fireAt && t < start) {
       const { title, body } = notifText(e);
       try {
-        if (state.swReg) state.swReg.showNotification(title, { body, tag: 'ev-' + id, icon: 'icons/icon-192.png' });
-        else new Notification(title, { body, icon: 'icons/icon-192.png' });
-      } catch { /* ignore */ }
-      notified.add(id);
-      changed = true;
+        const p = state.swReg
+          ? state.swReg.showNotification(title, { body, tag: 'ev-' + id, icon: 'icons/icon-192.png' })
+          : (new Notification(title, { body, icon: 'icons/icon-192.png' }), null);
+        // отметка «уведомлён» — только при успехе, иначе напоминание
+        // молча теряется навсегда; при отказе попробуем на следующем тике
+        if (p && p.catch) p.catch(() => {
+          const n2 = getNotified(); n2.delete(id); setNotified(n2);
+        });
+        notified.add(id);
+        changed = true;
+      } catch { /* показ не удался — не помечаем, повторим через 30с */ }
     } else if (t >= start) {
       notified.add(id); // missed window; don't fire late
       changed = true;
@@ -589,41 +609,37 @@ function fmtDataVersion(iso) {
   const ms = Date.parse(iso);
   if (!ms) return iso || '—';
   const p = mskOf(ms);
-  return `${p.day} ${['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][p.mo]}, ${pad2(p.h)}:${pad2(p.mi)}`;
+  return `${p.day} ${MONTHS_GEN[p.mo]}, ${pad2(p.h)}:${pad2(p.mi)}`;
 }
 
-function noteDataVersion(p, { quietFirstRun = false } = {}) {
+function noteDataVersion(p) {
   const v = p && p.meta && p.meta.version;
   const el = $('#dataVersion');
   if (el) el.textContent = v ? `от ${fmtDataVersion(v)}` : '';
   if (!v) return;
+  // тост только при смене уже виденной версии; первый запуск тихий сам собой
   const seen = localStorage.getItem('insomnia.seenVersion');
-  if (seen && seen !== v && !quietFirstRun) toast('Расписание обновлено', 2000);
-  if (!seen || seen !== v) localStorage.setItem('insomnia.seenVersion', v);
+  if (seen && seen !== v) toast('Расписание обновлено', 2000);
+  if (seen !== v) localStorage.setItem('insomnia.seenVersion', v);
 }
 
 /* ---------- import / update ---------- */
 // Normalize a parsed workbook (SheetJS) into our program shape.
 // Mirrors scripts/convert_xlsx.py.
 const EXPORT_URL = 'https://insomniafest.ru/export/program/2026';
-const MSK_OFFSET = 3 * 3600;      // фестиваль живёт по Москве (UTC+3)
-const ROLLOVER = DAY_CUTOFF;      // фестивальные сутки: 06:00 -> 05:59
 
+// МСК-разложение и фестивальные сутки — единственный источник в core.js;
+// эти обёртки лишь переводят unix-секунды экспорта в эпоху мс
 function mskParts(ts) {
-  const d = new Date((Number(ts) + MSK_OFFSET) * 1000);
-  const pad = x => String(x).padStart(2, '0');
+  const p = mskOf(Number(ts) * 1000);
+  const hhmm = `${pad2(p.h)}:${pad2(p.mi)}`;
   return {
-    y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, day: d.getUTCDate(),
-    h: d.getUTCHours(), mi: d.getUTCMinutes(),
-    hhmm: `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`,
-    iso: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`,
-    utcms: d.getTime(),
+    y: p.y, mo: p.mo + 1, day: p.day, h: p.h, mi: p.mi, hhmm,
+    iso: `${p.y}-${pad2(p.mo + 1)}-${pad2(p.day)}T${hhmm}:00`,
   };
 }
 function festDateOf(ts) {
-  const d = new Date((Number(ts) + MSK_OFFSET - ROLLOVER * 3600) * 1000);
-  const pad = x => String(x).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  return getFestivalDay(Number(ts) * 1000);
 }
 function unescapeHtmlEntities(s) {
   const el = document.createElement('textarea');
@@ -656,14 +672,13 @@ function exportToProgram(data) {
     if (!title || !String(startTs || '').match(/^\d+$/)) return;
     const s = mskParts(startTs);
     const endD = mkEnd(startTs, endTs);
-    const pad = x => String(x).padStart(2, '0');
     const date = festDateOf(startTs);
     const ev = {
       id: fnv1a([kind, date, s.hhmm, venue, title].join('|')),
       type: kind, date, start: s.hhmm,
-      end: endD ? `${pad(endD.getUTCHours())}:${pad(endD.getUTCMinutes())}` : null,
+      end: endD ? `${pad2(endD.getUTCHours())}:${pad2(endD.getUTCMinutes())}` : null,
       startISO: s.iso,
-      endISO: endD ? `${endD.getUTCFullYear()}-${pad(endD.getUTCMonth() + 1)}-${pad(endD.getUTCDate())}T${pad(endD.getUTCHours())}:${pad(endD.getUTCMinutes())}:00` : null,
+      endISO: endD ? `${endD.getUTCFullYear()}-${pad2(endD.getUTCMonth() + 1)}-${pad2(endD.getUTCDate())}T${pad2(endD.getUTCHours())}:${pad2(endD.getUTCMinutes())}:00` : null,
       venue, title,
       description: extra.description || '', films: extra.films || [], age: cleanText(extra.age),
     };
@@ -706,10 +721,9 @@ function exportToProgram(data) {
   });
   events.sort((a, b) => (a.startISO || '').localeCompare(b.startISO || '') || a.venue.localeCompare(b.venue));
   const dates = [...new Set(events.map(e => e.date))].sort();
-  const monthsGen = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   const days = dates.map(d => {
-    const dt = new Date(d + 'T00:00:00');
-    return { date: d, label: `${dt.getDate()} ${monthsGen[dt.getMonth()]}` };
+    const [, m, dd] = d.split('-').map(Number);
+    return { date: d, label: `${dd} ${MONTHS_GEN[m - 1]}` };
   });
   return {
     festival: 'Бессонница 2026', year: YEAR, source: EXPORT_URL, version: 2,
@@ -747,8 +761,7 @@ function toISO(base, hhmm) {
   const d = new Date(base.getTime());
   d.setHours(h, m, 0, 0);
   if (h < NIGHT_ROLLOVER_HOUR) d.setDate(d.getDate() + 1);
-  const pad = x => String(x).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
 }
 function normalizeText(v) {
   // зеркалит clean_text() из scripts/scrape_site.py — иначе id разойдутся
@@ -787,8 +800,7 @@ function workbookToProgram(workbooks) {
       const kind = detectKind(titleCell) || fallbackKind;
       const base = parseSheetDate(sheetName, titleCell);
       if (!base) return;
-      const pad = x => String(x).padStart(2, '0');
-      const dateIso = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
+      const dateIso = `${base.getFullYear()}-${pad2(base.getMonth() + 1)}-${pad2(base.getDate())}`;
       daysMap[dateIso] = { date: dateIso, label: sheetName.trim() };
       for (let i = 2; i < rows.length; i++) {
         const r = rows[i] || [];
@@ -802,8 +814,12 @@ function workbookToProgram(workbooks) {
         const startISO = toISO(base, start);
         let endISO = end ? toISO(base, end) : null;
         if (endISO && startISO && endISO <= startISO) {
-          const d = new Date(endISO); d.setDate(d.getDate() + 1);
-          endISO = d.toISOString().slice(0, 19);
+          // +1 день строго по компонентам строки: new Date(наивный ISO)
+          // парсится как локальное время, а toISOString() — UTC, что
+          // сдвигало конец события на офсет таймзоны устройства
+          const ms = Date.UTC(+endISO.slice(0, 4), +endISO.slice(5, 7) - 1, +endISO.slice(8, 10)) + 86400000;
+          const nd = new Date(ms);
+          endISO = `${nd.getUTCFullYear()}-${pad2(nd.getUTCMonth() + 1)}-${pad2(nd.getUTCDate())}${endISO.slice(10)}`;
         }
         const films = kind === 'animation' ? desc.split(',').map(x => x.trim()).filter(Boolean) : [];
         const description = kind === 'animation' ? '' : desc;
@@ -835,21 +851,26 @@ function ensureXLSX() {
 }
 
 async function importFromFiles(fileList) {
-  try { await ensureXLSX(); }
-  catch (err) { toast('Ошибка: ' + err.message); return; }
-  const files = Array.from(fileList);
-  const workbooks = [];
-  for (const f of files) {
-    const buf = await f.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array' });
-    // guess a fallback kind from filename
-    const name = f.name.toLowerCase();
-    const fallbackKind = name.includes('неанима') || name.includes('nonanim') || name.includes('program') ? 'program'
-      : name.includes('анима') || name.includes('anim') ? 'animation' : null;
-    workbooks.push({ wb, fallbackKind });
+  try {
+    await ensureXLSX();
+    const files = Array.from(fileList);
+    const workbooks = [];
+    for (const f of files) {
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      // guess a fallback kind from filename
+      const name = f.name.toLowerCase();
+      const fallbackKind = name.includes('неанима') || name.includes('nonanim') || name.includes('program') ? 'program'
+        : name.includes('анима') || name.includes('anim') ? 'animation' : null;
+      workbooks.push({ wb, fallbackKind });
+    }
+    const program = workbookToProgram(workbooks);
+    applyImportedProgram(program, `Загружено ${program.events.length} событий из ${files.length} файла(ов)`);
+  } catch (err) {
+    // битый/не-Excel файл не должен падать молча
+    $('#importStatus').textContent = 'Ошибка импорта: ' + err.message;
+    toast('Не удалось прочитать файл');
   }
-  const program = workbookToProgram(workbooks);
-  applyImportedProgram(program, `Загружено ${program.events.length} событий из ${files.length} файла(ов)`);
 }
 
 async function importFromUrl(url) {
@@ -879,7 +900,7 @@ function applyImportedProgram(program, msg, persist = true) {
   // и переживают откат/повтор обновления данных
   state.day = null;
   localStorage.removeItem(LS.notified);
-  if (Notification && Notification.permission === 'granted') state.favs.forEach(scheduleNotification);
+  if (notifGranted()) state.favs.forEach(scheduleNotification);
   $('#importStatus').textContent = msg;
   noteDataVersion(program);
   updateDataInfo();
@@ -889,7 +910,10 @@ function applyImportedProgram(program, msg, persist = true) {
 
 async function refreshMapQuiet() {
   const g = await loadGeo();
-  if (g) { GEO.data = g; if (state.view === 'map' || state.view === 'nearby') render(); }
+  if (!g) return;
+  GEO.data = g;
+  resetMapLayers(); // уже отрисованная карта не должна показывать старые слои
+  if (state.view === 'map' || state.view === 'nearby') render();
 }
 
 function resetData() {
@@ -904,6 +928,9 @@ function resetData() {
     updateDataInfo();
     toast('Возвращена встроенная версия');
     render();
+  }).catch(() => {
+    // импорт уже удалён, а встроенная версия не поднялась — честно скажем
+    toast('Не удалось загрузить встроенную версию — перезапустите приложение');
   });
 }
 
@@ -1001,7 +1028,7 @@ function wireUI() {
     localStorage.setItem(LS.lead, state.lead);
     // reschedule
     localStorage.removeItem(LS.notified);
-    if (Notification && Notification.permission === 'granted') {
+    if (notifGranted()) {
       // cancel & reschedule triggers
       state.favs.forEach(async id => { await cancelNotification(id); scheduleNotification(id); });
     }
@@ -1167,8 +1194,7 @@ function updateSimBar() {
 
 /* ---------- ticking ---------- */
 function tick() {
-  $('#brandClock').textContent = fmtClock(getNow());
-  updateSimBar();
+  updateSimBar(); // заодно пишет #brandClock
   pollNotifications();
   if (state.view === 'now') render(); // keep "now" fresh
 }
@@ -1185,7 +1211,7 @@ async function boot() {
     $('#content').innerHTML = '<div class="empty"><span class="big">⚠️</span>Не удалось загрузить программу.</div>';
     return;
   }
-  noteDataVersion(state.program, { quietFirstRun: !localStorage.getItem('insomnia.seenVersion') });
+  noteDataVersion(state.program);
   state.day = pickDefaultDay();
   initMockGeo();
   GEO.data = await loadGeo();
@@ -1199,4 +1225,9 @@ async function boot() {
   updateNotifStatus();
 }
 
-document.addEventListener('DOMContentLoaded', boot);
+document.addEventListener('DOMContentLoaded', () => boot().catch(err => {
+  // любой необработанный сбой инициализации не должен оставлять вечный
+  // экран «загрузка» без объяснения
+  const c = $('#content');
+  if (c) c.innerHTML = `<div class="empty"><span class="big">⚠️</span>Приложение не запустилось: ${escapeHtml(err && err.message || String(err))}. Закройте и откройте его заново.</div>`;
+}));

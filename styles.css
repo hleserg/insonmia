@@ -228,20 +228,12 @@ button { font-family: inherit; cursor: pointer; }
 .fav-btn.on { color: var(--amber-2); text-shadow: 0 0 10px rgba(255,189,46,.4); }
 .fav-btn:active { background: var(--card-2); }
 
-/* ---- Map view ---- */
-.map-layer { margin-bottom: 6px; }
+/* ---- Map view (карточки «рядом») ---- */
 .map-point {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 11px 12px; margin-bottom: 8px;
 }
 .map-point-name { font-weight: 650; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
-.map-point-desc { font-size: 0.83rem; color: var(--muted); margin-top: 4px; white-space: pre-wrap; }
-.map-link {
-  flex: 0 0 auto; font-family: var(--mono); font-size: 0.78rem; color: var(--green);
-  text-decoration: none; border: 1px solid var(--green-dim); border-radius: 8px; padding: 11px 12px;
-  white-space: nowrap;
-}
-.map-link:active { background: var(--card-2); }
 
 /* ---- Sheets ---- */
 .sheet { position: fixed; inset: 0; z-index: 50; }

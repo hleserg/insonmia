@@ -1,5 +1,6 @@
 /* Бессонница 2026 — офлайн-карта (Leaflet) и раздел «Рядом».
-   Подключается после app.js, использует его состояние/утилиты. */
+   Грузится ДО app.js (см. index.html); глобалы app.js (state, render, …)
+   читает только в рантайме, когда оба скрипта уже исполнены. */
 'use strict';
 
 const GEO = {
@@ -11,7 +12,7 @@ const GEO = {
   highlight: null,
   selfMarker: null,
   filters: null,       // Set включённых категорий
-  nearby: { watchId: null, pos: null, radius: 300, timer: 0 },
+  nearby: { pos: null, radius: 300 }, // жизненный цикл watch — в core.createGeoWatcher
   mock: null,          // ?mockgeo=lat,lng
 };
 
@@ -80,7 +81,6 @@ function initMockGeo() {
 }
 
 /* ---------- геометрия: core.js ---------- */
-const distanceM = (a, b) => window.InsomniaCore.distanceM(a, b);
 const bearingLabel = (a, b) => window.InsomniaCore.bearingLabel(a, b);
 
 /* ---------- Leaflet ---------- */
@@ -181,10 +181,15 @@ function highlightPoint(id, { open = false } = {}) {
 }
 
 /* ---------- карточка точки ---------- */
+function venuesOfPoint(pointId) {
+  // площадки программы, привязанные к точке карты (алиасы — мультиточки)
+  const vp = (GEO.data && GEO.data.venuePoints) || {};
+  return Object.keys(vp).filter(v => vp[v].includes(pointId));
+}
+
 function eventsAtPoint(pointId) {
   // события площадок, чей venuePoints содержит эту точку, на текущий фест-день
-  const vp = GEO.data.venuePoints || {};
-  const venues = Object.keys(vp).filter(v => vp[v].includes(pointId));
+  const venues = venuesOfPoint(pointId);
   if (!venues.length) return [];
   const today = getFestivalDay(getNow());
   return state.program.events
@@ -192,11 +197,10 @@ function eventsAtPoint(pointId) {
     .sort(sortByStart);
 }
 
-function openPointCard(p) {
-  const meta = CAT_META[p.category] || CAT_META.other;
-  const evs = eventsAtPoint(p.id);
-  const now = getNow();
-  const evHtml = evs.slice(0, 3).map(e => {
+// единый рендер строки события у точки: и в карточке точки, и в «рядом».
+// «сейчас»/«скоро» — строго по statusOf (скоро = ≤30 мин, как во всём приложении)
+function pointEventsHtml(events, max) {
+  return events.slice(0, max).map(e => {
     const st = statusOf(e);
     const tag = st === 'live' ? '<span class="live-tag">сейчас</span>'
       : st === 'soon' ? '<span class="soon-tag">скоро</span>' : '';
@@ -204,6 +208,12 @@ function openPointCard(p) {
       <span class="pe-time">${e.start}</span> ${escapeHtml(e.title)} ${tag}
     </div>`;
   }).join('');
+}
+
+function openPointCard(p) {
+  const meta = CAT_META[p.category] || CAT_META.other;
+  const evs = eventsAtPoint(p.id);
+  const evHtml = pointEventsHtml(evs, 3);
   const body = $('#sheetBody');
   body.innerHTML = `
     <div class="detail-time">${meta.emoji} ${escapeHtml(meta.label)}</div>
@@ -220,8 +230,7 @@ function openPointCard(p) {
   const allBtn = body.querySelector('#pointAllEvents');
   if (allBtn) allBtn.addEventListener('click', () => {
     hideSheet('#sheet');
-    const vp = GEO.data.venuePoints || {};
-    const venue = Object.keys(vp).find(v => vp[v].includes(p.id));
+    const venue = venuesOfPoint(p.id)[0];
     if (venue) {
       state.query = venue;
       $('#searchInput').value = venue;
@@ -236,11 +245,10 @@ function openPointCard(p) {
 /* ---------- вид «карта» ---------- */
 function initFilters() {
   if (GEO.filters || !GEO.data) return;
+  // roads-auto сюда сознательно не входит: авто-дороги выключены по умолчанию
   const cats = new Set(GEO.data.points.map(p => p.category));
   cats.add('roads-foot');
-  cats.add('roads-auto');
-  GEO.filters = new Set([...cats]
-    .filter(c => !DEFAULT_OFF.has(c) && c !== 'roads-auto'));
+  GEO.filters = new Set([...cats].filter(c => !DEFAULT_OFF.has(c)));
 }
 
 function renderMapView() {
@@ -268,11 +276,12 @@ function buildMapChips() {
   const cats = [...new Set(GEO.data.points.map(p => p.category))];
   cats.sort((a, b) => (CAT_META[a]?.label || a).localeCompare(CAT_META[b]?.label || b));
   const mk = (cat, label) => {
+    // buildMapChips зовётся только после initFilters (renderMapView) —
+    // GEO.filters здесь гарантированно есть
     const b = document.createElement('button');
-    b.className = 'chip' + (GEO.filters && GEO.filters.has(cat) ? ' active' : '');
+    b.className = 'chip' + (GEO.filters.has(cat) ? ' active' : '');
     b.textContent = label;
     b.addEventListener('click', () => {
-      if (!GEO.filters) return;
       if (GEO.filters.has(cat)) GEO.filters.delete(cat); else GEO.filters.add(cat);
       b.classList.toggle('active');
       applyMapFilters();
@@ -375,13 +384,7 @@ function renderNearby(root) {
     const meta = CAT_META[p.category] || CAT_META.other;
     const el = document.createElement('div');
     el.className = 'map-point';
-    const evHtml = p.events.slice(0, 2).map(e => {
-      const live = e._startMs <= now;
-      return `<div class="point-event" data-id="${e.id}">
-        <span class="pe-time">${e.start}</span> ${escapeHtml(e.title)}
-        ${live ? '<span class="live-tag">сейчас</span>' : '<span class="soon-tag">скоро</span>'}
-      </div>`;
-    }).join('');
+    const evHtml = pointEventsHtml(p.events, 2);
     el.innerHTML = `
       <div class="map-point-name">
         <span>${meta.emoji} ${escapeHtml(p.name)}</span>
@@ -404,6 +407,20 @@ function switchView(view) {
   state.view = view;
   $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === view));
   render();
+}
+
+// гео-данные обновились (тихий рефреш): сбросить карту и чипсы,
+// следующее открытие вкладки перерисует всё из свежего GEO.data
+function resetMapLayers() {
+  if (GEO.map) { GEO.map.remove(); GEO.map = null; }
+  GEO.layerGroups = {};
+  GEO.zoneById = {};
+  GEO.pointById = {};
+  GEO.highlight = null;
+  GEO.selfMarker = null;
+  GEO.filters = null;
+  const row = $('#mapChips');
+  if (row) { row.innerHTML = ''; delete row.dataset.built; }
 }
 
 // событие -> точки на карте (мультиточки беседки)

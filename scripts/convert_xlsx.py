@@ -11,12 +11,12 @@ starts at 00:30 actually happens in the early morning of 10 July). Real
 start/end datetimes are computed so the app can sort and show "now"
 correctly. The rule: within a day sheet the festival "night" runs from the
 evening into the small hours, and nothing is scheduled between ~04:00 and
-~09:00, so any time with hour < 9 belongs to the next calendar day.
+~06:00, so any time with hour < NIGHT_ROLLOVER_HOUR (06) belongs to the
+next calendar day — the same DAY_CUTOFF the app uses at runtime.
 """
 import json
 import re
 import sys
-import hashlib
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -58,7 +58,7 @@ def parse_time_range(raw):
     """Return (start 'HH:MM', end 'HH:MM'|None) from '21:20–22:30'."""
     if not raw:
         return None, None
-    s = str(raw).strip().replace("–", "-").replace("—", "-").replace("—", "-")
+    s = str(raw).strip().replace("–", "-").replace("—", "-").replace("―", "-")
     parts = [p.strip() for p in s.split("-") if p.strip()]
     times = []
     for p in parts:
@@ -187,6 +187,13 @@ def convert():
         "venues": sorted({e["venue"] for e in events if e["venue"]}),
         "events": events,
     }
+    # тот же санити-гейт, что у scrape_site.py: битые/пустые xlsx не должны
+    # молча затирать хорошие данные
+    n_prog = sum(1 for e in events if e["type"] == "program")
+    n_anim = sum(1 for e in events if e["type"] == "animation")
+    if not events or n_prog < 50 or n_anim < 10:
+        sys.exit(f"sanity check failed: {n_prog} programme / {n_anim} animation "
+                 "events — refusing to overwrite data/program.json")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"Wrote {len(events)} events across {len(day_list)} days -> {OUT}")
