@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#12102a" />
+  <title>Бессонница 2026 — программа</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Бессонница" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-row">
+      <div class="brand">
+        <span class="moon">🌙</span>
+        <div>
+          <div class="brand-title">Бессонница 2026</div>
+          <div class="brand-clock" id="brandClock">—</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnSearch" class="icon-btn" title="Поиск" aria-label="Поиск">🔎</button>
+        <button id="btnSettings" class="icon-btn" title="Настройки" aria-label="Настройки">⚙️</button>
+      </div>
+    </div>
+    <div id="searchBar" class="search-bar hidden">
+      <input id="searchInput" type="search" placeholder="Поиск по названию, площадке, фильму…" autocomplete="off" />
+      <button id="btnSearchClose" class="icon-btn">✕</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="now">Сейчас</button>
+    <button class="tab" data-view="schedule">Программа</button>
+    <button class="tab" data-view="favorites">Избранное <span class="badge" id="favBadge">0</span></button>
+  </nav>
+
+  <div id="filters" class="filters">
+    <div class="day-strip" id="dayStrip"></div>
+    <div class="chip-row" id="typeChips">
+      <button class="chip active" data-type="all">Всё</button>
+      <button class="chip" data-type="program">Дневная</button>
+      <button class="chip" data-type="animation">Анимация (ночь)</button>
+    </div>
+  </div>
+
+  <main id="content" class="content"><div class="loading">Загрузка программы…</div></main>
+
+  <!-- Event detail sheet -->
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-handle" data-close></div>
+      <div id="sheetBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- Settings sheet -->
+  <div id="settings" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-handle" data-close></div>
+      <div class="sheet-body">
+        <h2>Настройки</h2>
+
+        <section class="setting-block">
+          <h3>Уведомления</h3>
+          <p class="muted">Напоминание приходит за 15 минут до начала избранных событий, пока приложение открыто или свёрнуто.</p>
+          <button id="btnEnableNotif" class="btn">Разрешить уведомления</button>
+          <div id="notifStatus" class="muted small"></div>
+          <label class="row-toggle">
+            <span>За сколько минут напоминать</span>
+            <select id="leadSelect">
+              <option value="5">5 мин</option>
+              <option value="10">10 мин</option>
+              <option value="15" selected>15 мин</option>
+              <option value="30">30 мин</option>
+              <option value="60">60 мин</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="setting-block">
+          <h3>Обновление программы</h3>
+          <p class="muted">Данные хранятся офлайн. Обновить можно из новой Excel-таблицы или по ссылке с сайта.</p>
+          <button id="btnImportFile" class="btn">Загрузить из Excel-файла…</button>
+          <input id="fileInput" type="file" accept=".xlsx,.xls" hidden multiple />
+          <div class="url-import">
+            <input id="urlInput" type="url" placeholder="https://…/program.xlsx" />
+            <button id="btnImportUrl" class="btn ghost">Загрузить по ссылке</button>
+          </div>
+          <button id="btnRefreshBundled" class="btn ghost">Проверить обновление на сервере</button>
+          <div id="importStatus" class="muted small"></div>
+        </section>
+
+        <section class="setting-block">
+          <h3>Данные</h3>
+          <div id="dataInfo" class="muted small"></div>
+          <button id="btnResetData" class="btn ghost danger">Сбросить к встроенной версии</button>
+        </section>
+
+        <section class="setting-block">
+          <h3>Установка</h3>
+          <p class="muted">Добавьте приложение на главный экран, чтобы открывать офлайн одним касанием.</p>
+          <button id="btnInstall" class="btn" disabled>Установить приложение</button>
+          <p class="muted small" id="installHint"></p>
+        </section>
+
+        <p class="muted small center">Бессонница 2026 · офлайн-программа</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="vendor/xlsx.full.min.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
