@@ -1,5 +1,9 @@
 {
  "festival": "Бессонница 2026",
+ "meta": {
+  "version": "2026-07-02T21:02:04Z",
+  "source": "insomniafest.ru"
+ },
  "year": 2026,
  "source": "https://insomniafest.ru/export/program/2026",
  "version": 2,

@@ -62,10 +62,15 @@ Two independent halves share one contract — `data/program.json`:
   inputs in one place, change all three, and check the old→new id overlap
   (`≥90%` of ids should survive a data refresh; verify like the comparison in
   the repo history before overwriting `data/program.json`).
-- **Night rollover:** festival "days" run into the small hours. Times with hour
-  `< 9` belong to the *previous* festival day (`NIGHT_ROLLOVER_HOUR = 9`): the
-  `date` field is the festival-day bucket, while `startISO`/`endISO` are the real
-  Moscow-time (`UTC+3`, no DST) datetimes used for sorting and the "now" view.
+- **Festival day:** runs 06:00→05:59 MSK (`DAY_CUTOFF = 6` in app.js,
+  `NIGHT_ROLLOVER_HOUR = 6` in both Python converters — keep in sync). The
+  stored `date` field is the build-time bucket, but the app recomputes
+  `_festDay` from `startISO` at load (`decorateProgram`).
+- **Time model (app.js):** ALL comparisons via epoch ms — `e._startMs/_endMs`
+  (from naive-MSK `startISO` via `epochFromISO`) vs `getNow()`. Never compare
+  local Date objects/strings: device may be in any timezone. `getNow()` also
+  serves the `?now=` time simulation (sessionStorage-backed, sim bar UI).
+  Display times via `mskOf(ms)`.
 - **Venue placeholder:** the site names one stage with keyboard-mash text
   (`тстцтсттсцтс`); `normalize_venue` in all three converters maps any all-`тсц`
   string to `Сцена (уточняется)`.
@@ -77,8 +82,12 @@ Two independent halves share one contract — `data/program.json`:
   banner in «Избранное» with a manual cleanup button.
 - SW protocol: `fetch('data/…?fresh=1')` = network-only (honest offline errors
   for the explicit «Обновить» button; Chromium hides `cache:'reload'` from SW).
-  Plain data fetches are network-first with cache fallback. Bump `CACHE` in
-  sw.js on ANY asset change.
+  Plain data fetches are network-first with ~3.5s timeout, silent cache
+  fallback. Bump `CACHE` in sw.js on ANY asset change. New SW versions wait
+  for the in-app «обновить» banner (`SKIP_WAITING` message) — no auto-reload.
+- `data/program.json` has `meta.version` (export timestamp); the build skips
+  rewriting when content (minus meta) is unchanged — no cron commit churn.
+  The app shows a quiet «Расписание обновлено» toast when the version changes.
 
 ### Data schema notes
 

@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v5';
+const CACHE = 'insomnia-2026-v7';
 const ASSETS = [
   './',
   'index.html',
@@ -16,9 +16,12 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
-  );
+  // без skipWaiting: активация новой версии — по кнопке «обновить» в приложении
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -46,38 +49,55 @@ self.addEventListener('fetch', (event) => {
         fetch(req).then((res) => {
           if (res.ok) {
             const copy = res.clone();
-            // кэшируем под каноническим URL без параметра
-            caches.open(CACHE).then((c) => c.put(url.pathname.replace(/^\//, ''), copy));
+            // кэшируем под каноническим АБСОЛЮТНЫМ URL без параметра
+            // (относительный путь в подпапке GitHub Pages удваивал префикс)
+            caches.open(CACHE).then((c) => c.put(url.origin + url.pathname, copy));
           }
           return res;
         })
       );
       return;
     }
-    event.respondWith(
-      fetch(req).then(async (res) => {
+    // network-first с таймаутом ~3.5с: офлайн/медленная сеть — штатный режим,
+    // молча отдаём кэш без ошибок
+    event.respondWith((async () => {
+      try {
+        const res = await Promise.race([
+          fetch(req),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3500)),
+        ]);
         if (!res.ok) {
-          // сервер ответил ошибкой — не затираем кэш, отдаём офлайн-копию
           const cached = await caches.match(req);
           return cached || res;
         }
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
         return res;
-      }).catch(() => caches.match(req))
-    );
+      } catch {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        return Response.error();
+      }
+    })());
     return;
   }
 
-  // Cache-first for the app shell.
+  // Cache-first for the app shell. ignoreSearch — чтобы /?now=… находил
+  // кэшированный шелл; навигация офлайн всегда падает на index.html.
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+    caches.match(req, { ignoreSearch: true }).then((cached) => cached || fetch(req).then((res) => {
       if (res.ok) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
       }
       return res;
-    }).catch(() => cached))
+    }).catch(async () => {
+      if (req.mode === 'navigate') {
+        const shell = await caches.match('index.html');
+        if (shell) return shell;
+      }
+      return Response.error();
+    }))
   );
 });
 
