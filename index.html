@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#12102a" />
+  <meta name="theme-color" content="#0d1117" />
   <title>Бессонница 2026 — программа</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
@@ -15,13 +15,14 @@
 </head>
 <body>
   <header class="app-header">
+    <div class="titlebar">
+      <div class="traffic"><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+      <div class="titlebar-label">~/бессонница-2026 — zsh</div>
+    </div>
     <div class="header-row">
       <div class="brand">
-        <span class="moon">🌙</span>
-        <div>
-          <div class="brand-title">Бессонница 2026</div>
-          <div class="brand-clock" id="brandClock">—</div>
-        </div>
+        <div class="brand-title"><span class="prompt">$</span> бессонница<span class="cursor"></span></div>
+        <div class="brand-clock" id="brandClock">—</div>
       </div>
       <div class="header-actions">
         <button id="btnSearch" class="icon-btn" title="Поиск" aria-label="Поиск">🔎</button>
@@ -29,33 +30,38 @@
       </div>
     </div>
     <div id="searchBar" class="search-bar hidden">
-      <input id="searchInput" type="search" placeholder="Поиск по названию, площадке, фильму…" autocomplete="off" />
+      <input id="searchInput" type="search" placeholder="grep: название, площадка, фильм…" autocomplete="off" />
       <button id="btnSearchClose" class="icon-btn">✕</button>
     </div>
   </header>
 
   <nav class="tabs" id="tabs">
-    <button class="tab active" data-view="now">Сейчас</button>
-    <button class="tab" data-view="schedule">Программа</button>
-    <button class="tab" data-view="favorites">Избранное <span class="badge" id="favBadge">0</span></button>
+    <button class="tab active" data-view="now">сейчас</button>
+    <button class="tab" data-view="schedule">программа</button>
+    <button class="tab" data-view="favorites">избранное <span class="badge" id="favBadge">0</span></button>
+    <button class="tab" data-view="map">карта</button>
   </nav>
 
   <div id="filters" class="filters">
     <div class="day-strip" id="dayStrip"></div>
     <div class="chip-row" id="typeChips">
-      <button class="chip active" data-type="all">Всё</button>
-      <button class="chip" data-type="program">Дневная</button>
-      <button class="chip" data-type="animation">Анимация (ночь)</button>
+      <button class="chip active" data-type="all">всё</button>
+      <button class="chip" data-type="program">дневная</button>
+      <button class="chip" data-type="animation">анимация·ночь</button>
     </div>
   </div>
 
-  <main id="content" class="content"><div class="loading">Загрузка программы…</div></main>
+  <main id="content" class="content"><div class="loading">$ ./программа --загрузка </div></main>
 
   <!-- Event detail sheet -->
   <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-card">
-      <div class="sheet-handle" data-close></div>
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/событие</div>
+        <button class="icon-btn" data-close aria-label="Закрыть" style="min-width:34px;height:34px;font-size:.9rem;">✕</button>
+      </div>
       <div id="sheetBody" class="sheet-body"></div>
     </div>
   </div>
@@ -64,13 +70,16 @@
   <div id="settings" class="sheet hidden" role="dialog" aria-modal="true">
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-card">
-      <div class="sheet-handle" data-close></div>
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/настройки</div>
+        <button class="icon-btn" data-close aria-label="Закрыть" style="min-width:34px;height:34px;font-size:.9rem;">✕</button>
+      </div>
       <div class="sheet-body">
-        <h2>Настройки</h2>
 
         <section class="setting-block">
-          <h3>Уведомления</h3>
-          <p class="muted">Напоминание приходит за 15 минут до начала избранных событий, пока приложение открыто или свёрнуто.</p>
+          <h3>уведомления</h3>
+          <p class="muted small">Напоминание приходит за 15 минут до начала избранных событий, пока приложение открыто или свёрнуто.</p>
           <button id="btnEnableNotif" class="btn">Разрешить уведомления</button>
           <div id="notifStatus" class="muted small"></div>
           <label class="row-toggle">
@@ -86,32 +95,59 @@
         </section>
 
         <section class="setting-block">
-          <h3>Обновление программы</h3>
-          <p class="muted">Данные хранятся офлайн. Обновить можно из новой Excel-таблицы или по ссылке с сайта.</p>
-          <button id="btnImportFile" class="btn">Загрузить из Excel-файла…</button>
+          <h3>git pull программы</h3>
+          <p class="muted small">Данные обновляются с сайта фестиваля автоматически (каждые 6 часов на сервере). Здесь можно подтянуть вручную.</p>
+          <button id="btnUpdateFromSite" class="btn">Обновить программу</button>
+          <button id="btnImportFile" class="btn ghost">Загрузить из Excel-файла…</button>
           <input id="fileInput" type="file" accept=".xlsx,.xls" hidden multiple />
           <div class="url-import">
             <input id="urlInput" type="url" placeholder="https://…/program.xlsx" />
-            <button id="btnImportUrl" class="btn ghost">Загрузить по ссылке</button>
+            <button id="btnImportUrl" class="btn ghost">Из ссылки</button>
           </div>
-          <button id="btnRefreshBundled" class="btn ghost">Проверить обновление на сервере</button>
           <div id="importStatus" class="muted small"></div>
         </section>
 
         <section class="setting-block">
-          <h3>Данные</h3>
+          <h3>данные</h3>
           <div id="dataInfo" class="muted small"></div>
           <button id="btnResetData" class="btn ghost danger">Сбросить к встроенной версии</button>
         </section>
 
         <section class="setting-block">
-          <h3>Установка</h3>
-          <p class="muted">Добавьте приложение на главный экран, чтобы открывать офлайн одним касанием.</p>
+          <h3>установка</h3>
+          <p class="muted small">Добавьте приложение на главный экран, чтобы открывать офлайн одним касанием.</p>
           <button id="btnInstall" class="btn" disabled>Установить приложение</button>
           <p class="muted small" id="installHint"></p>
         </section>
 
-        <p class="muted small center">Бессонница 2026 · офлайн-программа</p>
+        <div class="whoami">
+          <span class="g">$ whoami</span><br>
+          &gt; Серёга · zen-programmer · human (beta)<br>
+          <span class="g">$ status</span><br>
+          &gt; open to new friends :)<br>
+          &gt; на фесте — в костюме дзен-программиста, рад новым знакомствам<br>
+          <span class="g">$ contact</span><br>
+          &gt; tg: <a href="https://t.me/skhlebnikov" target="_blank" rel="noopener">@skhlebnikov</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Install gate: избранное доступно только в установленном приложении -->
+  <div id="installGate" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/установка</div>
+        <button class="icon-btn" data-close aria-label="Закрыть" style="min-width:34px;height:34px;font-size:.9rem;">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="gate-star">☆ → ★</div>
+        <p class="gate-text">Избранное живёт в офлайн-приложении. Установи его — и твой маршрут будет работать на поле без интернета.</p>
+        <button id="gateInstall" class="btn">Установить</button>
+        <div id="gateHint" class="muted small hidden"></div>
+        <button id="gateLater" class="btn ghost">Позже</button>
       </div>
     </div>
   </div>
