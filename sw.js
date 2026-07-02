@@ -1,6 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v8';
-const TILES = 'insomnia-tiles-v1';
+const CACHE = 'insomnia-2026-v9';
 const ASSETS = [
   './',
   'index.html',
@@ -9,6 +8,7 @@ const ASSETS = [
   'vendor/xlsx.full.min.js',
   'data/program.json',
   'data/geo.json',
+  'data/basemap.json',
   'map.js',
   'vendor/leaflet.js',
   'vendor/leaflet.css',
@@ -21,35 +21,12 @@ const ASSETS = [
 
 self.addEventListener('install', (event) => {
   // без skipWaiting: активация новой версии — по кнопке «обновить» в приложении
-  event.waitUntil((async () => {
-    await caches.open(CACHE).then((c) => c.addAll(ASSETS));
-    // офлайн-тайлы: тянем по манифесту пачками; сбои не валят установку
-    try {
-      const res = await fetch('assets/tiles/manifest.json');
-      if (res.ok) {
-        const list = await res.json();
-        const tc = await caches.open(TILES);
-        const CHUNK = 50;
-        for (let i = 0; i < list.length; i += CHUNK) {
-          await Promise.allSettled(list.slice(i, i + CHUNK).map(async (u) => {
-            if (await tc.match(u)) return;
-            const r = await fetch(u);
-            if (r.ok) await tc.put(u, r);
-          }));
-        }
-      }
-    } catch { /* тайлы догрузятся в рантайме */ }
-  })());
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
 });
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
-  if (event.data === 'PREFETCH_TILES') {
-    // тайлы могли появиться на сервере ПОСЛЕ установки SW — докачиваем
-    // идемпотентно, не дожидаясь новой версии воркера
-    event.waitUntil((async () => {
-      try {
-        const res = await fetch('assets/tiles/manifest.json', { cache: 'no-cache' });
+});
         if (!res.ok) return;
         const list = await res.json();
         const tc = await caches.open(TILES);
@@ -69,7 +46,7 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE && k !== TILES).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -82,23 +59,7 @@ self.addEventListener('fetch', (event) => {
 
   // Network-first for the program data so "check for update" works online,
   // with cache fallback when offline.
-  // Тайлы карты: cache-first в отдельном кэше, кэшируем по мере запросов
-  if (url.pathname.includes('/assets/tiles/')) {
-    event.respondWith(
-      caches.open(TILES).then(async (c) => {
-        const hit = await c.match(req);
-        if (hit) return hit;
-        try {
-          const res = await fetch(req);
-          if (res.ok) c.put(req, res.clone());
-          return res;
-        } catch { return Response.error(); }
-      })
-    );
-    return;
-  }
-
-  if (url.pathname.endsWith('data/program.json') || url.pathname.endsWith('data/geo.json')) {
+  if (url.pathname.endsWith('data/program.json') || url.pathname.endsWith('data/geo.json') || url.pathname.endsWith('data/basemap.json')) {
     // Явное «обновить» (?fresh=1) — только сеть: приложение должно честно
     // увидеть офлайн/ошибку, а не свежий на вид кэш с ложным успехом.
     // (cache:'reload' в запросе SW не видит — Chromium нормализует режим.)

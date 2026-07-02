@@ -48,6 +48,14 @@ async function loadGeo() {
   } catch { return null; }
 }
 
+async function loadBasemap() {
+  try {
+    const res = await fetch('data/basemap.json', { cache: 'no-cache' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
 function initMockGeo() {
   try {
     const q = new URLSearchParams(location.search).get('mockgeo');
@@ -103,11 +111,27 @@ function ensureMap() {
     zoomControl: true, attributionControl: true,
     minZoom: 13, maxZoom: 18,
   });
-  L.tileLayer('assets/tiles/{z}/{x}/{y}.png', {
-    minZoom: 13, maxZoom: 18,
-    attribution: '© OpenStreetMap',
-    errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
-  }).addTo(map);
+  // Подложка — собственная отрисовка данных Overpass (© OpenStreetMap
+  // contributors, ODbL). Тайлы не используем: их массовое скачивание
+  // блокируется политикой OSM, а данные легальны и в разы легче.
+  map.attributionControl.addAttribution('данные © OpenStreetMap');
+  if (GEO.basemap) {
+    const bm = GEO.basemap;
+    const style = {
+      meadow:   { color: '#16240f', fillColor: '#141f0c', fillOpacity: 0.55, weight: 0 },
+      forest:   { color: '#0f2416', fillColor: '#0e2012', fillOpacity: 0.75, weight: 0 },
+      water:    { color: '#12395c', fillColor: '#0e2f4d', fillOpacity: 0.85, weight: 1 },
+      building: { color: '#30363d', fillColor: '#21262d', fillOpacity: 0.9, weight: 1 },
+    };
+    ['meadow', 'forest', 'water', 'building'].forEach(kind => {
+      (bm[kind] || []).forEach(poly =>
+        L.polygon(poly, { ...style[kind], interactive: false }).addTo(map));
+    });
+    (bm.water_line || []).forEach(line =>
+      L.polyline(line, { color: '#12395c', weight: 4, opacity: 0.8, interactive: false }).addTo(map));
+    (bm.path || []).forEach(line =>
+      L.polyline(line, { color: '#3a4149', weight: 1.2, opacity: 0.6, interactive: false }).addTo(map));
+  }
 
   // зоны -> дороги -> точки (порядок отрисовки)
   const groups = {};

@@ -946,10 +946,6 @@ async function registerSW() {
       });
     });
     if (state.swReg.waiting && navigator.serviceWorker.controller) showAppUpdateBanner();
-    // страховка офлайн-тайлов: докачать появившиеся после установки
-    if (navigator.serviceWorker.controller && navigator.onLine) {
-      navigator.serviceWorker.controller.postMessage('PREFETCH_TILES');
-    }
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       // Перезагружаемся ТОЛЬКО когда обновление запросил пользователь кнопкой.
       // Первая установка SW (clients.claim) тоже даёт controllerchange —
@@ -1204,6 +1200,7 @@ async function boot() {
   state.day = pickDefaultDay();
   initMockGeo();
   GEO.data = await loadGeo();
+  GEO.basemap = await loadBasemap();
   wireUI();
   updateSimBar();
   render();
