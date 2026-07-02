@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v7';
+const CACHE = 'insomnia-2026-v9';
 const ASSETS = [
   './',
   'index.html',
@@ -7,7 +7,11 @@ const ASSETS = [
   'app.js',
   'vendor/xlsx.full.min.js',
   'data/program.json',
-  'data/map.json',
+  'data/geo.json',
+  'data/basemap.json',
+  'map.js',
+  'vendor/leaflet.js',
+  'vendor/leaflet.css',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -40,7 +44,7 @@ self.addEventListener('fetch', (event) => {
 
   // Network-first for the program data so "check for update" works online,
   // with cache fallback when offline.
-  if (url.pathname.endsWith('data/program.json') || url.pathname.endsWith('data/map.json')) {
+  if (url.pathname.endsWith('data/program.json') || url.pathname.endsWith('data/geo.json') || url.pathname.endsWith('data/basemap.json')) {
     // Явное «обновить» (?fresh=1) — только сеть: приложение должно честно
     // увидеть офлайн/ошибку, а не свежий на вид кэш с ложным успехом.
     // (cache:'reload' в запросе SW не видит — Chromium нормализует режим.)

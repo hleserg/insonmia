@@ -1,0 +1,36 @@
+name: Fetch basemap data (Overpass)
+
+# Подложка карты как ДАННЫЕ (вода/лес/луга/тропы) одним легальным
+# Overpass-запросом. OSM tile-серверы блокируют массовое скачивание
+# тайлов из датацентров — тайлы не используем вовсе.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  basemap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch basemap via Overpass
+        run: python3 scripts/fetch_basemap.py
+      - name: Commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/basemap.json
+          if git diff --cached --quiet; then
+            echo "no changes"
+          else
+            git commit -m "Подложка карты: данные Overpass (вода/лес/тропы)"
+            for i in 1 2 3; do
+              if git push; then exit 0; fi
+              git pull --rebase
+            done
+            git push
+          fi

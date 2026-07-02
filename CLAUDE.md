@@ -89,6 +89,25 @@ Two independent halves share one contract — `data/program.json`:
   rewriting when content (minus meta) is unchanged — no cron commit churn.
   The app shows a quiet «Расписание обновлено» toast when the version changes.
 
+### Map / geo
+
+- `scripts/build_geo.py` converts the My Maps KML (fixture
+  `tests/fixtures/festival_map.kml`, KMZ also accepted) into `data/geo.json`:
+  points/zones/roads with category rules; point+polygon pairs dedup by name,
+  same-named standalone points (18 «Туалет») stay separate; ЦУЭ and «Кирпич»
+  intentionally skipped; KML `<description>` (editor timestamps) ignored.
+- `data/place-aliases.json`: manual venue→point aliases; a value may be a LIST
+  of point names (multi-point venues). Keys are normalized at load.
+- `map.js` owns Leaflet (`vendor/leaflet.*`), the «карта» view and «рядом»;
+  loaded before app.js, shares its globals. **No raster tiles**: OSM tile
+  servers block bulk/datacenter fetches (verified: 1811 identical «Access
+  blocked» stubs). The basemap is DATA — `data/basemap.json` (water/forest/
+  meadow/paths/buildings) fetched once from Overpass by `fetch-tiles.yml`
+  and drawn as themed Leaflet polygons; attribution «данные © OpenStreetMap»
+  is kept. basemap.json rides the normal SW precache.
+- Event cards link to the in-app map (`eventGeoPoints`) — no Google Maps
+  links anywhere in runtime.
+
 ### Data schema notes
 
 `events[]`: `id, type(program|animation), date, start, end, startISO, endISO,

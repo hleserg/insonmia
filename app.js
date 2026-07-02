@@ -12,7 +12,6 @@ const LS = {
 
 const state = {
   program: null,
-  map: null,          // data/map.json: слои карты + матчинг площадок
   view: 'now',
   day: null,          // ISO date string
   type: 'all',        // all | program | animation
@@ -131,21 +130,7 @@ async function loadProgram() {
   return res.json();
 }
 
-async function loadMap() {
-  try {
-    const res = await fetch('data/map.json', { cache: 'no-cache' });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch { return null; }
-}
-
 function eventById(id) { return state.program.events.find(e => e.id === id); }
-function venuePoint(venue) {
-  return state.map && state.map.venuePoints ? state.map.venuePoints[venue] : null;
-}
-function gmapsUrl(pt) {
-  return `https://www.google.com/maps/search/?api=1&query=${pt.lat},${pt.lng}`;
-}
 
 /* ---------- rendering ---------- */
 function eventTypeLabel(t) { return t === 'animation' ? 'Анимация' : 'Программа'; }
@@ -242,65 +227,17 @@ function render() {
   $('#favBadge').textContent = liveFavCount();
   const content = $('#content');
   content.innerHTML = '';
-  $('#filters').classList.toggle('hidden', state.view === 'favorites' || state.view === 'map');
+  $('#filters').classList.toggle('hidden', state.view !== 'now' && state.view !== 'schedule');
+  content.classList.toggle('hidden', state.view === 'map');
+  if (state.view === 'map') { renderMapView(); }
+  else { hideMapView(); }
+  // watchPosition живёт только пока открыт раздел «рядом»
+  if (state.view !== 'nearby') stopNearbyWatch();
 
   if (state.view === 'now') return renderNow(content);
   if (state.view === 'schedule') return renderSchedule(content);
   if (state.view === 'favorites') return renderFavorites(content);
-  if (state.view === 'map') return renderMap(content);
-}
-
-function renderMap(root) {
-  if (!state.map || !state.map.layers || !state.map.layers.length) {
-    root.appendChild(emptyState('🗺', 'Карта ещё не загружена. Обновите программу онлайн — и она появится офлайн.'));
-    return;
-  }
-  const q = state.query.toLowerCase();
-  const head = document.createElement('div');
-  head.className = 'update-banner';
-  head.innerHTML = `<span>🗺 ${escapeHtml(state.map.title || 'Карта фестиваля')}</span>`;
-  const openBtn = document.createElement('a');
-  openBtn.className = 'map-link';
-  openBtn.href = state.map.mapUrl;
-  openBtn.target = '_blank';
-  openBtn.rel = 'noopener';
-  openBtn.textContent = 'открыть в Google Maps';
-  head.appendChild(openBtn);
-  root.appendChild(head);
-
-  let shown = 0;
-  state.map.layers.forEach(layer => {
-    let pts = layer.points;
-    if (q) pts = pts.filter(p => p.name.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q));
-    if (!pts.length) return;
-    shown += pts.length;
-    const wrap = document.createElement('div');
-    wrap.className = 'map-layer';
-    wrap.appendChild(groupLabel(`${layer.name} (${pts.length})`));
-    // туалеты и прочие безымянные дубли — компактно нумеруем
-    const nameCount = {};
-    pts.forEach(p => { nameCount[p.name] = (nameCount[p.name] || 0) + 1; });
-    const seen = {};
-    pts.forEach(p => {
-      let label = p.name;
-      if (nameCount[p.name] > 1) {
-        seen[p.name] = (seen[p.name] || 0) + 1;
-        label = `${p.name} №${seen[p.name]}`;
-      }
-      const el = document.createElement('div');
-      el.className = 'map-point';
-      el.innerHTML = `
-        <div class="map-point-name">
-          <span>${escapeHtml(label)}</span>
-          <a class="map-link" target="_blank" rel="noopener" href="${gmapsUrl(p)}">📍 маршрут</a>
-        </div>
-        ${p.desc ? `<div class="map-point-desc">${escapeHtml(p.desc)}</div>` : ''}
-      `;
-      wrap.appendChild(el);
-    });
-    root.appendChild(wrap);
-  });
-  if (!shown) root.appendChild(emptyState('🔍', '$ grep: на карте ничего не найдено.'));
+  if (state.view === 'nearby') return renderNearby(content);
 }
 
 function renderNow(root) {
@@ -494,7 +431,7 @@ function openDetail(id) {
   const timeStr = (e.end ? `${e.start}–${e.end}` : e.start) + (night ? ` · ${night.marker}` : '');
   const p = mskOf(epochFromISO(e._festDay + 'T12:00'));
   const dateStr = `${WD[p.dow]}, ${p.day} ${MON[p.mo]} 2026`;
-  const pt = venuePoint(e.venue);
+  const geoPts = typeof eventGeoPoints === 'function' ? eventGeoPoints(e) : [];
   const vinfo = state.program.venueInfo
     ? state.program.venueInfo[e.venue] || state.program.venueInfo[(e.venue || '').split(' / ')[0]]
     : null;
@@ -509,7 +446,7 @@ function openDetail(id) {
       <span class="tag">📍 ${escapeHtml(e.venue || '—')}</span>
       ${e.age ? `<span class="tag">${escapeHtml(e.age)}</span>` : ''}
       <span class="tag">${eventTypeLabel(e.type)}</span>
-      ${pt ? `<a class="tag" target="_blank" rel="noopener" href="${gmapsUrl(pt)}">🧭 на карте</a>` : ''}
+      ${geoPts.map((p, i) => `<button class="tag geo-jump" data-gid="${p.id}">📍 ${geoPts.length > 1 ? escapeHtml(p.name) : 'на карте'}</button>`).join('')}
     </div>
     ${e.description ? `<div class="detail-desc">${escapeHtml(e.description)}</div>` : ''}
     ${filmItems ? `
@@ -535,6 +472,11 @@ function openDetail(id) {
     toggleFav(id);
     openDetail(id); // refresh button
   });
+  body.querySelectorAll('.geo-jump').forEach(btn => btn.addEventListener('click', () => {
+    hideSheet('#sheet');
+    switchView('map');
+    setTimeout(() => highlightPoint(btn.dataset.gid, { open: false }), 300);
+  }));
   showSheet('#sheet');
 }
 
@@ -962,8 +904,8 @@ function applyImportedProgram(program, msg, persist = true) {
 }
 
 async function refreshMapQuiet() {
-  const m = await loadMap();
-  if (m) { state.map = m; if (state.view === 'map') render(); }
+  const g = await loadGeo();
+  if (g) { GEO.data = g; if (state.view === 'map' || state.view === 'nearby') render(); }
 }
 
 function resetData() {
@@ -1158,6 +1100,9 @@ function wireUI() {
     $('#installHint').textContent = 'На iPhone: кнопка «Поделиться» → «На экран Домой».';
   }
 
+  // карта: «я где?»
+  $('#btnLocate').addEventListener('click', locateMe);
+
   // симуляция времени
   $('#simMinus').addEventListener('click', () => setSim(getNow() - 3600000));
   $('#simPlus').addEventListener('click', () => setSim(getNow() + 3600000));
@@ -1253,7 +1198,9 @@ async function boot() {
   }
   noteDataVersion(state.program, { quietFirstRun: !localStorage.getItem('insomnia.seenVersion') });
   state.day = pickDefaultDay();
-  state.map = await loadMap();
+  initMockGeo();
+  GEO.data = await loadGeo();
+  GEO.basemap = await loadBasemap();
   wireUI();
   updateSimBar();
   render();
