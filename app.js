@@ -209,10 +209,12 @@ function renderMap(root) {
   head.appendChild(openBtn);
   root.appendChild(head);
 
+  let shown = 0;
   state.map.layers.forEach(layer => {
     let pts = layer.points;
     if (q) pts = pts.filter(p => p.name.toLowerCase().includes(q) || (p.desc || '').toLowerCase().includes(q));
     if (!pts.length) return;
+    shown += pts.length;
     const wrap = document.createElement('div');
     wrap.className = 'map-layer';
     wrap.appendChild(groupLabel(`${layer.name} (${pts.length})`));
@@ -239,6 +241,7 @@ function renderMap(root) {
     });
     root.appendChild(wrap);
   });
+  if (!shown) root.appendChild(emptyState('🔍', '$ grep: на карте ничего не найдено.'));
 }
 
 function renderNow(root) {
@@ -472,7 +475,21 @@ function showSheet(sel) { $(sel).classList.remove('hidden'); }
 function hideSheet(sel) { $(sel).classList.add('hidden'); }
 
 /* ---------- favorites ---------- */
+function isStandalone() {
+  // тот же детект, что и для установочной логики: PWA с главного экрана
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+}
+
+function showInstallGate() {
+  $('#gateHint').classList.add('hidden');
+  showSheet('#installGate');
+}
+
 function toggleFav(id) {
+  // во вкладке браузера избранное не сохраняем — зовём к установке:
+  // офлайн на поле работает только у установленного приложения
+  if (!isStandalone()) { showInstallGate(); return; }
   if (state.favs.has(id)) {
     state.favs.delete(id);
     cancelNotification(id);
@@ -661,7 +678,8 @@ function exportToProgram(data) {
   (data.places || []).forEach(place => {
     const base = normalizeVenue(unescapeHtmlEntities(place.placeName));
     const pdesc = cleanText(place.placeDescription);
-    if (base && pdesc) venueInfo[base] = pdesc;
+    // ключ — как итоговый event.venue (двойной unescape), паритет с Python
+    if (base && pdesc) venueInfo[cleanText(base)] = pdesc;
     (place.placeEvents || []).forEach(e => {
       const loc = cleanText(e.eventLocationPlace);
       const venue = loc && loc.toLowerCase() !== 'none' ? `${base} / ${loc}` : base;
@@ -738,9 +756,11 @@ function toISO(base, hhmm) {
 function normalizeText(v) {
   // зеркалит clean_text() из scripts/scrape_site.py — иначе id разойдутся
   return String(v || '')
+    .replace(/\ufeff/g, '')
     .replace(/\u00a0/g, ' ')
     .replace(/\u2028/g, '\n')
-    .replace(/\r\n/g, '\n')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u0085/g, '\n')
     .replace(/[ \t]+/g, ' ')
     .trim();
 }
@@ -843,10 +863,8 @@ function applyImportedProgram(program, msg, persist = true) {
   if (persist) localStorage.setItem(LS.program, JSON.stringify(program));
   else localStorage.removeItem(LS.program);
   state.program = program;
-  // prune favorites/notified that no longer exist
-  const ids = new Set(program.events.map(e => e.id));
-  state.favs = new Set([...state.favs].filter(id => ids.has(id)));
-  saveFavs();
+  // избранное НЕ чистим: осиротевшие отметки живут в плашке «избранного»
+  // и переживают откат/повтор обновления данных
   state.day = null;
   localStorage.removeItem(LS.notified);
   if (Notification && Notification.permission === 'granted') state.favs.forEach(scheduleNotification);
@@ -945,7 +963,7 @@ function wireUI() {
   // settings sheet
   $('#btnSettings').addEventListener('click', () => { updateNotifStatus(); updateDataInfo(); showSheet('#settings'); });
   $$('[data-close]').forEach(el => el.addEventListener('click', () => {
-    hideSheet('#sheet'); hideSheet('#settings');
+    hideSheet('#sheet'); hideSheet('#settings'); hideSheet('#installGate');
   }));
 
   // notifications
@@ -972,7 +990,10 @@ function wireUI() {
       const res = await fetch(EXPORT_URL, { cache: 'no-cache' });
       if (res.ok) {
         const program = exportToProgram(await res.json());
-        if (program.events.length > 100) {
+        const nProg = program.events.filter(e => e.type === 'program').length;
+        const nAnim = program.events.filter(e => e.type === 'animation').length;
+        // тот же sanity-гейт, что у CI: урезанный экспорт не затирает данные
+        if (nProg >= 50 && nAnim >= 10) {
           applyImportedProgram(program, `> обновлено с сайта: ${program.events.length} событий`);
           done = true;
         }
@@ -981,7 +1002,7 @@ function wireUI() {
     if (done) { refreshMapQuiet(); return; }
     st.textContent = '$ сайт недоступен напрямую → пробую сервер приложения…';
     try {
-      const res = await fetch('data/program.json', { cache: 'reload' });
+      const res = await fetch('data/program.json?fresh=1', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const p = await res.json();
       applyImportedProgram({ ...p, importedAt: new Date().toISOString() },
@@ -1004,6 +1025,25 @@ function wireUI() {
   });
   $('#btnResetData').addEventListener('click', resetData);
 
+  // install gate
+  $('#gateLater').addEventListener('click', () => hideSheet('#installGate'));
+  $('#gateInstall').addEventListener('click', async () => {
+    if (state.deferredInstall) {
+      state.deferredInstall.prompt();
+      const choice = await state.deferredInstall.userChoice;
+      state.deferredInstall = null;
+      $('#btnInstall').disabled = true;
+      if (choice && choice.outcome === 'accepted') hideSheet('#installGate');
+      return;
+    }
+    // beforeinstallprompt не случился — показываем инструкцию по ОС
+    const hint = $('#gateHint');
+    hint.textContent = /iphone|ipad|ipod/i.test(navigator.userAgent)
+      ? 'iPhone/iPad: кнопка «Поделиться» → «На экран “Домой”».'
+      : 'Android: меню браузера (⋮) → «Установить приложение» или «Добавить на главный экран».';
+    hint.classList.remove('hidden');
+  });
+
   // install
   $('#btnInstall').addEventListener('click', async () => {
     if (!state.deferredInstall) { toast('В этом браузере: меню → «Добавить на главный экран»'); return; }
@@ -1016,7 +1056,7 @@ function wireUI() {
     $('#installHint').textContent = 'На iPhone: кнопка «Поделиться» → «На экран Домой».';
   }
 
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideSheet('#sheet'); hideSheet('#settings'); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideSheet('#sheet'); hideSheet('#settings'); hideSheet('#installGate'); } });
 }
 
 /* ---------- ticking ---------- */

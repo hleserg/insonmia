@@ -69,7 +69,9 @@ def clean_text(v):
     if v is None:
         return ""
     s = html.unescape(str(v))
-    s = s.replace("\xa0", " ").replace(" ", "\n").replace("\r\n", "\n")
+    s = s.replace("\ufeff", "")
+    s = s.replace("\xa0", " ").replace("\u2028", "\n").replace("\r\n", "\n")
+    s = s.replace("\r", "\n").replace("\x85", "\n")
     s = re.sub(r"[ \t]+", " ", s)
     return s.strip()
 

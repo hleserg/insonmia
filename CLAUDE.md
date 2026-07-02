@@ -69,8 +69,16 @@ Two independent halves share one contract — `data/program.json`:
 - **Venue placeholder:** the site names one stage with keyboard-mash text
   (`тстцтсттсцтс`); `normalize_venue` in all three converters maps any all-`тсц`
   string to `Сцена (уточняется)`.
-- Text from the export is HTML-unescaped and `\xa0`-normalized (`clean_text`);
-  the app HTML-escapes on render (`escapeHtml`) — don't inject raw strings.
+- Text normalization (`clean_text` / `normalizeText`) folds NBSP, U+2028, bare
+  `\r`, NEL (U+0085) and strips BOM identically in all three converters — any
+  change must land in all of them or ids diverge.
+- The app HTML-escapes on render (`escapeHtml`) — don't inject raw strings.
+- Favourites are **never auto-pruned** on data refresh: orphaned ids show as a
+  banner in «Избранное» with a manual cleanup button.
+- SW protocol: `fetch('data/…?fresh=1')` = network-only (honest offline errors
+  for the explicit «Обновить» button; Chromium hides `cache:'reload'` from SW).
+  Plain data fetches are network-first with cache fallback. Bump `CACHE` in
+  sw.js on ANY asset change.
 
 ### Data schema notes
 

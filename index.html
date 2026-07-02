@@ -122,10 +122,32 @@
 
         <div class="whoami">
           <span class="g">$ whoami</span><br>
-          &gt; бессонница@2026 · офлайн-режим: включён<br>
+          &gt; Серёга · zen-programmer · human (beta)<br>
           <span class="g">$ status</span><br>
-          &gt; running anyway…
+          &gt; open to new friends :)<br>
+          &gt; на фесте — в костюме дзен-программиста, рад новым знакомствам<br>
+          <span class="g">$ contact</span><br>
+          &gt; tg: <a href="https://t.me/skhlebnikov" target="_blank" rel="noopener">@skhlebnikov</a>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Install gate: избранное доступно только в установленном приложении -->
+  <div id="installGate" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/установка</div>
+        <button class="icon-btn" data-close aria-label="Закрыть" style="min-width:34px;height:34px;font-size:.9rem;">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="gate-star">☆ → ★</div>
+        <p class="gate-text">Избранное живёт в офлайн-приложении. Установи его — и твой маршрут будет работать на поле без интернета.</p>
+        <button id="gateInstall" class="btn">Установить</button>
+        <div id="gateHint" class="muted small hidden"></div>
+        <button id="gateLater" class="btn ghost">Позже</button>
       </div>
     </div>
   </div>

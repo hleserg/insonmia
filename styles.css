@@ -311,6 +311,14 @@ button { font-family: inherit; cursor: pointer; }
 .whoami .g { color: var(--green); }
 .whoami a { color: var(--green); text-decoration: none; }
 
+/* ---- Install gate ---- */
+.gate-star {
+  font-family: var(--mono); font-size: 1.6rem; color: var(--amber-2);
+  text-align: center; margin: 6px 0 10px;
+  text-shadow: 0 0 14px rgba(255,189,46,.35);
+}
+.gate-text { font-size: 0.95rem; line-height: 1.5; margin: 0 0 6px; }
+
 /* ---- Toast ---- */
 .toast {
   position: fixed; left: 50%; bottom: calc(24px + var(--safe-bottom)); transform: translateX(-50%);
