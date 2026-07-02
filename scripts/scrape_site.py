@@ -48,31 +48,36 @@ def fetch(url):
 
 
 def recon():
+    """Round 2: the programme page is a JS shell; the data comes from
+    PROGRAM_EXPORT_URL = https://insomniafest.ru/export/program/2026.
+    Fetch that export (plus the programApp JS that consumes it) and commit
+    both so the parser can be written against the real format."""
     out = ROOT / "debug_html"
     out.mkdir(exist_ok=True)
-    markers = ["Время", "Экран", "Площадка", "Программа", "–", "21:", "22:"]
-    print("=== insomniafest.ru recon ===")
-    for section in SECTIONS:
-        for date, ts in DAYS.items():
-            url = f"{BASE}?section={section}&day={ts}"
+    targets = {
+        "export_program_2026.txt": "https://insomniafest.ru/export/program/2026",
+        "programApp.js": "https://insomniafest.ru/?js=_js/programApp.v.1782814175",
+    }
+    print("=== insomniafest.ru recon round 2 ===")
+    for fname, url in targets.items():
+        try:
+            body, status = fetch(url)
+        except urllib.error.HTTPError as e:
+            print(f"[HTTP {e.code}] {url}")
+            # Save the error body too — it may describe expected params.
             try:
-                html, status = fetch(url)
-            except urllib.error.HTTPError as e:
-                print(f"[HTTP {e.code}] {section} {date} -> {url}")
-                continue
-            except Exception as e:
-                print(f"[ERR] {section} {date}: {e}")
-                continue
-            fp = out / f"{section}_{date}.html"
-            fp.write_text(html, encoding="utf-8")
-            hits = [m for m in markers if m in html]
-            print(f"[{status}] {section} {date}: {len(html):>7} bytes, markers={hits}")
-    # Save one full page to stdout tail so we can eyeball structure from logs too.
-    sample = out / f"non-animation_2026-07-09.html"
-    if sample.exists():
-        txt = sample.read_text(encoding="utf-8")
-        print("\n=== SAMPLE (first 4000 chars of non-animation day 1) ===")
-        print(txt[:4000])
+                (out / fname).write_text(e.read().decode("utf-8", "replace"), encoding="utf-8")
+            except Exception:
+                pass
+            continue
+        except Exception as e:
+            print(f"[ERR] {url}: {e}")
+            continue
+        (out / fname).write_text(body, encoding="utf-8")
+        print(f"[{status}] {url} -> {fname}: {len(body)} bytes")
+        print(f"--- first 2000 chars of {fname} ---")
+        print(body[:2000])
+        print("--- end ---")
 
 
 if __name__ == "__main__":
