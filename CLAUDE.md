@@ -99,10 +99,12 @@ Two independent halves share one contract — `data/program.json`:
 - `data/place-aliases.json`: manual venue→point aliases; a value may be a LIST
   of point names (multi-point venues). Keys are normalized at load.
 - `map.js` owns Leaflet (`vendor/leaflet.*`), the «карта» view and «рядом»;
-  loaded before app.js, shares its globals. Tiles served from `assets/tiles/`
-  (fetched once by `fetch-tiles.yml` in CI — the sandbox cannot reach OSM),
-  cached in a separate SW cache `insomnia-tiles-*` (install prefetch via
-  `assets/tiles/manifest.json`, failures don't brick install).
+  loaded before app.js, shares its globals. **No raster tiles**: OSM tile
+  servers block bulk/datacenter fetches (verified: 1811 identical «Access
+  blocked» stubs). The basemap is DATA — `data/basemap.json` (water/forest/
+  meadow/paths/buildings) fetched once from Overpass by `fetch-tiles.yml`
+  and drawn as themed Leaflet polygons; attribution «данные © OpenStreetMap»
+  is kept. basemap.json rides the normal SW precache.
 - Event cards link to the in-app map (`eventGeoPoints`) — no Google Maps
   links anywhere in runtime.
 
