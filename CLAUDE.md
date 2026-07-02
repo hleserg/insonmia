@@ -12,26 +12,36 @@ UI и комментарии — на русском; общение с влад
 ## Commands
 
 ```bash
+# Unit tests (node:test, zero deps; CI runs this on every push via tests.yml):
+npm test                                  # весь сьют в 4 таймзонах
+node --test tests/js/time.test.js         # один файл
+node --test --test-name-pattern='границы' tests/js/*.test.js   # один кейс
+
 # Rebuild data/program.json from the site export (what CI does):
 python3 scripts/scrape_site.py build
 # Offline, from the committed fixture:
 python3 scripts/scrape_site.py build --from tests/fixtures/export_program_2026.json
+# Map data: KML fixture -> data/geo.json (категории, зоны, мэтчинг площадок):
+python3 scripts/build_geo.py
 # Fallback: rebuild from the Excel files in source_xlsx/ (needs openpyxl):
 pip install -r requirements.txt && python3 scripts/convert_xlsx.py
 
 # Serve the app locally (no build step — plain static files):
 python3 -m http.server 8099
-# End-to-end smoke test via Playwright (module lives at /opt/node22/lib/node_modules
-# in the cloud sandbox; chromium binary at /opt/pw-browsers/chromium):
-node /tmp/drive.cjs   # see "Testing" below — drive scripts are written ad hoc
 ```
 
-`npm test` runs the unit suite (node:test, zero deps) over `core.js` — the pure
-time/geo logic shared by browser and node — in 4 timezones. No bundler/linter.
-Verification is done by driving the served app with Playwright (mock the clock
-with `page.clock.install({time: new Date('2026-07-09T23:20:00')})` to test the
-festival-night "live" states) and by sanity-checking the regenerated JSON
-(event count ~705, id overlap vs the previous data — see below).
+No bundler/linter. E2E is ad-hoc Playwright driving the served app (in the
+cloud sandbox: `require('/opt/node22/lib/node_modules/playwright/index.js')`,
+chromium at `/opt/pw-browsers/chromium`). Recipes that matter:
+- mock time with `page.clock.install({time: ...})` — NOT `?now=` (prod ignores it);
+- favourites need standalone mode: `ctx.addInitScript(() =>
+  Object.defineProperty(navigator, 'standalone', {get: () => true}))`;
+- prove timezone independence with `timezoneId: 'UTC'` contexts;
+- geolocation via `newContext({geolocation, permissions: ['geolocation']})`;
+- **real offline = kill the http server**: Playwright's `setOffline` does NOT
+  apply to service-worker-initiated fetches and will mask offline bugs.
+After regenerating data, sanity-check event count (~705) and id overlap vs the
+previous file (favourites are keyed on ids).
 
 ## Architecture
 
@@ -48,8 +58,9 @@ Two independent halves share one contract — `data/program.json`:
    insomniafest.ru (egress policy)** — use the fixture, or run the workflow via
    `workflow_dispatch` and read what it commits/logs.
 
-2. **The app (vanilla JS PWA, no build).** `app.js` renders three views (Сейчас /
-   Программа / Избранное) from the program JSON kept in `localStorage` (imported
+2. **The app (vanilla JS PWA, no build).** Load order: `core.js` (pure logic) →
+   `vendor/*` → `map.js` (Leaflet map + «рядом») → `app.js` (five views: Сейчас /
+   Программа / Избранное / Карта / Рядом) from the program JSON kept in `localStorage` (imported
    data) or fetched from `data/program.json` (bundled). `sw.js` caches the app shell
    cache-first and `program.json` network-first; bump the `CACHE` version string on
    any asset change or clients keep the stale shell. In-browser Excel import
@@ -123,11 +134,22 @@ them, so render code must tolerate absence). Top-level: `days[]`, `venues[]`,
 ## Deployment / operations
 
 - Hosted as static files (GitHub Pages, relative paths — works from a subfolder).
-- The GitHub MCP tools are the way to trigger/inspect workflows from the sandbox
-  (`actions_run_trigger` with `update-program.yml`, then read job logs). CI commits
-  regenerated data back to the branch — `git pull` before continuing local work.
-- PR #1 (`claude/festa-insomnia-mobile-app-6rec4z` → `main`) is the base feature
-  PR. The owner prefers **one branch per task** and stacked PRs on top.
+- Workflows: `tests.yml` (npm test on every push/PR), `update-program.yml`
+  (cron 6h: программа + geo; runs from the DEFAULT branch only),
+  `fetch-tiles.yml` (dispatch-only; historical name — fetches the Overpass
+  basemap, not tiles). The GitHub MCP tools trigger/inspect them from the
+  sandbox (`actions_run_trigger`, then job logs). CI commits data back to the
+  branch — `git pull` before continuing local work; data-commit steps use a
+  pull-rebase retry (races with human pushes are real).
+- **workflow_dispatch quirk**: a new workflow file is only dispatchable once it
+  exists on the repo's DEFAULT branch — cherry-pick the yml there first, then
+  dispatch with `ref:` pointing at your feature branch.
+- Process the owner expects: **one branch per task** → PR → orchestrated
+  adversarial verify (multi-agent) → fix findings → merge → update README on
+  task completion. Verify agents found real bugs in every round — don't skip it.
+- History: PRs #1–#5 merged (пайплайн, тема+карта v1+гейт, модель времени,
+  карта v2+рядом, автотесты). Owner still needs to flip Settings → default
+  branch to `main` and enable GitHub Pages (main / root).
 
 ## Владелец
 
