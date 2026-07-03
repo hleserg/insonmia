@@ -417,10 +417,14 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--green); border: 3px solid #fff;
   box-shadow: 0 0 12px rgba(63,185,80,.8);
 }
+/* кнопка якорится к самой карте (.map-stage), а не к .map-wrap:
+   иначе подсказка под картой сдвигает её на себя и ворует тапы */
+.map-stage { position: relative; }
 .locate-btn {
   position: absolute; right: 12px; bottom: 18px; z-index: 800;
   box-shadow: 0 4px 16px rgba(0,0,0,.5);
 }
+.map-wrap .geo-help { margin: 8px 14px 12px; }
 .point-event {
   font-size: 0.85rem; padding: 12px 0; border-top: 1px solid var(--line);
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap; cursor: pointer;

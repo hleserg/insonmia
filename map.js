@@ -12,7 +12,7 @@ const GEO = {
   highlight: null,
   selfMarker: null,
   filters: null,       // Set включённых категорий
-  nearby: { pos: null, radius: 300 }, // жизненный цикл watch — в core.createGeoWatcher
+  nearby: { pos: null, posAt: 0, error: null, radius: 300 }, // watch — в core.createGeoWatcher
   mock: null,          // ?mockgeo=lat,lng
 };
 
@@ -294,14 +294,22 @@ function buildMapChips() {
 }
 
 /* ---------- геолокация ---------- */
+const IS_IOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+
 // человеческий текст по коду GeolocationPositionError (1/2/3);
-// код 1 — доступ не дан (в т.ч. Яндекс Браузер молча режет запрос в PWA)
+// код 1 — доступ не дан (в т.ч. Яндекс Браузер молча режет запрос в PWA);
+// код 0 (наш) — geolocation-API в браузере нет вовсе
 function geoErrorText(err) {
-  if (err && err.code === 1) {
-    return 'Браузер не дал доступ к геопозиции. Проверьте: настройки браузера → сайты → ' +
-      'местоположение, и разрешение «Местоположение» у самого браузера в настройках Android.';
+  if (err && err.code === 0) {
+    return 'В этом браузере нет геолокации. Откройте приложение в Chrome или Safari — карта и «рядом» те же.';
   }
-  // 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT — с точки зрения гостя одно и то же
+  if (err && err.code === 1) {
+    return IS_IOS
+      ? 'Браузер не дал доступ к геопозиции. Проверьте: Настройки → Конфиденциальность → Службы геолокации, и разрешение для вашего браузера.'
+      : 'Браузер не дал доступ к геопозиции. Проверьте: настройки браузера → сайты → местоположение, и разрешение «Местоположение» у самого браузера в настройках Android.';
+  }
+  // 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT: GPS продолжает ловиться в фоне —
+  // при первом же фиксе список появится сам, «повторить» лишь ускоряет
   return 'Не удалось получить GPS. Проверьте, что геолокация на телефоне включена, и вы не в ' +
     'помещении: первый захват спутников может занять минуту-две под открытым небом.';
 }
@@ -338,11 +346,12 @@ async function locateMe() {
     }).addTo(GEO.map);
     GEO.map.setView([pos.lat, pos.lng], Math.max(GEO.map.getZoom(), 16));
   } catch (err) {
-    toast(geoErrorText(err));
+    toast(geoErrorText(err), 8000); // текст длинный — даём время прочитать
   }
 }
 
-// сворачиваемая подсказка для «рядом» и карты
+// сворачиваемая подсказка для «рядом» и карты; открытость переживает
+// ререндеры (render() пересоздаёт DOM каждые ~10 с при живом GPS)
 function geoHelpEl() {
   const d = document.createElement('details');
   d.className = 'geo-help';
@@ -354,28 +363,40 @@ function geoHelpEl() {
       <li><b>На поляне:</b> GPS работает без интернета, но первый захват — до пары минут
         под открытым небом.</li>
     </ul>`;
+  d.open = !!GEO.helpOpen;
+  d.addEventListener('toggle', () => { GEO.helpOpen = d.open; });
   return d;
 }
 
 /* ---------- «рядом» ---------- */
 const NEARBY_RADII = [150, 300, 600, 0]; // 0 = всё
 
+const POS_FRESH_MS = 5 * 60000; // позиция старше — не «последняя известная», а вчерашняя
+
 const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
   typeof navigator !== 'undefined' ? navigator.geolocation : null,
   pos => {
     GEO.nearby.pos = pos;
+    GEO.nearby.posAt = Date.now();
     GEO.nearby.error = null;
     if (state.view === 'nearby') render();
   }, 10000, Date.now,
   err => {
-    // позиция уже есть — работаем по последней известной, ошибку не показываем
-    if (GEO.nearby.pos) return;
+    // свежая позиция есть — молча работаем по ней
+    if (GEO.nearby.pos && Date.now() - GEO.nearby.posAt < POS_FRESH_MS) return;
+    GEO.nearby.pos = null; // позиция протухла — честно признаём, не рисуем старые метры
+    // дедуп: та же ошибка уже на экране — не дёргаем render (не схлопывать подсказку)
+    if (GEO.nearby.error && GEO.nearby.error.code === err.code) return;
     GEO.nearby.error = err;
     if (state.view === 'nearby') render();
   });
 
 function startNearbyWatch() {
-  if (GEO.mock) { GEO.nearby.pos = GEO.mock; return; }
+  if (GEO.mock) { GEO.nearby.pos = GEO.mock; GEO.nearby.posAt = Date.now(); return; }
+  if (!(typeof navigator !== 'undefined' && navigator.geolocation)) {
+    GEO.nearby.error = { code: 0 }; // API нет вовсе — не молчать вечным «gps --wait»
+    return;
+  }
   nearbyWatcher.start();
   // разрешение уже отклонено — диалога не будет, честно говорим сразу
   geoDenied().then(denied => {
