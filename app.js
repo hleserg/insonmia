@@ -15,6 +15,7 @@ const LS = {
   urlSrc: 'insomnia.updateUrl',
   pins: 'insomnia.pins',            // пользовательские метки на карте
   installBarHidden: 'insomnia.installBarHidden', // ✕ на плашке установки
+  offlineReadyShown: 'insomnia.offlineReadyShown', // тост «офлайн готов» — один раз
 };
 
 const state = {
@@ -956,6 +957,7 @@ function resetData() {
 }
 
 function updateDataInfo() {
+  checkOfflineReady(); // строка «офлайн готов N/N» в блоке установки
   const p = state.program;
   const src = localStorage.getItem(LS.program) ? 'обновлённая (импорт)' : 'встроенная';
   const when = p.importedAt ? new Date(p.importedAt).toLocaleString('ru-RU') : '—';
@@ -969,6 +971,7 @@ async function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   try {
     state.swReg = await navigator.serviceWorker.register('sw.js');
+    setTimeout(checkOfflineReady, 2500); // прекэш к этому моменту обычно уже едет
     state.swReg.addEventListener('updatefound', () => {
       const nw = state.swReg.installing;
       nw && nw.addEventListener('statechange', () => {
@@ -997,8 +1000,10 @@ function showAppUpdateBanner() {
 
 /* ---------- установка: плашка + кнопки, переживающие отказ ---------- */
 function installInstructionText() {
+  // iOS: у ярлыка на главном экране ОТДЕЛЬНОЕ хранилище от Safari — без
+  // первого онлайн-запуска с ярлыка офлайн не заработает (серый экран)
   return /iphone|ipad|ipod/i.test(navigator.userAgent)
-    ? 'iPhone: Safari → «Поделиться» → «На экран “Домой”».'
+    ? 'iPhone: Safari → «Поделиться» → «На экран “Домой”». Потом ОБЯЗАТЕЛЬНО откройте приложение с ярлыка один раз с интернетом — иначе офлайн не заработает.'
     : 'Android: меню браузера (⋮) → «Установить приложение» или «Добавить на главный экран».';
 }
 
@@ -1050,6 +1055,38 @@ async function promptInstall(context) {
   if (DEV) console.log('[install] userChoice:', outcome);
   if (outcome === 'accepted') return; // остальное сделает appinstalled
   installShowInstruction(context);
+}
+
+/* «офлайн готов»: спрашиваем у SW, сколько файлов прекэша реально в кэше.
+   Особенно важно на iOS: у ярлыка отдельное от Safari хранилище, и до
+   первого онлайн-запуска с ярлыка офлайн не работает вовсе */
+function checkOfflineReady() {
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
+  navigator.serviceWorker.controller.postMessage('OFFLINE_STATUS');
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || d.type !== 'OFFLINE_STATUS') return;
+    const ready = d.have >= d.total;
+    const el = $('#offlineStatus');
+    if (el) {
+      el.textContent = ready
+        ? `Офлайн готов: ${d.have}/${d.total} файлов в кэше ✓`
+        : `Офлайн готовится: ${d.have}/${d.total} файлов — не выключайте интернет`;
+    }
+    if (ready) {
+      if (isStandalone() && localStorage.getItem(LS.offlineReadyShown) !== '1') {
+        localStorage.setItem(LS.offlineReadyShown, '1');
+        toast('✓ офлайн готов — приложение переживёт авиарежим', 5000);
+      }
+    } else {
+      setTimeout(checkOfflineReady, 4000); // прекэш ещё докачивается
+    }
+  });
+  // controller появляется после первой активации SW (первый запуск ярлыка)
+  navigator.serviceWorker.addEventListener('controllerchange', () => setTimeout(checkOfflineReady, 1500));
 }
 
 window.addEventListener('beforeinstallprompt', (e) => {

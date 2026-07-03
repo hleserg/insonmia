@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v18';
+const CACHE = 'insomnia-2026-v19';
 const ASSETS = [
   './',
   'index.html',
@@ -30,6 +30,19 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  // «офлайн готов?»: сколько файлов прекэша реально лежит в кэше
+  if (event.data === 'OFFLINE_STATUS') {
+    event.waitUntil((async () => {
+      let have = 0;
+      try {
+        const c = await caches.open(CACHE);
+        for (const a of ASSETS) {
+          if (await c.match(a, { ignoreSearch: true })) have++;
+        }
+      } catch { /* считаем что 0 */ }
+      if (event.source) event.source.postMessage({ type: 'OFFLINE_STATUS', have, total: ASSETS.length });
+    })());
+  }
 });
 
 self.addEventListener('activate', (event) => {
