@@ -155,6 +155,9 @@ button { font-family: inherit; cursor: pointer; }
   display: inline-flex; align-items: center;
 }
 .chip.active { color: var(--green); border-color: var(--green-dim); background: var(--card-2); }
+/* служебные «☑ все»/«☐ ничего» на карте: действие, а не состояние —
+   не подсвечиваются, слегка отделены от чипов категорий */
+.chip-bulk { color: var(--fg); border-style: dashed; }
 
 /* ---- Content ---- */
 /* min-height: сетка приезжает после загрузки данных — без резерва высоты

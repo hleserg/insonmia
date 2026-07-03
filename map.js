@@ -290,6 +290,7 @@ function buildMapChips() {
     // GEO.filters здесь гарантированно есть
     const b = document.createElement('button');
     b.className = 'chip' + (GEO.filters.has(cat) ? ' active' : '');
+    b.dataset.cat = cat;
     b.textContent = label;
     b.addEventListener('click', () => {
       if (GEO.filters.has(cat)) GEO.filters.delete(cat); else GEO.filters.add(cat);
@@ -298,6 +299,24 @@ function buildMapChips() {
     });
     row.appendChild(b);
   };
+  // «все»/«ничего»: включить/выключить все категории разом — чтобы оставить
+  // одни туалеты, не нужно выщёлкивать два десятка чипов по одному
+  const syncChips = () => {
+    row.querySelectorAll('.chip[data-cat]').forEach(b =>
+      b.classList.toggle('active', GEO.filters.has(b.dataset.cat)));
+    applyMapFilters();
+  };
+  const mkBulk = (label, fill) => {
+    const b = document.createElement('button');
+    b.className = 'chip chip-bulk';
+    b.textContent = label;
+    b.addEventListener('click', () => { fill(); syncChips(); });
+    row.appendChild(b);
+  };
+  mkBulk('☑ все', () => {
+    GEO.filters = new Set(['my', ...cats, 'roads-foot', 'roads-auto']);
+  });
+  mkBulk('☐ ничего', () => { GEO.filters = new Set(); });
   mk('my', 'мои'); // первым — свои метки
   cats.forEach(c => mk(c, (CAT_META[c] || CAT_META.other).label));
   mk('roads-foot', 'тропы');
