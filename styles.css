@@ -501,3 +501,7 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .install-bar-text b { display: block; color: var(--amber-2); font-size: 1rem; margin-bottom: 2px; }
 .install-bar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .install-bar-actions .btn { width: auto; margin: 0; padding: 12px 14px; }
+
+/* предупреждение про Яндекс Браузер */
+.warn-yandex { color: var(--amber-2); }
+.yb-warn { color: var(--amber-2); }
