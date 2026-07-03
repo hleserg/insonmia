@@ -104,7 +104,7 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---- Tabs ---- */
 .tabs {
-  position: sticky; top: 0; z-index: 15;
+  position: sticky; top: var(--header-h, 0px); z-index: 15;
   display: flex; gap: 4px; padding: 6px 10px 0;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
@@ -134,7 +134,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* ---- Filters ---- */
-.filters { padding: 8px 0 4px; background: var(--bg); position: sticky; top: 0; z-index: 10; }
+.filters { padding: 8px 0 4px; background: var(--bg); position: sticky; top: calc(var(--header-h, 0px) + var(--tabs-h, 0px)); z-index: 10; }
 .day-strip { display: flex; gap: 8px; overflow-x: auto; padding: 4px 14px; scrollbar-width: none; }
 .day-strip::-webkit-scrollbar { display: none; }
 .day-btn {
@@ -502,8 +502,7 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .install-bar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .install-bar-actions .btn { width: auto; margin: 0; padding: 12px 14px; }
 
-/* предупреждение про Яндекс Браузер */
-.warn-yandex { color: var(--amber-2); }
+/* акцент предупреждений о браузере (плашка + настройки) */
 .yb-warn { color: var(--amber-2); }
 
 /* «сейчас»: чужие дни заглушены, активные (текущие) сутки — как обычно */
