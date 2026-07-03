@@ -84,18 +84,18 @@
         </Icon>
       </IconStyle>
     </Style>
-    <Style id="icon-1559-097138-labelson">
+    <Style id="icon-1559-0F9D58-labelson">
       <IconStyle>
-        <color>ff387109</color>
+        <color>ff589d0f</color>
         <scale>1</scale>
         <Icon>
           <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
         </Icon>
       </IconStyle>
     </Style>
-    <Style id="icon-1559-0F9D58-labelson">
+    <Style id="icon-1559-795548-labelson">
       <IconStyle>
-        <color>ff589d0f</color>
+        <color>ff485579</color>
         <scale>1</scale>
         <Icon>
           <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
@@ -1620,38 +1620,6 @@
         <styleUrl>#poly-0288D1-2000-51-highlight</styleUrl>
       </Pair>
     </StyleMap>
-    <Style id="poly-097138-2000-51-normal">
-      <LineStyle>
-        <color>ff387109</color>
-        <width>2</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>33387109</color>
-        <fill>1</fill>
-        <outline>1</outline>
-      </PolyStyle>
-    </Style>
-    <Style id="poly-097138-2000-51-highlight">
-      <LineStyle>
-        <color>ff387109</color>
-        <width>3</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>33387109</color>
-        <fill>1</fill>
-        <outline>1</outline>
-      </PolyStyle>
-    </Style>
-    <StyleMap id="poly-097138-2000-51">
-      <Pair>
-        <key>normal</key>
-        <styleUrl>#poly-097138-2000-51-normal</styleUrl>
-      </Pair>
-      <Pair>
-        <key>highlight</key>
-        <styleUrl>#poly-097138-2000-51-highlight</styleUrl>
-      </Pair>
-    </StyleMap>
     <Style id="poly-0F9D58-1200-77-normal">
       <LineStyle>
         <color>ff589d0f</color>
@@ -1682,38 +1650,6 @@
       <Pair>
         <key>highlight</key>
         <styleUrl>#poly-0F9D58-1200-77-highlight</styleUrl>
-      </Pair>
-    </StyleMap>
-    <Style id="poly-0F9D58-2000-51-normal">
-      <LineStyle>
-        <color>ff589d0f</color>
-        <width>2</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>33589d0f</color>
-        <fill>1</fill>
-        <outline>1</outline>
-      </PolyStyle>
-    </Style>
-    <Style id="poly-0F9D58-2000-51-highlight">
-      <LineStyle>
-        <color>ff589d0f</color>
-        <width>3</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>33589d0f</color>
-        <fill>1</fill>
-        <outline>1</outline>
-      </PolyStyle>
-    </Style>
-    <StyleMap id="poly-0F9D58-2000-51">
-      <Pair>
-        <key>normal</key>
-        <styleUrl>#poly-0F9D58-2000-51-normal</styleUrl>
-      </Pair>
-      <Pair>
-        <key>highlight</key>
-        <styleUrl>#poly-0F9D58-2000-51-highlight</styleUrl>
       </Pair>
     </StyleMap>
     <Style id="poly-9C27B0-1200-77-normal">
@@ -1810,6 +1746,70 @@
       <Pair>
         <key>highlight</key>
         <styleUrl>#poly-AFB42B-2000-51-highlight</styleUrl>
+      </Pair>
+    </StyleMap>
+    <Style id="poly-BCAAA4-1200-77-normal">
+      <LineStyle>
+        <color>ffa4aabc</color>
+        <width>1.2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4da4aabc</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Style id="poly-BCAAA4-1200-77-highlight">
+      <LineStyle>
+        <color>ffa4aabc</color>
+        <width>1.8</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4da4aabc</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <StyleMap id="poly-BCAAA4-1200-77">
+      <Pair>
+        <key>normal</key>
+        <styleUrl>#poly-BCAAA4-1200-77-normal</styleUrl>
+      </Pair>
+      <Pair>
+        <key>highlight</key>
+        <styleUrl>#poly-BCAAA4-1200-77-highlight</styleUrl>
+      </Pair>
+    </StyleMap>
+    <Style id="poly-BCAAA4-2000-51-normal">
+      <LineStyle>
+        <color>ffa4aabc</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>33a4aabc</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Style id="poly-BCAAA4-2000-51-highlight">
+      <LineStyle>
+        <color>ffa4aabc</color>
+        <width>3</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>33a4aabc</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <StyleMap id="poly-BCAAA4-2000-51">
+      <Pair>
+        <key>normal</key>
+        <styleUrl>#poly-BCAAA4-2000-51-normal</styleUrl>
+      </Pair>
+      <Pair>
+        <key>highlight</key>
+        <styleUrl>#poly-BCAAA4-2000-51-highlight</styleUrl>
       </Pair>
     </StyleMap>
     <Style id="poly-E65100-1200-77-normal">
@@ -4648,7 +4648,7 @@
       <Placemark>
         <name>Главный административный лагерь</name>
         <description>11.03.2026 14:09:12</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.082422,54.6794604,0
@@ -4658,7 +4658,7 @@
       <Placemark>
         <name>Главный административный лагерь</name>
         <description>11.03.2026 14:08:54</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -4697,7 +4697,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 14:11:32</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.086088,54.681919,0
@@ -4707,7 +4707,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 14:11:23</description>
-        <styleUrl>#poly-0F9D58-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -4778,7 +4778,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 14:15:59</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.089307,54.681541,0
@@ -4788,7 +4788,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 14:15:35</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -4920,7 +4920,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 14:30:04</description>
-        <styleUrl>#icon-1559-097138-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.09096,54.682008,0
@@ -4930,7 +4930,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 14:29:56</description>
-        <styleUrl>#poly-097138-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5067,7 +5067,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>10.03.2026 23:39:20</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.088703,54.676539,0
@@ -5078,7 +5078,7 @@
         <name>Административный лагерь
 </name>
         <description>10.03.2026 23:38:59</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5099,7 +5099,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 14:25:01</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094077,54.683787,0
@@ -5110,7 +5110,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 14:24:40</description>
-        <styleUrl>#poly-0F9D58-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5131,7 +5131,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>10.03.2026 16:47:04</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.091027,54.675969,0
@@ -5142,7 +5142,7 @@
         <name>Административный лагерь
 </name>
         <description>10.03.2026 16:46:30</description>
-        <styleUrl>#poly-0F9D58-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5169,7 +5169,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 15:06:40</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094774,54.684526,0
@@ -5180,7 +5180,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 15:06:31</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5201,7 +5201,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 16:00:50</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.080037,54.680653,0
@@ -5212,7 +5212,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 15:59:33</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5231,7 +5231,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 17:30:52</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.080288,54.678433,0
@@ -5242,7 +5242,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 17:29:39</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5261,7 +5261,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>26.04.2026 16:10:49</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.07956,54.680403,0
@@ -5272,7 +5272,7 @@
         <name>Административный лагерь
 </name>
         <description>26.04.2026 16:04:43</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5291,7 +5291,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 23:09:53</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.092629,54.682958,0
@@ -5302,7 +5302,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 23:09:23</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5323,7 +5323,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 23:12:01</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.092624,54.682372,0
@@ -5334,7 +5334,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 23:11:51</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5365,7 +5365,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 23:17:31</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.091318,54.682662,0
@@ -5376,7 +5376,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 23:17:10</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5396,7 +5396,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 23:34:36</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.093123,54.687413,0
@@ -5407,7 +5407,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 23:34:13</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5429,7 +5429,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 17:07:32</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094854,54.683666,0
@@ -5440,7 +5440,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 17:06:53</description>
-        <styleUrl>#poly-0F9D58-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5459,7 +5459,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 17:14:43</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.089519,54.682609,0
@@ -5470,7 +5470,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 17:14:24</description>
-        <styleUrl>#poly-0F9D58-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5489,7 +5489,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 17:40:02</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.093422,54.682813,0
@@ -5500,7 +5500,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 17:39:41</description>
-        <styleUrl>#poly-0F9D58-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5524,7 +5524,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 17:48:52</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.086135,54.676942,0
@@ -5535,7 +5535,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 17:48:33</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5565,7 +5565,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 17:56:14</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.093484,54.675599,0
@@ -5576,7 +5576,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 17:55:48</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5598,7 +5598,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>11.03.2026 23:23:41</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.095899,54.675966,0
@@ -5609,7 +5609,7 @@
         <name>Административный лагерь
 </name>
         <description>11.03.2026 23:23:08</description>
-        <styleUrl>#poly-0F9D58-2000-51</styleUrl>
+        <styleUrl>#poly-BCAAA4-2000-51</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5638,7 +5638,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 20:32:26</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.080558,54.680933,0
@@ -5649,7 +5649,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 20:31:43</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5668,7 +5668,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 20:35:32</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.087635,54.680923,0
@@ -5679,7 +5679,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 20:35:13</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5712,7 +5712,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>13.04.2026 0:59:02</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.0773228,54.6796377,0
@@ -5723,7 +5723,7 @@
         <name>Административный лагерь
 </name>
         <description>13.04.2026 1:01:07</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5742,7 +5742,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>20.04.2026 18:43:26</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094911,54.684928,0
@@ -5753,7 +5753,7 @@
         <name>Административный лагерь
 </name>
         <description>20.04.2026 18:42:25</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5772,7 +5772,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>20.04.2026 19:02:40</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.090314,54.682162,0
@@ -5783,7 +5783,7 @@
         <name>Административный лагерь
 </name>
         <description>20.04.2026 19:02:22</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5802,7 +5802,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>20.04.2026 20:15:13</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.08499,54.677292,0
@@ -5813,7 +5813,7 @@
         <name>Административный лагерь
 </name>
         <description>20.04.2026 20:14:20</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5832,7 +5832,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>20.04.2026 20:36:21</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094024,54.684326,0
@@ -5843,7 +5843,7 @@
         <name>Административный лагерь
 </name>
         <description>20.04.2026 20:36:02</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5862,7 +5862,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>20.04.2026 19:57:03</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.086519,54.676802,0
@@ -5873,7 +5873,7 @@
         <name>Административный лагерь
 </name>
         <description>20.04.2026 19:56:38</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5894,7 +5894,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>30.04.2026 19:31:00</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.081544,54.67823,0
@@ -5905,7 +5905,7 @@
         <name>Административный лагерь
 </name>
         <description>30.04.2026 19:31:42</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5924,7 +5924,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>30.04.2026 19:47:56</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.07839,54.679005,0
@@ -5935,7 +5935,7 @@
         <name>Административный лагерь
 </name>
         <description>30.04.2026 19:42:32</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5954,7 +5954,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>06.05.2026 19:52:36</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094221,54.684814,0
@@ -5965,7 +5965,7 @@
         <name>Административный лагерь
 </name>
         <description>06.05.2026 19:52:08</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -5984,7 +5984,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 16:53:20</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094162,54.686369,0
@@ -5995,7 +5995,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 16:53:01</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -6014,7 +6014,7 @@
       <Placemark>
         <name>Административный лагерь</name>
         <description>08.04.2026 16:43:14</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.093376,54.686667,0
@@ -6025,7 +6025,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 16:42:15</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -6045,7 +6045,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 17:13:22</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.093767,54.684084,0
@@ -6056,7 +6056,7 @@
         <name>Административный лагерь
 </name>
         <description>08.04.2026 17:13:05</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -6076,7 +6076,7 @@
         <name>Административный лагерь
 </name>
         <description>18.05.2026 13:22:45</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.094266,54.685819,0
@@ -6087,7 +6087,7 @@
         <name>Административный лагерь
 </name>
         <description>18.05.2026 13:21:52</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
@@ -6107,7 +6107,7 @@
         <name>Административный лагерь
 </name>
         <description>18.05.2026 22:33:04</description>
-        <styleUrl>#icon-1559-0F9D58-labelson</styleUrl>
+        <styleUrl>#icon-1559-795548-labelson</styleUrl>
         <Point>
           <coordinates>
             35.092464,54.675659,0
@@ -6118,7 +6118,7 @@
         <name>Административный лагерь
 </name>
         <description>18.05.2026 22:32:44</description>
-        <styleUrl>#poly-0F9D58-1200-77</styleUrl>
+        <styleUrl>#poly-BCAAA4-1200-77</styleUrl>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
