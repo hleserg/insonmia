@@ -58,8 +58,12 @@ const BASE = `http://127.0.0.1:${PORT}`;
   console.log('после «все»:', JSON.stringify(all));
   assert.ok(all.markers >= before.markers, '«все» должно вернуть не меньше маркеров, чем на старте');
   assert.equal(all.activeChips, all.totalChips, 'все чипы должны гореть');
-  const autoOn = await page.evaluate(() => GEO.filters.has('roads-auto') && GEO.filters.has('service'));
-  assert.ok(autoOn, '«все» включает и авто-дороги, и служебные');
+  // roads-auto захардкожен в кнопке; остальные категории — по фактическим
+  // чипам, а не по именам из данных (geo.json может пересобраться)
+  const allOn = await page.evaluate(() =>
+    GEO.filters.has('roads-auto') &&
+    [...document.querySelectorAll('#mapChips .chip[data-cat]')].every(b => GEO.filters.has(b.dataset.cat)));
+  assert.ok(allOn, '«все» включает авто-дороги и каждую категорию из ряда чипов');
 
   // уход с вкладки и возврат — выбор не сбрасывается (state держится в GEO.filters)
   await page.click('#mapChips .chip-bulk >> nth=1');
