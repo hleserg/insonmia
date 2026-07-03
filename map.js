@@ -379,8 +379,7 @@ function sharePin(pin) {
   copy.then(() => toast('> ссылка на метку скопирована'))
     .catch(() => {
       // буфер недоступен — отдаём ссылку в выделяемое поле, не в тост
-      hideSheet('#sheet');
-      hideSheet('#settings');
+      hideAllSheets();
       $('#pinImportText').value = url;
       showSheet('#pinImport');
       toast('Буфер недоступен — ссылка в поле, скопируйте руками', 5000);
@@ -472,7 +471,7 @@ function applyPinImport() {
 }
 
 function openPinImport() {
-  hideSheet('#settings'); // не наслаиваем шиты: импорт открывается из настроек
+  hideAllSheets(); // не наслаиваем шиты (настройки, входящая метка, редактор)
   $('#pinImportText').value = '';
   $('#pinImportPreview').textContent = '';
   $('#pinImportApply').classList.add('hidden');
@@ -488,7 +487,7 @@ function exportPinsLine() {
     ? navigator.clipboard.writeText(line) : Promise.reject();
   copy.then(() => toast(`> ${pins.length} мет. одной строкой — в буфере`))
     .catch(() => {
-      hideSheet('#settings');
+      hideAllSheets();
       $('#pinImportText').value = line;
       showSheet('#pinImport');
       toast('Буфер недоступен — строка в поле импорта, скопируйте руками', 5000);
@@ -538,6 +537,7 @@ function handleIncomingPin() {
     showOnMap(false);
   });
   $('#pinIncomingView').addEventListener('click', () => { hideSheet('#pinIncoming'); showOnMap(true); });
+  hideAllSheets(); // ссылка могла прилететь при открытом импорте/настройках
   showSheet('#pinIncoming');
   setTimeout(() => { const b = $('#pinIncomingAdd'); if (b) b.focus(); }, 60);
   return true;

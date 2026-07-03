@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <title>Связь на поляне без интернета — Бессонница 2026</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="icons/favicon-32.png">
+  <style>
+    /* локальные стили страницы-гайда: карточки-шаги в духе терминала */
+    /* safe-top: в standalone-iOS контент рисуется под статус-баром */
+    .guide { max-width: 640px; margin: 0 auto; padding: calc(12px + var(--safe-top)) 14px calc(28px + var(--safe-bottom)); }
+    .guide h1 { font-size: 1.3rem; margin: 10px 0 4px; }
+    .guide .lead { color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
+    .g-card {
+      border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+      padding: 14px; margin-bottom: 12px;
+    }
+    .g-card h2 { font-size: 1rem; margin: 0 0 8px; display: flex; align-items: center; gap: 10px; }
+    .g-num {
+      font-family: var(--mono); color: var(--green); border: 1px solid var(--green-dim);
+      border-radius: 8px; min-width: 28px; height: 28px; display: inline-flex;
+      align-items: center; justify-content: center; font-size: 0.85rem; flex: none;
+    }
+    .g-card { overflow-wrap: anywhere; } /* длинные неразрывные строки не переливаются */
+    .g-card p, .g-card li { color: var(--text); line-height: 1.5; font-size: 0.95rem; }
+    .g-card ul { padding-left: 20px; margin: 8px 0; }
+    .g-card .muted { display: block; margin-top: 6px; }
+    .g-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: var(--tap); margin: 10px 0 2px; padding: 0 16px;
+      background: var(--bg); border: 1px solid var(--green-dim); border-radius: 10px;
+      color: var(--green); font-weight: 600; text-decoration: none;
+      -webkit-tap-highlight-color: transparent; overflow-wrap: anywhere;
+    }
+    .g-btn.ghost { border-color: var(--line); color: var(--text); }
+    .g-warn {
+      border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px;
+      color: var(--muted); font-size: 0.85rem; margin-top: 14px; line-height: 1.5;
+    }
+    .g-back {
+      display: inline-flex; align-items: center; min-height: var(--tap);
+      color: var(--muted); text-decoration: none; font-family: var(--mono); font-size: 0.85rem;
+    }
+    .g-kbd { font-family: var(--mono); color: var(--amber-2); }
+  </style>
+</head>
+<body>
+  <div class="guide">
+    <a class="g-back" href="./">&larr; к расписанию</a>
+    <h1>📡 Связь на поляне без интернета</h1>
+    <p class="lead">На поляне сети нет, но есть mesh: приложение <b>Bitchat</b> гоняет
+      текстовые сообщения по Bluetooth от телефона к телефону. Чем больше людей его
+      поставит, тем дальше бьёт сеть — сообщения прыгают через чужие телефоны.</p>
+
+    <div class="g-card">
+      <h2><span class="g-num">1</span> Установи ДО выезда — на поляне будет поздно</h2>
+      <p><b>Android</b> — прямая ссылка на APK:</p>
+      <a class="g-btn" href="https://github.com/permissionlesstech/bitchat-android/releases/download/1.7.4/app-arm64-v8a-release.apk"
+         rel="noopener">⬇ Скачать APK (Bitchat 1.7.4)</a>
+      <span class="muted small">браузер спросит разрешение на установку — это нормально
+        для приложений не из маркета · работает только с интернетом</span>
+      <p style="margin-top:12px"><b>iPhone</b> — App Store, поиск «Bitchat Mesh»:</p>
+      <a class="g-btn ghost" href="https://apps.apple.com/app/bitchat-mesh/id6748219622" rel="noopener"> App Store — Bitchat Mesh</a>
+      <span class="muted small">работает только с интернетом</span>
+    </div>
+
+    <div class="g-card">
+      <h2><span class="g-num">2</span> Открой приложение и разреши Bluetooth</h2>
+      <p>Больше ничего не нужно: ни регистрации, ни номера телефона. Ник можно сменить
+        тапом по нему.</p>
+    </div>
+
+    <div class="g-card">
+      <h2><span class="g-num">3</span> Проверь две настройки</h2>
+      <ul>
+        <li>канал <span class="g-kbd">#mesh</span> — выбран по умолчанию, это общий эфир поляны;</li>
+        <li>тумблер <span class="g-kbd">run in background</span> — <b>ВКЛЮЧЁН</b>.
+          Без него связь умирает, как только приложение свернулось.</li>
+      </ul>
+    </div>
+
+    <div class="g-card">
+      <h2><span class="g-num">4</span> Что НЕ трогать</h2>
+      <p>Geohash-каналы, карту локаций и Tor — это городские фичи, они работают через
+        интернет и на поляне бесполезны. Доступ к локации приложению давать не нужно.</p>
+    </div>
+
+    <div class="g-card">
+      <h2>💬 Как этим пользоваться на фесте</h2>
+      <ul>
+        <li><span class="g-kbd">#mesh</span> — общий эфир: видно всех в радиусе, сообщения
+          прыгают дальше через телефоны других пользователей;</li>
+        <li>личка — тап по нику в списке <span class="g-kbd">Сеть → Люди</span>;</li>
+        <li>для своей компании договоритесь о префиксе в квадратных скобках, например
+          <span class="g-kbd">[ЛО] выезжаем к сцене</span> — отдельных каналов
+          в mesh-режиме нет, префикс легко ищется глазами.</li>
+      </ul>
+    </div>
+
+    <div class="g-card">
+      <h2>📍 Обмен метками</h2>
+      <p>Кинули вам координаты лагеря текстом в Bitchat? Скопируйте сообщение и вставьте
+        в форму — приложение само найдёт координаты и название:</p>
+      <a class="g-btn" href="./#import-pins">➕ Добавить метку из текста</a>
+      <p class="muted small">а своей меткой можно поделиться из её карточки на карте —
+        ссылка вида #pin=… открывается даже без сети у того, у кого приложение уже стоит</p>
+    </div>
+
+    <div class="g-warn">
+      Честно: Bluetooth-mesh — это 10–50 метров на прыжок, в чистом поле дальше, в толпе
+      меньше. Сообщения могут идти долго или не дойти. Bitchat — стороннее приложение,
+      мы его не делали: вопросы не к нам 😄 Но на прошлых фестах штука работала.
+    </div>
+    <a class="g-back" href="./">&larr; к расписанию</a>
+  </div>
+</body>
+</html>

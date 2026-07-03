@@ -1,8 +1,9 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v13';
+const CACHE = 'insomnia-2026-v14';
 const ASSETS = [
   './',
   'index.html',
+  'mesh.html',
   'styles.css',
   'app.js',
   'core.js',
@@ -99,6 +100,13 @@ self.addEventListener('fetch', (event) => {
       return res;
     }).catch(async () => {
       if (req.mode === 'navigate') {
+        // короткая ссылка без .html (/mesh) — сперва пробуем страницу,
+        // и только потом откатываемся на шелл приложения
+        const seg = url.pathname.split('/').pop();
+        if (seg && !seg.includes('.')) {
+          const page = await caches.match(seg + '.html');
+          if (page) return page;
+        }
         const shell = await caches.match('index.html');
         if (shell) return shell;
       }

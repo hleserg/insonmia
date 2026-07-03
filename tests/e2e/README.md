@@ -10,6 +10,7 @@ node tests/e2e/geo.js           # геолокация: granted / denied без 
 node tests/e2e/ux.js            # UX-проход: тап-таргеты, 360px, пустые состояния, контраст
 node tests/e2e/perf.js          # первая отрисовка при 4x CPU + утечки при навигации
 node tests/e2e/xlsx-offline.js  # ленивый xlsx-вендор грузится офлайн из прекэша
+node tests/e2e/mesh-guide.js    # гайд Bitchat: APK-ссылка, переход к импорту меток, авиарежим
 ```
 
 Локально нужен Playwright: `npm i -D playwright && npx playwright install chromium`.

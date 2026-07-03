@@ -472,6 +472,9 @@ function openDetail(id) {
 
 function showSheet(sel) { $(sel).classList.remove('hidden'); }
 function hideSheet(sel) { $(sel).classList.add('hidden'); }
+// перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
+// иначе шиты наслаиваются и фокус уезжает в невидимое поле
+function hideAllSheets() { $$('.sheet').forEach(s => s.classList.add('hidden')); }
 
 /* ---------- favorites ---------- */
 function isStandalone() {
@@ -1143,9 +1146,7 @@ function wireUI() {
     $('#appUpdateBar').classList.add('hidden');
   });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') $$('.sheet').forEach(s => s.classList.add('hidden'));
-  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideAllSheets(); });
 }
 
 /* ---------- симуляция времени (?now=2026-07-11T17:00, МСК) ---------- */
@@ -1241,8 +1242,17 @@ async function boot() {
   registerSW();
   updateNotifStatus();
   handleIncomingPin(); // открыли по чужой #pin=-ссылке — предложить добавить
-  // ссылка может прилететь и в уже открытое приложение (same-document навигация)
-  window.addEventListener('hashchange', handleIncomingPin);
+  handleImportHash();  // гайд «связь на поляне» ведёт на форму импорта меток
+  // ссылки могут прилетать и в уже открытое приложение (same-document навигация)
+  window.addEventListener('hashchange', () => { handleIncomingPin() || handleImportHash(); });
+}
+
+// ./#import-pins (из mesh.html): открыть «добавить из текста» с фокусом в поле
+function handleImportHash() {
+  if (location.hash !== '#import-pins') return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  openPinImport();
+  return true;
 }
 
 document.addEventListener('DOMContentLoaded', () => boot().catch(err => {
