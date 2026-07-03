@@ -11,6 +11,7 @@ node tests/e2e/ux.js            # UX-проход: тап-таргеты, 360px,
 node tests/e2e/perf.js          # первая отрисовка при 4x CPU + утечки при навигации
 node tests/e2e/xlsx-offline.js  # ленивый xlsx-вендор грузится офлайн из прекэша
 node tests/e2e/mesh-guide.js    # гайд Bitchat: APK-ссылка, переход к импорту меток, авиарежим
+node tests/e2e/install-flow.js  # плашка установки, отказ в диалоге не убивает кнопку, appinstalled
 node tests/e2e/subpath.js       # подпуть /insonmia/: 0 запросов мимо, 0×404, #pin= офлайн, scope SW
 ```
 

@@ -55,6 +55,18 @@
     </div>
   </div>
 
+  <!-- Плашка установки: только в браузерном режиме (в standalone её нет) -->
+  <div id="installBar" class="install-bar hidden">
+    <div class="install-bar-text">
+      <b>⚠️ Без установки офлайн-режим работать не будет!</b>
+      <span id="installBarHint">На поляне нет сети — поставьте приложение, пока есть интернет.</span>
+    </div>
+    <div class="install-bar-actions">
+      <button id="installBarBtn" class="btn">Установить</button>
+      <button id="installBarClose" class="icon-btn" aria-label="Скрыть">✕</button>
+    </div>
+  </div>
+
   <main id="content" class="content"><div class="loading">$ ./программа --загрузка </div></main>
 
   <!-- Офлайн-карта (Leaflet) -->
@@ -169,7 +181,7 @@
         <section class="setting-block">
           <h3>установка</h3>
           <p class="muted small">Добавьте приложение на главный экран, чтобы открывать офлайн одним касанием.</p>
-          <button id="btnInstall" class="btn" disabled>Установить приложение</button>
+          <button id="btnInstall" class="btn">Установить приложение</button>
           <p class="muted small" id="installHint"></p>
         </section>
 

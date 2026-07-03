@@ -490,3 +490,14 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 
 /* логотип-глаз в шапке: наследует высоту строки заголовка */
 .brand-eye { width: 1.15em; height: 1.15em; vertical-align: -0.22em; margin-right: 6px; }
+
+/* плашка установки (только браузерный режим): крупно и выделенно */
+.install-bar {
+  display: flex; gap: 10px; align-items: center;
+  padding: 12px 14px;
+  background: #241a06; border-bottom: 2px solid var(--amber-2);
+}
+.install-bar-text { flex: 1; min-width: 0; font-size: 0.85rem; color: var(--muted); line-height: 1.35; }
+.install-bar-text b { display: block; color: var(--amber-2); font-size: 1rem; margin-bottom: 2px; }
+.install-bar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.install-bar-actions .btn { width: auto; margin: 0; padding: 12px 14px; }
