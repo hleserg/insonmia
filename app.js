@@ -1007,17 +1007,47 @@ function installInstructionText() {
     : 'Android: меню браузера (⋮) → «Установить приложение» или «Добавить на главный экран».';
 }
 
+// семейство браузера для честных предупреждений. Порядок важен: клоны
+// Chromium (ЯБ, Edge, Opera, Samsung...) содержат «Chrome» в UA
+function browserFamily() {
+  const ua = navigator.userAgent;
+  if (/YaBrowser/i.test(ua)) return 'yandex';
+  if (/EdgA?\/|OPR\/|SamsungBrowser|MiuiBrowser|UCBrowser|HuaweiBrowser|Firefox\/|FxiOS|DuckDuckGo|Vivaldi|WhatsApp|Instagram|Telegram/i.test(ua)) return 'other';
+  if (/CriOS\/|Chrome\//i.test(ua)) return 'chrome';
+  if (/Safari/i.test(ua) && /iPhone|iPad|iPod|Macintosh/i.test(ua)) return 'safari';
+  return 'other';
+}
+
+// текст-предупреждение по браузеру; Chrome и Safari — без страшилок
+function browserSupportWarning() {
+  const fam = browserFamily();
+  if (fam === 'yandex') {
+    return '<b class="yb-warn">Вы в Яндекс Браузере — в нём приложение работает нестабильно.</b> ' +
+      'Полная работоспособность тестировалась только с Chrome: на время феста ' +
+      'поставьте Chrome браузером по умолчанию.';
+  }
+  if (fam === 'other') {
+    return '<b class="yb-warn">Работоспособность в этом браузере не подтверждена.</b> ' +
+      'Тестировалось в Chrome (Android) и Safari (iPhone) — надёжнее всего установить из Chrome.';
+  }
+  return '';
+}
+
 function updateInstallBar() {
   const bar = $('#installBar');
   if (!bar) return;
   const show = !isStandalone() && localStorage.getItem(LS.installBarHidden) !== '1';
   bar.classList.toggle('hidden', !show);
-  // открыто в Яндекс Браузере — говорим прямо: тестировалось только с Chrome
-  if (show && /YaBrowser/i.test(navigator.userAgent)) {
-    $('#installBarHint').innerHTML =
-      '<b class="yb-warn">Вы в Яндекс Браузере — в нём приложение работает нестабильно.</b> ' +
-      'Полная работоспособность тестировалась только с Chrome: на время феста ' +
-      'поставьте Chrome браузером по умолчанию.';
+  if (show) {
+    const warn = browserSupportWarning();
+    if (warn) $('#installBarHint').innerHTML = warn;
+  }
+  // та же строка в настройках (пустая для Chrome/Safari — блок скрыт)
+  const bw = $('#browserWarn');
+  if (bw) {
+    const warn = browserSupportWarning();
+    bw.innerHTML = warn;
+    bw.classList.toggle('hidden', !warn);
   }
 }
 
