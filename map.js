@@ -103,6 +103,9 @@ function ensureMap() {
   // Подложка — собственная отрисовка данных Overpass (© OpenStreetMap
   // contributors, ODbL). Тайлы не используем: их массовое скачивание
   // блокируется политикой OSM, а данные легальны и в разы легче.
+  // Префикс без дефолтного флага (Leaflet ≥1.8 вшивает его в ссылку);
+  // лицензия Leaflet (BSD) упоминания в UI не требует — оставляем текст.
+  map.attributionControl.setPrefix('Leaflet');
   map.attributionControl.addAttribution('данные © OpenStreetMap');
   if (GEO.basemap) {
     const bm = GEO.basemap;
