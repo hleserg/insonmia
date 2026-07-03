@@ -1007,6 +1007,13 @@ function updateInstallBar() {
   if (!bar) return;
   const show = !isStandalone() && localStorage.getItem(LS.installBarHidden) !== '1';
   bar.classList.toggle('hidden', !show);
+  // открыто в Яндекс Браузере — говорим прямо: тестировалось только с Chrome
+  if (show && /YaBrowser/i.test(navigator.userAgent)) {
+    $('#installBarHint').innerHTML =
+      '<b class="yb-warn">Вы в Яндекс Браузере — в нём приложение работает нестабильно.</b> ' +
+      'Полная работоспособность тестировалась только с Chrome: на время феста ' +
+      'поставьте Chrome браузером по умолчанию.';
+  }
 }
 
 // показать инструкцию по месту клика; кнопки при этом остаются живыми
