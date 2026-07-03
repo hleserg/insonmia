@@ -426,3 +426,20 @@ button { font-family: inherit; cursor: pointer; }
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap; cursor: pointer;
 }
 .pe-time { font-family: var(--mono); color: var(--amber-2); font-weight: 700; }
+
+/* сворачиваемая подсказка «Не работает геолокация?» («рядом» + карта) */
+.geo-help {
+  margin: 10px 2px 4px;
+  border: 1px dashed var(--line); border-radius: 10px;
+  font-size: 0.85rem; color: var(--muted);
+}
+.geo-help summary {
+  cursor: pointer; list-style: none;
+  min-height: var(--tap); display: flex; align-items: center;
+  padding: 0 14px; font-family: var(--mono); font-size: 0.8rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.geo-help summary::before { content: "? "; color: var(--green); margin-right: 6px; }
+.geo-help ul { margin: 0; padding: 0 14px 12px 28px; }
+.geo-help li { margin-bottom: 8px; line-height: 1.45; }
+.geo-help li b { color: var(--text); font-weight: 600; }

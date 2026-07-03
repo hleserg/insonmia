@@ -167,3 +167,25 @@ test('watch-throttle: прореживает внутри интервала и 
   fakeNow += 10000; handler(mk(54.5));  // ещё интервал — принят
   assert.equal(fixes.length, 3);
 });
+
+test('watch-ошибки: onError получает код, опции форсят GPS (ЯБ/офлайн)', () => {
+  let errHandler = null, opts = null;
+  const fakeGeo = {
+    watchPosition(cb, err, o) { errHandler = err; opts = o; return 1; },
+    clearWatch() {},
+  };
+  const errors = [];
+  const w = core.createGeoWatcher(fakeGeo, () => {}, 0, Date.now, e => errors.push(e));
+  w.start();
+  // enableHighAccuracy: сетевое определение (дефолт Яндекс Браузера)
+  // не работает без интернета — нужен именно GPS
+  assert.equal(opts.enableHighAccuracy, true);
+  assert.ok(opts.timeout >= 10000, 'timeout должен давать GPS время на захват');
+  errHandler({ code: 2 });               // POSITION_UNAVAILABLE
+  errHandler({ code: 1 });               // PERMISSION_DENIED
+  assert.deepEqual(errors.map(e => e.code), [2, 1]);
+  // без onError ошибка не роняет колбэк (обратная совместимость)
+  const w2 = core.createGeoWatcher(fakeGeo, () => {}, 0);
+  w2.start();
+  assert.doesNotThrow(() => errHandler({ code: 3 }));
+});
