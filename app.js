@@ -272,6 +272,26 @@ function renderNow(root) {
 
 function renderSchedule(root) {
   if (!state.day) state.day = pickDefaultDay(); // ДО полосы — иначе нет активного дня
+
+  // Активный поиск — по ВСЕЙ программе, не только по выбранному дню:
+  // иначе событие «теряется», если оно на другой дате. Полоса дат на время
+  // поиска заглушена (день-фильтр не действует); state.day не трогаем —
+  // после очистки запроса вернётся выбранный день.
+  if (state.query) {
+    buildDayStrip(true, null);
+    const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
+    if (!evs.length) {
+      root.appendChild(emptyState('🔍', '$ grep: ничего не найдено по фильтру.'));
+      return;
+    }
+    let lastDay = null;
+    evs.forEach(e => {
+      if (e._festDay !== lastDay) { lastDay = e._festDay; root.appendChild(dayHeading(e._festDay)); }
+      root.appendChild(eventCard(e));
+    });
+    return;
+  }
+
   buildDayStrip();
   const evs = filteredEvents()
     .filter(e => e._festDay === state.day)
