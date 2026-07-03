@@ -239,9 +239,12 @@ function renderNow(root) {
   const live = window.InsomniaCore.getCurrent(evs, n);
   const upcoming = window.InsomniaCore.getUpcoming(evs, n); // без горизонта: все будущие
 
-  const first = evs[0] ? evs[0]._startMs : null;
-  const lastEv = evs[evs.length - 1];
-  const last = lastEv ? (lastEv._endMs || lastEv._startMs) : null;
+  // границы для баннеров «до старта»/«завершён» — по ВСЕЙ программе:
+  // активный поиск/фильтр сужает evs и посреди феста давал ложное
+  // «до старта 3 дн.» (единственный матч — событие через 3 дня)
+  const all = state.program.events.filter(e => e._startMs != null);
+  const first = all.length ? Math.min(...all.map(e => e._startMs)) : null;
+  const last = all.length ? Math.max(...all.map(e => e._endMs || e._startMs)) : null;
 
   if (first && n < first) {
     const days = Math.ceil((first - n) / 86400000);
@@ -1221,12 +1224,16 @@ function wireUI() {
     $('#searchInput').value = '';
     state.query = '';
     render();
+    window.scrollTo(0, 0);
   });
   $('#searchInput').addEventListener('input', (e) => {
     state.query = e.target.value.trim();
     // поиск из «сейчас» переводит на «программу» (switchView сам вызывает render)
     if (state.query && state.view === 'now') switchView('schedule');
     else render();
+    // размер выдачи скачет между нажатиями: без сброса скролла результат
+    // (или пустое состояние) остаётся спрятанным за липкой шапкой
+    window.scrollTo(0, 0);
   });
 
   // settings sheet
