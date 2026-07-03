@@ -505,3 +505,7 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 /* предупреждение про Яндекс Браузер */
 .warn-yandex { color: var(--amber-2); }
 .yb-warn { color: var(--amber-2); }
+
+/* «сейчас»: чужие дни заглушены, активные (текущие) сутки — как обычно */
+.day-btn:disabled { opacity: 0.35; }
+.day-btn.active:disabled { opacity: 1; }
