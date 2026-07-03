@@ -14,6 +14,7 @@ const LS = {
   notified: 'insomnia.notified',    // ids already notified (in-app scheduler dedup)
   urlSrc: 'insomnia.updateUrl',
   pins: 'insomnia.pins',            // пользовательские метки на карте
+  installBarHidden: 'insomnia.installBarHidden', // ✕ на плашке установки
 };
 
 const state = {
@@ -994,10 +995,73 @@ function showAppUpdateBanner() {
   bar.classList.remove('hidden');
 }
 
+/* ---------- установка: плашка + кнопки, переживающие отказ ---------- */
+function installInstructionText() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+    ? 'iPhone: Safari → «Поделиться» → «На экран “Домой”».'
+    : 'Android: меню браузера (⋮) → «Установить приложение» или «Добавить на главный экран».';
+}
+
+function updateInstallBar() {
+  const bar = $('#installBar');
+  if (!bar) return;
+  const show = !isStandalone() && localStorage.getItem(LS.installBarHidden) !== '1';
+  bar.classList.toggle('hidden', !show);
+}
+
+// показать инструкцию по месту клика; кнопки при этом остаются живыми
+function installShowInstruction(context) {
+  const txt = installInstructionText();
+  if (context === 'gate') {
+    const h = $('#gateHint');
+    h.textContent = txt;
+    h.classList.remove('hidden');
+  } else if (context === 'bar') {
+    $('#installBarHint').textContent = txt;
+    toast(txt, 8000);
+  } else {
+    const h = $('#installHint');
+    h.textContent = txt;
+    h.classList.remove('hidden');
+  }
+}
+
+// единый флоу для плашки, гейта и настроек. Событие beforeinstallprompt
+// одноразовое: тратим его, но при ЛЮБОМ исходе кроме established кнопки
+// не хороним — показываем инструкцию; Chrome может выдать новое событие
+// (слушатель вернёт быстрый путь сам)
+async function promptInstall(context) {
+  const ev = state.deferredInstall;
+  if (!ev) { installShowInstruction(context); return; }
+  state.deferredInstall = null;
+  let outcome = 'exception';
+  try {
+    ev.prompt();
+    const choice = await ev.userChoice;
+    outcome = (choice && choice.outcome) || 'unknown';
+  } catch { /* prompt уже потрачен или не разрешён жестом */ }
+  if (DEV) console.log('[install] userChoice:', outcome);
+  if (outcome === 'accepted') return; // остальное сделает appinstalled
+  installShowInstruction(context);
+}
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   state.deferredInstall = e;
-  $('#btnInstall').disabled = false;
+  updateInstallBar();
+});
+
+// скрываем установочный UI ТОЛЬКО по факту установки
+window.addEventListener('appinstalled', () => {
+  state.deferredInstall = null;
+  localStorage.setItem(LS.installBarHidden, '1');
+  const bar = $('#installBar');
+  if (bar) bar.classList.add('hidden');
+  hideSheet('#installGate');
+  const h = $('#installHint');
+  if (h) { h.textContent = 'Установлено ✅ Откройте приложение с главного экрана.'; h.classList.remove('hidden'); }
+  toast('> установлено. Откройте с главного экрана 🎉', 6000);
+  if (DEV) console.log('[install] appinstalled');
 });
 
 /* ---------- event wiring ---------- */
@@ -1095,35 +1159,19 @@ function wireUI() {
   });
   $('#btnResetData').addEventListener('click', resetData);
 
-  // install gate
+  // установка: гейт, настройки, плашка — один флоу promptInstall
   $('#gateLater').addEventListener('click', () => hideSheet('#installGate'));
-  $('#gateInstall').addEventListener('click', async () => {
-    if (state.deferredInstall) {
-      state.deferredInstall.prompt();
-      const choice = await state.deferredInstall.userChoice;
-      state.deferredInstall = null;
-      $('#btnInstall').disabled = true;
-      if (choice && choice.outcome === 'accepted') hideSheet('#installGate');
-      return;
-    }
-    // beforeinstallprompt не случился — показываем инструкцию по ОС
-    const hint = $('#gateHint');
-    hint.textContent = /iphone|ipad|ipod/i.test(navigator.userAgent)
-      ? 'iPhone/iPad: кнопка «Поделиться» → «На экран “Домой”».'
-      : 'Android: меню браузера (⋮) → «Установить приложение» или «Добавить на главный экран».';
-    hint.classList.remove('hidden');
+  $('#gateInstall').addEventListener('click', () => promptInstall('gate'));
+  $('#btnInstall').addEventListener('click', () => promptInstall('settings'));
+  $('#installBarBtn').addEventListener('click', () => promptInstall('bar'));
+  $('#installBarClose').addEventListener('click', () => {
+    localStorage.setItem(LS.installBarHidden, '1');
+    $('#installBar').classList.add('hidden');
   });
-
-  // install
-  $('#btnInstall').addEventListener('click', async () => {
-    if (!state.deferredInstall) { toast('В этом браузере: меню → «Добавить на главный экран»'); return; }
-    state.deferredInstall.prompt();
-    await state.deferredInstall.userChoice;
-    state.deferredInstall = null;
-    $('#btnInstall').disabled = true;
-  });
+  updateInstallBar();
   if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
-    $('#installHint').textContent = 'На iPhone: кнопка «Поделиться» → «На экран Домой».';
+    $('#installHint').textContent = installInstructionText();
+    $('#installHint').classList.remove('hidden');
   }
 
   // карта: «я где?» + подсказка под картой + мои метки
