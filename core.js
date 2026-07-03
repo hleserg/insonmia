@@ -157,17 +157,39 @@
   // bbox поляны + мягкий запас: за пределами — предупреждаем, но не запрещаем
   const FEST_BBOX = { latMin: 54.67, latMax: 54.70, lngMin: 35.05, lngMax: 35.10 };
 
+  function pinKey(name) {
+    // нормализованный ключ имени: «повторное имя = обновление»
+    return String(name || '').trim().toLowerCase();
+  }
+
   function parseCoordPairs(text) {
     // «54,68712 35,07934» (русская десятичная запятая), «54.687, 35.079»,
-    // 4+ числа — попарно; целые без дробной части координатами не считаем
+    // 4+ числа — попарно; целые без дробной части координатами не считаем.
+    // Два прохода: сначала пары в окрестности поляны (постороннее число
+    // вроде «5,5 км» не сбивает настоящие координаты), потом остальные.
     const norm = String(text || '').replace(/(\d),(\d)/g, '$1.$2');
     const nums = (norm.match(/-?\d{1,3}\.\d+/g) || []).map(Number);
-    const pairs = [];
-    for (let i = 0; i + 1 < nums.length; i += 2) {
-      const lat = nums[i], lng = nums[i + 1];
-      if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) pairs.push({ lat, lng });
+    const used = new Array(nums.length).fill(false);
+    const found = []; // {at, lat, lng} — соберём и вернём в порядке текста
+    for (let i = 0; i + 1 < nums.length; i++) {
+      if (used[i] || used[i + 1]) continue;
+      if (!pinOutsideFest({ lat: nums[i], lng: nums[i + 1] })) {
+        found.push({ at: i, lat: nums[i], lng: nums[i + 1] });
+        used[i] = used[i + 1] = true;
+        i++;
+      }
     }
-    return pairs;
+    // остаток — скользящим окном по валидным диапазонам (не по жёстким парам)
+    const rest = [];
+    nums.forEach((n, i) => { if (!used[i]) rest.push({ n, at: i }); });
+    for (let i = 0; i + 1 < rest.length;) {
+      const lat = rest[i].n, lng = rest[i + 1].n;
+      if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        found.push({ at: rest[i].at, lat, lng });
+        i += 2;
+      } else i += 1; // мусорное число сдвигает окно, не съедая соседа
+    }
+    return found.sort((a, b) => a.at - b.at).map(({ lat, lng }) => ({ lat, lng }));
   }
 
   function pinFromHash(hashOrUrl) {
@@ -175,13 +197,18 @@
     const m = String(hashOrUrl || '').match(/#pin=([^#]+)/);
     if (!m) return null;
     const parts = m[1].split(',');
-    const lat = Number(parts[0]), lng = Number(parts[1]);
-    if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    // пустая строка через Number() даёт 0 («нулевой остров») — требуем цифры
+    const NUM = /^-?\d{1,3}(\.\d+)?$/;
+    const latS = (parts[0] || '').trim(), lngS = (parts[1] || '').trim();
+    if (!NUM.test(latS) || !NUM.test(lngS)) return null;
+    const lat = Number(latS), lng = Number(lngS);
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
     let name = '';
     try { name = decodeURIComponent(parts[2] || ''); } catch { name = parts[2] || ''; }
     let emoji = '';
     try { emoji = decodeURIComponent(parts[3] || ''); } catch { emoji = ''; }
-    return { lat, lng, name: name.trim(), emoji: emoji.trim() };
+    // лимиты как в редакторе: чужая ссылка не обходит ограничения полей
+    return { lat, lng, name: name.trim().slice(0, 60), emoji: emoji.trim().slice(0, 8) };
   }
 
   function pinToHash(pin) {
@@ -197,7 +224,10 @@
     // несколько #pin= в одной строке (экспорт «одной строкой») — расклеиваем
     const lines = String(text || '').split(/\n/).flatMap(l => l.split(/(?=#pin=)/));
     const isCoordLine = lines.map(l => parseCoordPairs(l).length > 0);
-    const nameAt = i => (lines[i] != null && !isCoordLine[i] && lines[i].trim()) ? lines[i].trim() : '';
+    // строка-имя достаётся ровно ОДНОЙ координатной строке (формат
+    // «координаты, под ними имя» не должен схлопывать метки при импорте)
+    const usedName = new Set();
+    const nameIdx = i => (lines[i] != null && !isCoordLine[i] && lines[i].trim() && !usedName.has(i)) ? i : -1;
     lines.forEach((line, i) => {
       const fromHash = pinFromHash(line);
       if (fromHash) { out.push(fromHash); return; }
@@ -208,17 +238,22 @@
       }
       const pairs = parseCoordPairs(line);
       if (!pairs.length) return;
-      const name = nameAt(i - 1) || nameAt(i + 1);
+      let ni = nameIdx(i - 1);
+      if (ni < 0) ni = nameIdx(i + 1);
+      const name = ni >= 0 ? lines[ni].trim() : '';
+      if (ni >= 0) usedName.add(ni);
       pairs.forEach((p, k) => out.push({ ...p, name: pairs.length > 1 ? `${name} ${k + 1}`.trim() : name, emoji: '' }));
     });
     return out;
   }
 
-  function upsertPin(pins, pin, limit = 50) {
+  const PIN_LIMIT = 50;
+
+  function upsertPin(pins, pin, limit = PIN_LIMIT) {
     // то же имя (без регистра/пробелов) -> обновить, не дублировать
-    const key = String(pin.name || '').trim().toLowerCase();
+    const key = pinKey(pin.name);
     const list = pins.slice();
-    const i = list.findIndex(p => String(p.name || '').trim().toLowerCase() === key);
+    const i = list.findIndex(p => pinKey(p.name) === key);
     if (i >= 0) { list[i] = { ...list[i], ...pin }; return { ok: true, pins: list, updated: true }; }
     if (list.length >= limit) return { ok: false, pins, updated: false, reason: 'limit' };
     list.push(pin);
@@ -239,6 +274,8 @@
   exports.pinToHash = pinToHash;
   exports.upsertPin = upsertPin;
   exports.pinOutsideFest = pinOutsideFest;
+  exports.pinKey = pinKey;
+  exports.PIN_LIMIT = PIN_LIMIT;
   exports.MSK_MS = MSK_MS;
   exports.DAY_CUTOFF = DAY_CUTOFF;
   exports.epochFromISO = epochFromISO;

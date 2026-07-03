@@ -94,8 +94,10 @@ function saveFavs() { localStorage.setItem(LS.favs, JSON.stringify([...state.fav
 function loadPins() {
   try {
     const raw = JSON.parse(localStorage.getItem(LS.pins) || '[]');
+    // строгий Number.isFinite: глобальный isFinite коэрсит null/''/[] в 0 —
+    // битая запись превращалась бы в метку на «нулевом острове»
     state.pins = Array.isArray(raw)
-      ? raw.filter(p => p && isFinite(p.lat) && isFinite(p.lng)) : [];
+      ? raw.filter(p => p && Number.isFinite(p.lat) && Number.isFinite(p.lng)) : [];
   } catch { state.pins = []; }
 }
 function savePins() { localStorage.setItem(LS.pins, JSON.stringify(state.pins || [])); }

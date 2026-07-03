@@ -75,3 +75,26 @@ test('bbox ±10 км: на поляне — тихо, в 20+ км — мягко
   assert.equal(core.pinOutsideFest({ lat: 54.50, lng: 35.075 }), true);  // ~20 км
   assert.equal(core.pinOutsideFest({ lat: 54.685, lng: 35.40 }), true);  // ~20 км восток
 });
+
+test('постороннее число («5,5 км») не сбивает настоящие координаты', () => {
+  const p1 = core.parseCoordPairs('5,5 км до лагеря: 54,68712 35,07934');
+  assert.equal(p1.length, 1);
+  assert.ok(Math.abs(p1[0].lat - 54.68712) < 1e-9, 'взялась не та пара: ' + JSON.stringify(p1));
+  const p2 = core.parseCoordPairs('точность 95.5 м: 54.68712 35.07934');
+  assert.equal(p2.length, 1);
+  assert.ok(Math.abs(p2[0].lat - 54.68712) < 1e-9);
+});
+
+test('импорт «координаты, под ними имя»: имя достаётся ровно одной строке', () => {
+  const pins = core.parsePinsFromText('54.681 35.071\nЛагерь\n54.690 35.081\nМашина');
+  assert.equal(pins.length, 2);
+  assert.deepEqual(pins.map(p => p.name), ['Лагерь', 'Машина']);
+});
+
+test('pinFromHash: пустые координаты и обход лимитов имени/эмодзи отсекаются', () => {
+  assert.equal(core.pinFromHash('#pin=,35.07,x'), null);      // Number('') === 0 — не метка
+  assert.equal(core.pinFromHash('#pin=54.68,,x'), null);
+  const long = core.pinFromHash('#pin=54.68,35.07,' + encodeURIComponent('а'.repeat(200)) + ',' + encodeURIComponent('🔥'.repeat(30)));
+  assert.ok(long.name.length <= 60, 'имя обходит лимит редактора');
+  assert.ok(long.emoji.length <= 8, 'эмодзи-строка не ограничена');
+});

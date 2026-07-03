@@ -302,8 +302,17 @@ function buildMapChips() {
 
 /* ---------- мои метки (user pins) ---------- */
 const PIN_EMOJI = ['⛺', '🔥', '🚗', '💧', '🍲', '📍'];
-const PIN_LIMIT = 50;
+const PIN_LIMIT = window.InsomniaCore.PIN_LIMIT;
+const pinKey = window.InsomniaCore.pinKey;
 const PIN_EDIT = { original: null }; // имя метки, которую правим (переименование без дубля)
+
+// свободное автоимя вида «база», «база 2», «база 3»… среди текущих меток
+function freePinName(pins, base) {
+  if (!pins.some(p => pinKey(p.name) === pinKey(base))) return base;
+  let n = 2;
+  while (pins.some(p => pinKey(p.name) === pinKey(`${base} ${n}`))) n++;
+  return `${base} ${n}`;
+}
 
 function pinIcon(emoji) {
   return L.divIcon({
@@ -348,8 +357,8 @@ function openPinCard(pin) {
   $('#pinCardShare').addEventListener('click', () => sharePin(pin));
   $('#pinCardEdit').addEventListener('click', () => { hideSheet('#sheet'); openPinEditor(pin); });
   $('#pinCardDel').addEventListener('click', () => {
-    const key = String(pin.name || '').trim().toLowerCase();
-    state.pins = state.pins.filter(p => String(p.name || '').trim().toLowerCase() !== key);
+    const key = pinKey(pin.name);
+    state.pins = state.pins.filter(p => pinKey(p.name) !== key);
     pinsChanged();
     hideSheet('#sheet');
     toast('> метка удалена');
@@ -368,7 +377,14 @@ function sharePin(pin) {
   const copy = navigator.clipboard && navigator.clipboard.writeText
     ? navigator.clipboard.writeText(url) : Promise.reject();
   copy.then(() => toast('> ссылка на метку скопирована'))
-    .catch(() => toast(url, 9000)); // хотя бы показать — можно переписать руками
+    .catch(() => {
+      // буфер недоступен — отдаём ссылку в выделяемое поле, не в тост
+      hideSheet('#sheet');
+      hideSheet('#settings');
+      $('#pinImportText').value = url;
+      showSheet('#pinImport');
+      toast('Буфер недоступен — ссылка в поле, скопируйте руками', 5000);
+    });
 }
 
 function selectPinEmoji(emoji) {
@@ -399,11 +415,16 @@ function savePinFromEditor() {
   const pair = core.parseCoordPairs($('#pinCoords').value)[0];
   if (!pair) { toast('Координаты не распознаны — «54,68712 35,07934»'); $('#pinCoords').focus(); return; }
   const pin = { ...pair, name, emoji: selectedPinEmoji(), note: $('#pinNote').value.trim() };
-  // переименование при правке: убираем старую запись, чтобы не плодить дубль
+  // переименование при правке: в занятое имя не даём (иначе две метки
+  // молча схлопнутся в одну), свою старую запись убираем
   let pins = state.pins || [];
-  if (PIN_EDIT.original && PIN_EDIT.original.trim().toLowerCase() !== name.toLowerCase()) {
-    const old = PIN_EDIT.original.trim().toLowerCase();
-    pins = pins.filter(p => String(p.name || '').trim().toLowerCase() !== old);
+  if (PIN_EDIT.original && pinKey(PIN_EDIT.original) !== pinKey(name)) {
+    if (pins.some(p => pinKey(p.name) === pinKey(name))) {
+      toast('Это имя занято другой меткой — выберите другое');
+      $('#pinName').focus();
+      return;
+    }
+    pins = pins.filter(p => pinKey(p.name) !== pinKey(PIN_EDIT.original));
   }
   const r = core.upsertPin(pins, pin, PIN_LIMIT);
   if (!r.ok) { toast(`Лимит ${PIN_LIMIT} меток — удалите что-нибудь`); return; }
@@ -434,10 +455,11 @@ function parsePinImportText() {
 function applyPinImport() {
   const core = window.InsomniaCore;
   const found = core.parsePinsFromText($('#pinImportText').value);
-  let added = 0, updated = 0, rejected = 0, noname = 0;
+  let added = 0, updated = 0, rejected = 0;
   let pins = state.pins || [];
-  found.forEach((p, i) => {
-    const pin = { ...p, name: p.name || `метка ${pins.length + noname++ + 1}` };
+  found.forEach(p => {
+    // автоимя не должно совпасть с существующей меткой (молчаливая перезапись)
+    const pin = { ...p, name: p.name || freePinName(pins, 'метка') };
     const r = core.upsertPin(pins, pin, PIN_LIMIT);
     if (!r.ok) { rejected++; return; }
     pins = r.pins;
@@ -491,26 +513,33 @@ function handleIncomingPin() {
     ${core.pinOutsideFest(pin) ? '<div class="muted small">⚠️ далеко от поляны</div>' : ''}
     <button class="btn" id="pinIncomingAdd">Добавить в мои метки</button>
     <button class="btn ghost" id="pinIncomingView">Просто посмотреть</button>`;
-  const showOnMap = () => {
+  const showOnMap = (withPreview) => {
     switchView('map');
     setTimeout(() => {
       if (!GEO.map) return;
       GEO.map.setView([pin.lat, pin.lng], 17);
-      L.marker([pin.lat, pin.lng], { icon: pinIcon(pin.emoji) })
-        .addTo(GEO.map).bindPopup(escapeHtml(pin.name || 'метка')).openPopup();
+      // превью живёт в одном экземпляре и не остаётся навсегда:
+      // сохранённую метку рисует слой «мои», дубль-фантом не нужен
+      if (GEO.preview) { GEO.preview.remove(); GEO.preview = null; }
+      if (withPreview) {
+        GEO.preview = L.marker([pin.lat, pin.lng], { icon: pinIcon(pin.emoji) })
+          .addTo(GEO.map).bindPopup(escapeHtml(pin.name || 'метка')).openPopup();
+      }
     }, 300);
   };
   $('#pinIncomingAdd').addEventListener('click', () => {
-    const r = window.InsomniaCore.upsertPin(state.pins || [], { ...pin, name: pin.name || 'метка из ссылки' }, PIN_LIMIT);
+    const name = pin.name || freePinName(state.pins || [], 'метка из ссылки');
+    const r = window.InsomniaCore.upsertPin(state.pins || [], { ...pin, name }, PIN_LIMIT);
     if (!r.ok) { toast(`Лимит ${PIN_LIMIT} меток`); return; }
     state.pins = r.pins;
     pinsChanged();
     hideSheet('#pinIncoming');
     toast(r.updated ? '> метка обновлена' : '> метка добавлена');
-    showOnMap();
+    showOnMap(false);
   });
-  $('#pinIncomingView').addEventListener('click', () => { hideSheet('#pinIncoming'); showOnMap(); });
+  $('#pinIncomingView').addEventListener('click', () => { hideSheet('#pinIncoming'); showOnMap(true); });
   showSheet('#pinIncoming');
+  setTimeout(() => { const b = $('#pinIncomingAdd'); if (b) b.focus(); }, 60);
   return true;
 }
 
@@ -789,6 +818,7 @@ function switchView(view) {
 // следующее открытие вкладки перерисует всё из свежего GEO.data
 function resetMapLayers() {
   if (GEO.map) { GEO.map.remove(); GEO.map = null; }
+  GEO.preview = null;
   GEO.layerGroups = {};
   GEO.zoneById = {};
   GEO.pointById = {};
