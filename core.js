@@ -153,6 +153,92 @@
     };
   }
 
+  /* ---------- пользовательские метки (user pins) ---------- */
+  // bbox поляны + мягкий запас: за пределами — предупреждаем, но не запрещаем
+  const FEST_BBOX = { latMin: 54.67, latMax: 54.70, lngMin: 35.05, lngMax: 35.10 };
+
+  function parseCoordPairs(text) {
+    // «54,68712 35,07934» (русская десятичная запятая), «54.687, 35.079»,
+    // 4+ числа — попарно; целые без дробной части координатами не считаем
+    const norm = String(text || '').replace(/(\d),(\d)/g, '$1.$2');
+    const nums = (norm.match(/-?\d{1,3}\.\d+/g) || []).map(Number);
+    const pairs = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+      const lat = nums[i], lng = nums[i + 1];
+      if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) pairs.push({ lat, lng });
+    }
+    return pairs;
+  }
+
+  function pinFromHash(hashOrUrl) {
+    // #pin=lat,lng,name,emoji — имя URL-кодировано; мусор -> null, не падаем
+    const m = String(hashOrUrl || '').match(/#pin=([^#]+)/);
+    if (!m) return null;
+    const parts = m[1].split(',');
+    const lat = Number(parts[0]), lng = Number(parts[1]);
+    if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    let name = '';
+    try { name = decodeURIComponent(parts[2] || ''); } catch { name = parts[2] || ''; }
+    let emoji = '';
+    try { emoji = decodeURIComponent(parts[3] || ''); } catch { emoji = ''; }
+    return { lat, lng, name: name.trim(), emoji: emoji.trim() };
+  }
+
+  function pinToHash(pin) {
+    const lat = Number(pin.lat).toFixed(5), lng = Number(pin.lng).toFixed(5);
+    return `#pin=${lat},${lng},${encodeURIComponent(pin.name || '')},${encodeURIComponent(pin.emoji || '')}`;
+  }
+
+  function parsePinsFromText(text) {
+    // свободный текст: строки с парой координат -> метки; имя — СОСЕДНЯЯ
+    // строка без координат (строго над, иначе строго под — пустая строка
+    // рвёт соседство); geo:-URI и #pin= тоже понимаем
+    const out = [];
+    // несколько #pin= в одной строке (экспорт «одной строкой») — расклеиваем
+    const lines = String(text || '').split(/\n/).flatMap(l => l.split(/(?=#pin=)/));
+    const isCoordLine = lines.map(l => parseCoordPairs(l).length > 0);
+    const nameAt = i => (lines[i] != null && !isCoordLine[i] && lines[i].trim()) ? lines[i].trim() : '';
+    lines.forEach((line, i) => {
+      const fromHash = pinFromHash(line);
+      if (fromHash) { out.push(fromHash); return; }
+      const geo = line.match(/geo:(-?\d{1,3}[.,]\d+)\s*,\s*(-?\d{1,3}[.,]\d+)/i);
+      if (geo) {
+        out.push({ lat: Number(geo[1].replace(',', '.')), lng: Number(geo[2].replace(',', '.')), name: '', emoji: '' });
+        return;
+      }
+      const pairs = parseCoordPairs(line);
+      if (!pairs.length) return;
+      const name = nameAt(i - 1) || nameAt(i + 1);
+      pairs.forEach((p, k) => out.push({ ...p, name: pairs.length > 1 ? `${name} ${k + 1}`.trim() : name, emoji: '' }));
+    });
+    return out;
+  }
+
+  function upsertPin(pins, pin, limit = 50) {
+    // то же имя (без регистра/пробелов) -> обновить, не дублировать
+    const key = String(pin.name || '').trim().toLowerCase();
+    const list = pins.slice();
+    const i = list.findIndex(p => String(p.name || '').trim().toLowerCase() === key);
+    if (i >= 0) { list[i] = { ...list[i], ...pin }; return { ok: true, pins: list, updated: true }; }
+    if (list.length >= limit) return { ok: false, pins, updated: false, reason: 'limit' };
+    list.push(pin);
+    return { ok: true, pins: list, updated: false };
+  }
+
+  function pinOutsideFest(pin, marginKm = 10) {
+    // мягкое предупреждение: дальше ~10 км от поляны
+    const dLat = marginKm / 111.32;
+    const dLng = marginKm / (111.32 * Math.cos(54.68 * Math.PI / 180));
+    return pin.lat < FEST_BBOX.latMin - dLat || pin.lat > FEST_BBOX.latMax + dLat ||
+           pin.lng < FEST_BBOX.lngMin - dLng || pin.lng > FEST_BBOX.lngMax + dLng;
+  }
+
+  exports.parseCoordPairs = parseCoordPairs;
+  exports.parsePinsFromText = parsePinsFromText;
+  exports.pinFromHash = pinFromHash;
+  exports.pinToHash = pinToHash;
+  exports.upsertPin = upsertPin;
+  exports.pinOutsideFest = pinOutsideFest;
   exports.MSK_MS = MSK_MS;
   exports.DAY_CUTOFF = DAY_CUTOFF;
   exports.epochFromISO = epochFromISO;

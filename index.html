@@ -61,6 +61,7 @@
     <div id="mapStatus" class="muted small" style="padding:0 14px;"></div>
     <div class="map-stage">
       <div id="leafletMap"></div>
+      <button id="btnAddPin" class="icon-btn pin-add-btn" title="новая метка" aria-label="новая метка">➕</button>
       <button id="btnLocate" class="icon-btn locate-btn" title="я где?" aria-label="я где?">🎯</button>
     </div>
   </div>
@@ -150,6 +151,13 @@
         </section>
 
         <section class="setting-block">
+          <h3>мои метки</h3>
+          <div id="pinsInfo" class="muted small"></div>
+          <button id="btnPinsExport" class="btn ghost">Экспорт одной строкой</button>
+          <button id="btnPinsImport" class="btn ghost">Добавить из текста</button>
+        </section>
+
+        <section class="setting-block">
           <h3>установка</h3>
           <p class="muted small">Добавьте приложение на главный экран, чтобы открывать офлайн одним касанием.</p>
           <button id="btnInstall" class="btn" disabled>Установить приложение</button>
@@ -186,6 +194,66 @@
         <div id="gateHint" class="muted small hidden"></div>
         <button id="gateLater" class="btn ghost">Позже</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Редактор метки -->
+  <div id="pinEditor" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label" id="pinEditorTitle">~/метки/новая</div>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
+      </div>
+      <div class="sheet-body pin-form">
+        <label>название
+          <input id="pinName" maxlength="60" placeholder="Наш лагерь" autocomplete="off">
+        </label>
+        <div class="emoji-row" id="pinEmojiRow"></div>
+        <label>координаты
+          <input id="pinCoords" placeholder="54,68712 35,07934" autocomplete="off" inputmode="text">
+        </label>
+        <button id="pinFromGps" class="btn ghost">📡 взять мою позицию</button>
+        <label>заметка
+          <textarea id="pinNote" rows="2" maxlength="200" placeholder="за жёлтым шатром"></textarea>
+        </label>
+        <div id="pinWarn" class="muted small hidden">⚠️ это далеко от поляны — сохранится, но проверьте координаты</div>
+        <button id="pinSave" class="btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Импорт меток из текста -->
+  <div id="pinImport" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/метки/из-текста</div>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
+      </div>
+      <div class="sheet-body pin-form">
+        <p class="muted small">Вставьте текст с координатами: пары «54,68712 35,07934», geo:-ссылки,
+          #pin=-ссылки или экспортную строку. Название — соседней строкой.</p>
+        <textarea id="pinImportText" rows="4" placeholder="Наш лагерь&#10;54,68712 35,07934"></textarea>
+        <button id="pinImportGo" class="btn ghost">Разобрать</button>
+        <div id="pinImportPreview" class="muted small"></div>
+        <button id="pinImportApply" class="btn hidden">Добавить всё</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Метка из входящей ссылки -->
+  <div id="pinIncoming" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/метки/из-ссылки</div>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
+      </div>
+      <div class="sheet-body pin-form" id="pinIncomingBody"></div>
     </div>
   </div>
 
