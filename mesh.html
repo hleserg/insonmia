@@ -9,7 +9,8 @@
   <link rel="icon" href="icons/favicon-32.png">
   <style>
     /* локальные стили страницы-гайда: карточки-шаги в духе терминала */
-    .guide { max-width: 640px; margin: 0 auto; padding: 12px 14px calc(28px + var(--safe-bottom)); }
+    /* safe-top: в standalone-iOS контент рисуется под статус-баром */
+    .guide { max-width: 640px; margin: 0 auto; padding: calc(12px + var(--safe-top)) 14px calc(28px + var(--safe-bottom)); }
     .guide h1 { font-size: 1.3rem; margin: 10px 0 4px; }
     .guide .lead { color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
     .g-card {
@@ -22,6 +23,7 @@
       border-radius: 8px; min-width: 28px; height: 28px; display: inline-flex;
       align-items: center; justify-content: center; font-size: 0.85rem; flex: none;
     }
+    .g-card { overflow-wrap: anywhere; } /* длинные неразрывные строки не переливаются */
     .g-card p, .g-card li { color: var(--text); line-height: 1.5; font-size: 0.95rem; }
     .g-card ul { padding-left: 20px; margin: 8px 0; }
     .g-card .muted { display: block; margin-top: 6px; }
@@ -111,6 +113,7 @@
       меньше. Сообщения могут идти долго или не дойти. Bitchat — стороннее приложение,
       мы его не делали: вопросы не к нам 😄 Но на прошлых фестах штука работала.
     </div>
+    <a class="g-back" href="./">&larr; к расписанию</a>
   </div>
 </body>
 </html>

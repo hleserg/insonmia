@@ -41,8 +41,12 @@ const serverOff = () => { if (server) { server.kill('SIGKILL'); server = null; }
 
   // 2. «Добавить метку из текста» -> приложение открывает форму с фокусом в поле
   await page.click('a[href="./#import-pins"]');
-  await page.waitForTimeout(1200);
-  const sheetOpen = await page.evaluate(() => !document.querySelector('#pinImport').classList.contains('hidden'));
+  let sheetOpen = false; // поллинг вместо фиксированной паузы (медленный CI)
+  for (let i = 0; i < 30 && !sheetOpen; i++) {
+    await page.waitForTimeout(200);
+    sheetOpen = await page.evaluate(() =>
+      !!document.querySelector('#pinImport') && !document.querySelector('#pinImport').classList.contains('hidden'));
+  }
   const focused = await page.evaluate(() => document.activeElement && document.activeElement.id);
   const hash = await page.evaluate(() => location.hash);
   assert.ok(sheetOpen, 'форма импорта не открылась');

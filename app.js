@@ -472,6 +472,9 @@ function openDetail(id) {
 
 function showSheet(sel) { $(sel).classList.remove('hidden'); }
 function hideSheet(sel) { $(sel).classList.add('hidden'); }
+// перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
+// иначе шиты наслаиваются и фокус уезжает в невидимое поле
+function hideAllSheets() { $$('.sheet').forEach(s => s.classList.add('hidden')); }
 
 /* ---------- favorites ---------- */
 function isStandalone() {
@@ -1143,9 +1146,7 @@ function wireUI() {
     $('#appUpdateBar').classList.add('hidden');
   });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') $$('.sheet').forEach(s => s.classList.add('hidden'));
-  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideAllSheets(); });
 }
 
 /* ---------- симуляция времени (?now=2026-07-11T17:00, МСК) ---------- */
