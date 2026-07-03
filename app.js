@@ -230,8 +230,10 @@ function render() {
 }
 
 function renderNow(root) {
-  // полоса дат в «сейчас» — индикатор текущих суток, не фильтр
-  buildDayStrip(true, pickDefaultDay());
+  // полоса дат в «сейчас» — индикатор ТЕКУЩИХ суток, не фильтр: вне дат
+  // фестиваля (до/после) не подсвечиваем ничего — все дни заглушены
+  const today = getFestivalDay(getNow());
+  buildDayStrip(true, (state.program._days || []).includes(today) ? today : null);
   const n = getNow();
   const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
   const live = window.InsomniaCore.getCurrent(evs, n);
@@ -269,8 +271,8 @@ function renderNow(root) {
 }
 
 function renderSchedule(root) {
+  if (!state.day) state.day = pickDefaultDay(); // ДО полосы — иначе нет активного дня
   buildDayStrip();
-  if (!state.day) state.day = pickDefaultDay();
   const evs = filteredEvents()
     .filter(e => e._festDay === state.day)
     .sort(sortByStart);
@@ -399,6 +401,7 @@ function emptyState(icon, text) {
 // в «программе» (state.day) при этом не трогаем — вернётся как был
 function buildDayStrip(readonly = false, activeDay = state.day) {
   const strip = $('#dayStrip');
+  const keepScroll = strip.scrollLeft; // tick() перестраивает полосу каждые 30с
   strip.innerHTML = '';
   (state.program._days || []).forEach(date => {
     const p = dayParts(date);
@@ -409,6 +412,7 @@ function buildDayStrip(readonly = false, activeDay = state.day) {
     else btn.addEventListener('click', () => { state.day = date; render(); });
     strip.appendChild(btn);
   });
+  strip.scrollLeft = keepScroll;
 }
 
 function pickDefaultDay() {
@@ -1018,7 +1022,12 @@ function installInstructionText() {
 function browserFamily() {
   const ua = navigator.userAgent;
   if (/YaBrowser/i.test(ua)) return 'yandex';
-  if (/EdgA?\/|OPR\/|SamsungBrowser|MiuiBrowser|UCBrowser|HuaweiBrowser|Firefox\/|FxiOS|DuckDuckGo|Vivaldi|WhatsApp|Instagram|Telegram/i.test(ua)) return 'other';
+  // вебвью мессенджеров (Telegram/VK на Android — дефолтный системный WebView
+  // с маркерами «; wv)» или «Version/x.x … Chrome/»): установка оттуда
+  // невозможна вовсе — зовём открыть во внешнем браузере
+  if (/;\s*wv\)/.test(ua) || (/Android/i.test(ua) && /Version\/\d+\.\d+/.test(ua) && /Chrome\//.test(ua))
+      || /WhatsApp|Instagram|Telegram|VKAndroidApp|VkontakteAndroid/i.test(ua)) return 'webview';
+  if (/EdgA?\/|EdgiOS\/|OPR\/|OPX\/|OPT\/|OPiOS\/|SamsungBrowser|MiuiBrowser|UCBrowser|HuaweiBrowser|Firefox\/|FxiOS|DuckDuckGo|Ddg\/|Vivaldi/i.test(ua)) return 'other';
   if (/CriOS\/|Chrome\//i.test(ua)) return 'chrome';
   if (/Safari/i.test(ua) && /iPhone|iPad|iPod|Macintosh/i.test(ua)) return 'safari';
   return 'other';
@@ -1031,6 +1040,11 @@ function browserSupportWarning() {
     return '<b class="yb-warn">Вы в Яндекс Браузере — в нём приложение работает нестабильно.</b> ' +
       'Полная работоспособность тестировалась только с Chrome: на время феста ' +
       'поставьте Chrome браузером по умолчанию.';
+  }
+  if (fam === 'webview') {
+    return '<b class="yb-warn">Похоже, страница открыта внутри другого приложения.</b> ' +
+      'Установка отсюда не работает: откройте ссылку во внешнем браузере ' +
+      '(меню ⋮ → «Открыть в браузере» / «Открыть в Chrome»).';
   }
   if (fam === 'other') {
     return '<b class="yb-warn">Работоспособность в этом браузере не подтверждена.</b> ' +
@@ -1129,6 +1143,29 @@ window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   state.deferredInstall = e;
   updateInstallBar();
+});
+
+// sticky-слои: вкладки и фильтры липнут ПОД шапкой — её высота динамична
+// (safe-area, поиск), поэтому меряем и отдаём в CSS-переменные
+function measureStickyOffsets() {
+  const h = document.querySelector('.app-header');
+  const t = document.querySelector('.tabs');
+  if (h) document.documentElement.style.setProperty('--header-h', h.offsetHeight + 'px');
+  if (t) document.documentElement.style.setProperty('--tabs-h', t.offsetHeight + 'px');
+}
+measureStickyOffsets();
+window.addEventListener('resize', measureStickyOffsets);
+if (window.ResizeObserver) {
+  const hd = document.querySelector('.app-header');
+  if (hd) new ResizeObserver(measureStickyOffsets).observe(hd);
+}
+
+// кнопки плашки вешаем СРАЗУ (не в wireUI): beforeinstallprompt может
+// показать плашку до конца boot() — кнопки не должны быть мёртвыми
+$('#installBarBtn').addEventListener('click', () => promptInstall('bar'));
+$('#installBarClose').addEventListener('click', () => {
+  localStorage.setItem(LS.installBarHidden, '1');
+  $('#installBar').classList.add('hidden');
 });
 
 // скрываем установочный UI ТОЛЬКО по факту установки
@@ -1239,15 +1276,10 @@ function wireUI() {
   });
   $('#btnResetData').addEventListener('click', resetData);
 
-  // установка: гейт, настройки, плашка — один флоу promptInstall
+  // установка: гейт и настройки (кнопки плашки навешаны на верхнем уровне)
   $('#gateLater').addEventListener('click', () => hideSheet('#installGate'));
   $('#gateInstall').addEventListener('click', () => promptInstall('gate'));
   $('#btnInstall').addEventListener('click', () => promptInstall('settings'));
-  $('#installBarBtn').addEventListener('click', () => promptInstall('bar'));
-  $('#installBarClose').addEventListener('click', () => {
-    localStorage.setItem(LS.installBarHidden, '1');
-    $('#installBar').classList.add('hidden');
-  });
   updateInstallBar();
   if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
     $('#installHint').textContent = installInstructionText();
