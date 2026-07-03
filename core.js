@@ -125,9 +125,11 @@
     });
   }
 
-  function createGeoWatcher(geolocation, onFix, throttleMs = 10000, clock = Date.now) {
+  function createGeoWatcher(geolocation, onFix, throttleMs = 10000, clock = Date.now, onError = null) {
     // жизненный цикл watchPosition c троттлингом; clearWatch ровно один раз;
-    // clock инжектируется — тесты проверяют троттлинг детерминированно
+    // clock инжектируется — тесты проверяют троттлинг детерминированно.
+    // enableHighAccuracy заставляет браузер дёргать именно GPS: сетевое
+    // определение (дефолт Яндекс Браузера) без интернета не работает вовсе
     let watchId = null;
     let lastAt = -Infinity;
     return {
@@ -138,7 +140,8 @@
           if (t - lastAt < throttleMs) return;
           lastAt = t;
           onFix({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        }, () => { /* молча */ }, { enableHighAccuracy: true, maximumAge: 5000 });
+        }, err => { if (onError) onError(err); },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
       },
       stop() {
         if (watchId != null && geolocation) {

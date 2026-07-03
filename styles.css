@@ -417,12 +417,33 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--green); border: 3px solid #fff;
   box-shadow: 0 0 12px rgba(63,185,80,.8);
 }
+/* кнопка якорится к самой карте (.map-stage), а не к .map-wrap:
+   иначе подсказка под картой сдвигает её на себя и ворует тапы */
+.map-stage { position: relative; }
 .locate-btn {
   position: absolute; right: 12px; bottom: 18px; z-index: 800;
   box-shadow: 0 4px 16px rgba(0,0,0,.5);
 }
+.map-wrap .geo-help { margin: 8px 14px 12px; }
 .point-event {
   font-size: 0.85rem; padding: 12px 0; border-top: 1px solid var(--line);
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap; cursor: pointer;
 }
 .pe-time { font-family: var(--mono); color: var(--amber-2); font-weight: 700; }
+
+/* сворачиваемая подсказка «Не работает геолокация?» («рядом» + карта) */
+.geo-help {
+  margin: 10px 2px 4px;
+  border: 1px dashed var(--line); border-radius: 10px;
+  font-size: 0.85rem; color: var(--muted);
+}
+.geo-help summary {
+  cursor: pointer; list-style: none;
+  min-height: var(--tap); display: flex; align-items: center;
+  padding: 0 14px; font-family: var(--mono); font-size: 0.8rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.geo-help summary::before { content: "? "; color: var(--green); margin-right: 6px; }
+.geo-help ul { margin: 0; padding: 0 14px 12px 28px; }
+.geo-help li { margin-bottom: 8px; line-height: 1.45; }
+.geo-help li b { color: var(--text); font-weight: 600; }

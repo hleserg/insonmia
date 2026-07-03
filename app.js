@@ -1108,8 +1108,9 @@ function wireUI() {
     $('#installHint').textContent = 'На iPhone: кнопка «Поделиться» → «На экран Домой».';
   }
 
-  // карта: «я где?»
+  // карта: «я где?» + подсказка под картой
   $('#btnLocate').addEventListener('click', locateMe);
+  if (typeof geoHelpEl === 'function') $('#mapWrap').appendChild(geoHelpEl());
 
   // симуляция времени
   $('#simMinus').addEventListener('click', () => setSim(getNow() - 3600000));
