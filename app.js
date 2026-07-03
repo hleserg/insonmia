@@ -13,6 +13,7 @@ const LS = {
   program: 'insomnia.program',      // imported/updated program JSON
   notified: 'insomnia.notified',    // ids already notified (in-app scheduler dedup)
   urlSrc: 'insomnia.updateUrl',
+  pins: 'insomnia.pins',            // пользовательские метки на карте
 };
 
 const state = {
@@ -22,6 +23,7 @@ const state = {
   type: 'all',        // all | program | animation
   query: '',
   favs: new Set(),
+  pins: [],           // пользовательские метки [{lat,lng,name,emoji,note}]
   lead: 15,
   deferredInstall: null,
   swReg: null,
@@ -88,6 +90,17 @@ function loadFavs() {
   catch { state.favs = new Set(); }
 }
 function saveFavs() { localStorage.setItem(LS.favs, JSON.stringify([...state.favs])); }
+
+function loadPins() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS.pins) || '[]');
+    // строгий Number.isFinite: глобальный isFinite коэрсит null/''/[] в 0 —
+    // битая запись превращалась бы в метку на «нулевом острове»
+    state.pins = Array.isArray(raw)
+      ? raw.filter(p => p && Number.isFinite(p.lat) && Number.isFinite(p.lng)) : [];
+  } catch { state.pins = []; }
+}
+function savePins() { localStorage.setItem(LS.pins, JSON.stringify(state.pins || [])); }
 
 let simNotified = new Set(); // дедуп напоминаний в симуляции — только в памяти
 function getNotified() {
@@ -1014,8 +1027,10 @@ function wireUI() {
 
   // settings sheet
   $('#btnSettings').addEventListener('click', () => { updateNotifStatus(); updateDataInfo(); showSheet('#settings'); });
+  // закрывает СВОЙ шит (крестик/светофор/бэкдроп лежат внутри .sheet)
   $$('[data-close]').forEach(el => el.addEventListener('click', () => {
-    hideSheet('#sheet'); hideSheet('#settings'); hideSheet('#installGate');
+    const sheet = el.closest('.sheet');
+    if (sheet) sheet.classList.add('hidden');
   }));
 
   // notifications
@@ -1108,9 +1123,10 @@ function wireUI() {
     $('#installHint').textContent = 'На iPhone: кнопка «Поделиться» → «На экран Домой».';
   }
 
-  // карта: «я где?» + подсказка под картой
+  // карта: «я где?» + подсказка под картой + мои метки
   $('#btnLocate').addEventListener('click', locateMe);
   if (typeof geoHelpEl === 'function') $('#mapWrap').appendChild(geoHelpEl());
+  wirePinUI();
 
   // симуляция времени
   $('#simMinus').addEventListener('click', () => setSim(getNow() - 3600000));
@@ -1127,7 +1143,9 @@ function wireUI() {
     $('#appUpdateBar').classList.add('hidden');
   });
 
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideSheet('#sheet'); hideSheet('#settings'); hideSheet('#installGate'); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $$('.sheet').forEach(s => s.classList.add('hidden'));
+  });
 }
 
 /* ---------- симуляция времени (?now=2026-07-11T17:00, МСК) ---------- */
@@ -1200,6 +1218,7 @@ function tick() {
 /* ---------- boot ---------- */
 async function boot() {
   loadFavs();
+  loadPins();
   state.lead = parseInt(localStorage.getItem(LS.lead) || '15', 10);
   const leadSel = $('#leadSelect'); if (leadSel) leadSel.value = String(state.lead);
   initSim();
@@ -1221,6 +1240,9 @@ async function boot() {
   setInterval(tick, 30000);
   registerSW();
   updateNotifStatus();
+  handleIncomingPin(); // открыли по чужой #pin=-ссылке — предложить добавить
+  // ссылка может прилететь и в уже открытое приложение (same-document навигация)
+  window.addEventListener('hashchange', handleIncomingPin);
 }
 
 document.addEventListener('DOMContentLoaded', () => boot().catch(err => {

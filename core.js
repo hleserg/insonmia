@@ -153,6 +153,129 @@
     };
   }
 
+  /* ---------- пользовательские метки (user pins) ---------- */
+  // bbox поляны + мягкий запас: за пределами — предупреждаем, но не запрещаем
+  const FEST_BBOX = { latMin: 54.67, latMax: 54.70, lngMin: 35.05, lngMax: 35.10 };
+
+  function pinKey(name) {
+    // нормализованный ключ имени: «повторное имя = обновление»
+    return String(name || '').trim().toLowerCase();
+  }
+
+  function parseCoordPairs(text) {
+    // «54,68712 35,07934» (русская десятичная запятая), «54.687, 35.079»,
+    // 4+ числа — попарно; целые без дробной части координатами не считаем.
+    // Два прохода: сначала пары в окрестности поляны (постороннее число
+    // вроде «5,5 км» не сбивает настоящие координаты), потом остальные.
+    const norm = String(text || '').replace(/(\d),(\d)/g, '$1.$2');
+    const nums = (norm.match(/-?\d{1,3}\.\d+/g) || []).map(Number);
+    const used = new Array(nums.length).fill(false);
+    const found = []; // {at, lat, lng} — соберём и вернём в порядке текста
+    for (let i = 0; i + 1 < nums.length; i++) {
+      if (used[i] || used[i + 1]) continue;
+      if (!pinOutsideFest({ lat: nums[i], lng: nums[i + 1] })) {
+        found.push({ at: i, lat: nums[i], lng: nums[i + 1] });
+        used[i] = used[i + 1] = true;
+        i++;
+      }
+    }
+    // остаток — скользящим окном по валидным диапазонам (не по жёстким парам)
+    const rest = [];
+    nums.forEach((n, i) => { if (!used[i]) rest.push({ n, at: i }); });
+    for (let i = 0; i + 1 < rest.length;) {
+      const lat = rest[i].n, lng = rest[i + 1].n;
+      if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        found.push({ at: rest[i].at, lat, lng });
+        i += 2;
+      } else i += 1; // мусорное число сдвигает окно, не съедая соседа
+    }
+    return found.sort((a, b) => a.at - b.at).map(({ lat, lng }) => ({ lat, lng }));
+  }
+
+  function pinFromHash(hashOrUrl) {
+    // #pin=lat,lng,name,emoji — имя URL-кодировано; мусор -> null, не падаем
+    const m = String(hashOrUrl || '').match(/#pin=([^#]+)/);
+    if (!m) return null;
+    const parts = m[1].split(',');
+    // пустая строка через Number() даёт 0 («нулевой остров») — требуем цифры
+    const NUM = /^-?\d{1,3}(\.\d+)?$/;
+    const latS = (parts[0] || '').trim(), lngS = (parts[1] || '').trim();
+    if (!NUM.test(latS) || !NUM.test(lngS)) return null;
+    const lat = Number(latS), lng = Number(lngS);
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    let name = '';
+    try { name = decodeURIComponent(parts[2] || ''); } catch { name = parts[2] || ''; }
+    let emoji = '';
+    try { emoji = decodeURIComponent(parts[3] || ''); } catch { emoji = ''; }
+    // лимиты как в редакторе: чужая ссылка не обходит ограничения полей
+    return { lat, lng, name: name.trim().slice(0, 60), emoji: emoji.trim().slice(0, 8) };
+  }
+
+  function pinToHash(pin) {
+    const lat = Number(pin.lat).toFixed(5), lng = Number(pin.lng).toFixed(5);
+    return `#pin=${lat},${lng},${encodeURIComponent(pin.name || '')},${encodeURIComponent(pin.emoji || '')}`;
+  }
+
+  function parsePinsFromText(text) {
+    // свободный текст: строки с парой координат -> метки; имя — СОСЕДНЯЯ
+    // строка без координат (строго над, иначе строго под — пустая строка
+    // рвёт соседство); geo:-URI и #pin= тоже понимаем
+    const out = [];
+    // несколько #pin= в одной строке (экспорт «одной строкой») — расклеиваем
+    const lines = String(text || '').split(/\n/).flatMap(l => l.split(/(?=#pin=)/));
+    const isCoordLine = lines.map(l => parseCoordPairs(l).length > 0);
+    // строка-имя достаётся ровно ОДНОЙ координатной строке (формат
+    // «координаты, под ними имя» не должен схлопывать метки при импорте)
+    const usedName = new Set();
+    const nameIdx = i => (lines[i] != null && !isCoordLine[i] && lines[i].trim() && !usedName.has(i)) ? i : -1;
+    lines.forEach((line, i) => {
+      const fromHash = pinFromHash(line);
+      if (fromHash) { out.push(fromHash); return; }
+      const geo = line.match(/geo:(-?\d{1,3}[.,]\d+)\s*,\s*(-?\d{1,3}[.,]\d+)/i);
+      if (geo) {
+        out.push({ lat: Number(geo[1].replace(',', '.')), lng: Number(geo[2].replace(',', '.')), name: '', emoji: '' });
+        return;
+      }
+      const pairs = parseCoordPairs(line);
+      if (!pairs.length) return;
+      let ni = nameIdx(i - 1);
+      if (ni < 0) ni = nameIdx(i + 1);
+      const name = ni >= 0 ? lines[ni].trim() : '';
+      if (ni >= 0) usedName.add(ni);
+      pairs.forEach((p, k) => out.push({ ...p, name: pairs.length > 1 ? `${name} ${k + 1}`.trim() : name, emoji: '' }));
+    });
+    return out;
+  }
+
+  const PIN_LIMIT = 50;
+
+  function upsertPin(pins, pin, limit = PIN_LIMIT) {
+    // то же имя (без регистра/пробелов) -> обновить, не дублировать
+    const key = pinKey(pin.name);
+    const list = pins.slice();
+    const i = list.findIndex(p => pinKey(p.name) === key);
+    if (i >= 0) { list[i] = { ...list[i], ...pin }; return { ok: true, pins: list, updated: true }; }
+    if (list.length >= limit) return { ok: false, pins, updated: false, reason: 'limit' };
+    list.push(pin);
+    return { ok: true, pins: list, updated: false };
+  }
+
+  function pinOutsideFest(pin, marginKm = 10) {
+    // мягкое предупреждение: дальше ~10 км от поляны
+    const dLat = marginKm / 111.32;
+    const dLng = marginKm / (111.32 * Math.cos(54.68 * Math.PI / 180));
+    return pin.lat < FEST_BBOX.latMin - dLat || pin.lat > FEST_BBOX.latMax + dLat ||
+           pin.lng < FEST_BBOX.lngMin - dLng || pin.lng > FEST_BBOX.lngMax + dLng;
+  }
+
+  exports.parseCoordPairs = parseCoordPairs;
+  exports.parsePinsFromText = parsePinsFromText;
+  exports.pinFromHash = pinFromHash;
+  exports.pinToHash = pinToHash;
+  exports.upsertPin = upsertPin;
+  exports.pinOutsideFest = pinOutsideFest;
+  exports.pinKey = pinKey;
+  exports.PIN_LIMIT = PIN_LIMIT;
   exports.MSK_MS = MSK_MS;
   exports.DAY_CUTOFF = DAY_CUTOFF;
   exports.epochFromISO = epochFromISO;

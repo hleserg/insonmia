@@ -17,6 +17,7 @@ const GEO = {
 };
 
 const CAT_META = {
+  my:       { label: 'мои',         emoji: '📍', color: '#d29922' },
   screen:   { label: 'экраны',      emoji: '🎬', color: '#a371f7' },
   stage:    { label: 'сцены',       emoji: '🎤', color: '#a371f7' },
   venue:    { label: 'площадки',    emoji: '🎪', color: '#58a6ff' },
@@ -151,7 +152,11 @@ function ensureMap() {
   GEO.layerGroups = groups;
   GEO.map = map;
   initFilters();
+  drawPins(); // слой «мои» — до applyMapFilters, чтобы фильтр знал о группе
   applyMapFilters();
+
+  // лонгтап (contextmenu на тач-устройствах) — новая метка в этом месте
+  map.on('contextmenu', (e) => openPinEditor({ lat: e.latlng.lat, lng: e.latlng.lng }));
 
   const lats = GEO.data.points.map(p => p.lat);
   const lngs = GEO.data.points.map(p => p.lng);
@@ -248,6 +253,7 @@ function initFilters() {
   // roads-auto сюда сознательно не входит: авто-дороги выключены по умолчанию
   const cats = new Set(GEO.data.points.map(p => p.category));
   cats.add('roads-foot');
+  cats.add('my'); // пользовательские метки включены по умолчанию
   GEO.filters = new Set([...cats].filter(c => !DEFAULT_OFF.has(c)));
 }
 
@@ -288,9 +294,284 @@ function buildMapChips() {
     });
     row.appendChild(b);
   };
+  mk('my', 'мои'); // первым — свои метки
   cats.forEach(c => mk(c, (CAT_META[c] || CAT_META.other).label));
   mk('roads-foot', 'тропы');
   mk('roads-auto', 'авто-дороги');
+}
+
+/* ---------- мои метки (user pins) ---------- */
+const PIN_EMOJI = ['⛺', '🔥', '🚗', '💧', '🍲', '📍'];
+const PIN_LIMIT = window.InsomniaCore.PIN_LIMIT;
+const pinKey = window.InsomniaCore.pinKey;
+const PIN_EDIT = { original: null }; // имя метки, которую правим (переименование без дубля)
+
+// свободное автоимя вида «база», «база 2», «база 3»… среди текущих меток
+function freePinName(pins, base) {
+  if (!pins.some(p => pinKey(p.name) === pinKey(base))) return base;
+  let n = 2;
+  while (pins.some(p => pinKey(p.name) === pinKey(`${base} ${n}`))) n++;
+  return `${base} ${n}`;
+}
+
+function pinIcon(emoji) {
+  return L.divIcon({
+    className: 'geo-marker',
+    html: `<div class="pin-my">${escapeHtml(emoji || '📍')}</div>`,
+    iconSize: [32, 32], iconAnchor: [16, 16],
+  });
+}
+
+// перерисовать слой «мои» из state.pins (после любого изменения меток)
+function drawPins() {
+  if (!GEO.map) return;
+  const g = GEO.layerGroups.my || (GEO.layerGroups.my = L.layerGroup());
+  g.clearLayers();
+  (state.pins || []).forEach(pin => {
+    const mk = L.marker([pin.lat, pin.lng], { icon: pinIcon(pin.emoji) });
+    mk.on('click', () => openPinCard(pin));
+    g.addLayer(mk);
+  });
+}
+
+function pinsChanged() {
+  savePins();
+  drawPins();
+  updatePinsInfo();
+  if (state.view === 'nearby') render();
+}
+
+function openPinCard(pin) {
+  const body = $('#sheetBody');
+  body.innerHTML = `
+    <div class="detail-time">${escapeHtml(pin.emoji || '📍')} моя метка</div>
+    <div class="detail-title">${escapeHtml(pin.name || 'без названия')}</div>
+    ${pin.note ? `<p class="detail-desc">${escapeHtml(pin.note)}</p>` : ''}
+    <div class="muted small">${(+pin.lat).toFixed(5)}, ${(+pin.lng).toFixed(5)}</div>
+    ${window.InsomniaCore.pinOutsideFest(pin) ? '<div class="muted small">⚠️ далеко от поляны</div>' : ''}
+    <div class="pin-actions">
+      <button class="btn" id="pinCardShare">поделиться</button>
+      <button class="btn ghost" id="pinCardEdit">редактировать</button>
+      <button class="btn ghost danger" id="pinCardDel">удалить</button>
+    </div>`;
+  $('#pinCardShare').addEventListener('click', () => sharePin(pin));
+  $('#pinCardEdit').addEventListener('click', () => { hideSheet('#sheet'); openPinEditor(pin); });
+  $('#pinCardDel').addEventListener('click', () => {
+    const key = pinKey(pin.name);
+    state.pins = state.pins.filter(p => pinKey(p.name) !== key);
+    pinsChanged();
+    hideSheet('#sheet');
+    toast('> метка удалена');
+  });
+  showSheet('#sheet');
+}
+
+function pinUrl(pin) {
+  return location.origin + location.pathname + window.InsomniaCore.pinToHash(pin);
+}
+
+function sharePin(pin) {
+  const url = pinUrl(pin);
+  const text = `${pin.emoji || '📍'} ${pin.name} — метка на карте «Бессонницы»`;
+  if (navigator.share) { navigator.share({ title: pin.name, text, url }).catch(() => {}); return; }
+  const copy = navigator.clipboard && navigator.clipboard.writeText
+    ? navigator.clipboard.writeText(url) : Promise.reject();
+  copy.then(() => toast('> ссылка на метку скопирована'))
+    .catch(() => {
+      // буфер недоступен — отдаём ссылку в выделяемое поле, не в тост
+      hideSheet('#sheet');
+      hideSheet('#settings');
+      $('#pinImportText').value = url;
+      showSheet('#pinImport');
+      toast('Буфер недоступен — ссылка в поле, скопируйте руками', 5000);
+    });
+}
+
+function selectPinEmoji(emoji) {
+  $$('#pinEmojiRow button').forEach(b => b.classList.toggle('active', b.dataset.emoji === emoji));
+}
+function selectedPinEmoji() {
+  const b = document.querySelector('#pinEmojiRow button.active');
+  return b ? b.dataset.emoji : '📍';
+}
+
+function openPinEditor(seed) {
+  PIN_EDIT.original = seed && seed.name ? seed.name : null;
+  $('#pinEditorTitle').textContent = PIN_EDIT.original ? '~/метки/править' : '~/метки/новая';
+  $('#pinName').value = (seed && seed.name) || '';
+  $('#pinNote').value = (seed && seed.note) || '';
+  $('#pinCoords').value = seed && isFinite(seed.lat) && isFinite(seed.lng)
+    ? `${(+seed.lat).toFixed(5)}, ${(+seed.lng).toFixed(5)}` : '';
+  selectPinEmoji((seed && seed.emoji) || '📍');
+  $('#pinWarn').classList.add('hidden');
+  showSheet('#pinEditor');
+  if (!$('#pinName').value) setTimeout(() => $('#pinName').focus(), 60);
+}
+
+function savePinFromEditor() {
+  const core = window.InsomniaCore;
+  const name = $('#pinName').value.trim();
+  if (!name) { toast('Дайте метке название'); $('#pinName').focus(); return; }
+  const pair = core.parseCoordPairs($('#pinCoords').value)[0];
+  if (!pair) { toast('Координаты не распознаны — «54,68712 35,07934»'); $('#pinCoords').focus(); return; }
+  const pin = { ...pair, name, emoji: selectedPinEmoji(), note: $('#pinNote').value.trim() };
+  // переименование при правке: в занятое имя не даём (иначе две метки
+  // молча схлопнутся в одну), свою старую запись убираем
+  let pins = state.pins || [];
+  if (PIN_EDIT.original && pinKey(PIN_EDIT.original) !== pinKey(name)) {
+    if (pins.some(p => pinKey(p.name) === pinKey(name))) {
+      toast('Это имя занято другой меткой — выберите другое');
+      $('#pinName').focus();
+      return;
+    }
+    pins = pins.filter(p => pinKey(p.name) !== pinKey(PIN_EDIT.original));
+  }
+  const r = core.upsertPin(pins, pin, PIN_LIMIT);
+  if (!r.ok) { toast(`Лимит ${PIN_LIMIT} меток — удалите что-нибудь`); return; }
+  state.pins = r.pins;
+  pinsChanged();
+  hideSheet('#pinEditor');
+  const far = core.pinOutsideFest(pin);
+  toast(far ? '⚠️ метка далеко от поляны — но сохранена' : (r.updated ? '> метка обновлена' : '> метка сохранена'), far ? 5000 : 2600);
+  if (GEO.map) GEO.map.setView([pin.lat, pin.lng], Math.max(GEO.map.getZoom(), 16));
+}
+
+// «добавить из текста»: разбор свободного текста / экспортной строки
+function parsePinImportText() {
+  const raw = $('#pinImportText').value;
+  const found = window.InsomniaCore.parsePinsFromText(raw);
+  const box = $('#pinImportPreview');
+  if (!found.length) {
+    box.textContent = 'Координат не нашлось. Подойдут пары «54,68712 35,07934», geo:-ссылки или #pin=-ссылки.';
+    $('#pinImportApply').classList.add('hidden');
+    return;
+  }
+  box.innerHTML = found.slice(0, 50).map(p =>
+    `<div class="pin-import-row">${escapeHtml(p.emoji || '📍')} ${escapeHtml(p.name || 'без названия')} · ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>`).join('');
+  $('#pinImportApply').classList.remove('hidden');
+  $('#pinImportApply').dataset.count = String(found.length);
+}
+
+function applyPinImport() {
+  const core = window.InsomniaCore;
+  const found = core.parsePinsFromText($('#pinImportText').value);
+  let added = 0, updated = 0, rejected = 0;
+  let pins = state.pins || [];
+  found.forEach(p => {
+    // автоимя не должно совпасть с существующей меткой (молчаливая перезапись)
+    const pin = { ...p, name: p.name || freePinName(pins, 'метка') };
+    const r = core.upsertPin(pins, pin, PIN_LIMIT);
+    if (!r.ok) { rejected++; return; }
+    pins = r.pins;
+    if (r.updated) updated++; else added++;
+  });
+  state.pins = pins;
+  pinsChanged();
+  hideSheet('#pinImport');
+  toast(`> метки: +${added}${updated ? `, обновлено ${updated}` : ''}${rejected ? `, отклонено ${rejected} (лимит ${PIN_LIMIT})` : ''}`, 5000);
+}
+
+function openPinImport() {
+  hideSheet('#settings'); // не наслаиваем шиты: импорт открывается из настроек
+  $('#pinImportText').value = '';
+  $('#pinImportPreview').textContent = '';
+  $('#pinImportApply').classList.add('hidden');
+  showSheet('#pinImport');
+  setTimeout(() => $('#pinImportText').focus(), 60);
+}
+
+function exportPinsLine() {
+  const pins = state.pins || [];
+  if (!pins.length) { toast('Меток пока нет'); return; }
+  const line = pins.map(p => window.InsomniaCore.pinToHash(p)).join(' ');
+  const copy = navigator.clipboard && navigator.clipboard.writeText
+    ? navigator.clipboard.writeText(line) : Promise.reject();
+  copy.then(() => toast(`> ${pins.length} мет. одной строкой — в буфере`))
+    .catch(() => {
+      hideSheet('#settings');
+      $('#pinImportText').value = line;
+      showSheet('#pinImport');
+      toast('Буфер недоступен — строка в поле импорта, скопируйте руками', 5000);
+    });
+}
+
+function updatePinsInfo() {
+  const el = $('#pinsInfo');
+  if (el) el.textContent = `Сохранено: ${(state.pins || []).length} из ${PIN_LIMIT}. Лонгтап по карте — новая метка.`;
+}
+
+// входящий диплинк #pin=… (открыли чужую ссылку)
+function handleIncomingPin() {
+  const core = window.InsomniaCore;
+  const pin = core.pinFromHash(location.hash);
+  if (!pin) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  const body = $('#pinIncomingBody');
+  body.innerHTML = `
+    <div class="detail-title">${escapeHtml(pin.emoji || '📍')} ${escapeHtml(pin.name || 'метка без названия')}</div>
+    <div class="muted small">${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}</div>
+    ${core.pinOutsideFest(pin) ? '<div class="muted small">⚠️ далеко от поляны</div>' : ''}
+    <button class="btn" id="pinIncomingAdd">Добавить в мои метки</button>
+    <button class="btn ghost" id="pinIncomingView">Просто посмотреть</button>`;
+  const showOnMap = (withPreview) => {
+    switchView('map');
+    setTimeout(() => {
+      if (!GEO.map) return;
+      GEO.map.setView([pin.lat, pin.lng], 17);
+      // превью живёт в одном экземпляре и не остаётся навсегда:
+      // сохранённую метку рисует слой «мои», дубль-фантом не нужен
+      if (GEO.preview) { GEO.preview.remove(); GEO.preview = null; }
+      if (withPreview) {
+        GEO.preview = L.marker([pin.lat, pin.lng], { icon: pinIcon(pin.emoji) })
+          .addTo(GEO.map).bindPopup(escapeHtml(pin.name || 'метка')).openPopup();
+      }
+    }, 300);
+  };
+  $('#pinIncomingAdd').addEventListener('click', () => {
+    const name = pin.name || freePinName(state.pins || [], 'метка из ссылки');
+    const r = window.InsomniaCore.upsertPin(state.pins || [], { ...pin, name }, PIN_LIMIT);
+    if (!r.ok) { toast(`Лимит ${PIN_LIMIT} меток`); return; }
+    state.pins = r.pins;
+    pinsChanged();
+    hideSheet('#pinIncoming');
+    toast(r.updated ? '> метка обновлена' : '> метка добавлена');
+    showOnMap(false);
+  });
+  $('#pinIncomingView').addEventListener('click', () => { hideSheet('#pinIncoming'); showOnMap(true); });
+  showSheet('#pinIncoming');
+  setTimeout(() => { const b = $('#pinIncomingAdd'); if (b) b.focus(); }, 60);
+  return true;
+}
+
+// вешается из wireUI (app.js): редактор, импорт, экспорт, кнопка «➕»
+function wirePinUI() {
+  const row = $('#pinEmojiRow');
+  PIN_EMOJI.forEach(e => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.emoji = e;
+    b.textContent = e;
+    b.addEventListener('click', () => selectPinEmoji(e));
+    row.appendChild(b);
+  });
+  $('#btnAddPin').addEventListener('click', () => openPinEditor(null));
+  $('#pinFromGps').addEventListener('click', async () => {
+    if (await geoDenied()) { toast(geoErrorText({ code: 1 }), 8000); return; }
+    try {
+      const pos = await getPosition();
+      $('#pinCoords').value = `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    } catch (err) { toast(geoErrorText(err), 8000); }
+  });
+  $('#pinCoords').addEventListener('input', () => {
+    const pair = window.InsomniaCore.parseCoordPairs($('#pinCoords').value)[0];
+    $('#pinWarn').classList.toggle('hidden', !(pair && window.InsomniaCore.pinOutsideFest(pair)));
+  });
+  $('#pinSave').addEventListener('click', savePinFromEditor);
+  $('#pinImportGo').addEventListener('click', parsePinImportText);
+  $('#pinImportApply').addEventListener('click', applyPinImport);
+  $('#btnPinsExport').addEventListener('click', exportPinsLine);
+  $('#btnPinsImport').addEventListener('click', openPinImport);
+  updatePinsInfo();
 }
 
 /* ---------- геолокация ---------- */
@@ -458,14 +739,48 @@ function renderNearby(root) {
   const now = getNow();
   const items = getNearby(GEO.data.points.filter(p => p.category !== 'service'),
     state.program.events, GEO.nearby.pos, now, GEO.nearby.radius);
+
+  // свои метки — первым блоком (лагерь/машина важнее чужих туалетов)
+  const dM = window.InsomniaCore.distanceM;
+  const myNear = (state.pins || [])
+    .map(p => ({ ...p, dist: dM(GEO.nearby.pos, p) }))
+    .filter(p => !GEO.nearby.radius || p.dist <= GEO.nearby.radius)
+    .sort((a, b) => a.dist - b.dist);
+  if (myNear.length) {
+    const head = document.createElement('div');
+    head.className = 'time-group-label';
+    head.textContent = 'мои метки';
+    root.appendChild(head);
+    myNear.forEach(p => {
+      const el = document.createElement('div');
+      el.className = 'map-point';
+      el.innerHTML = `
+        <div class="map-point-name">
+          <span><span class="pin-my pin-inline">${escapeHtml(p.emoji || '📍')}</span> ${escapeHtml(p.name || 'без названия')}</span>
+          <span class="muted small">${p.dist} м ${bearingLabel(GEO.nearby.pos, p)}</span>
+        </div>`;
+      el.addEventListener('click', () => {
+        switchView('map');
+        setTimeout(() => {
+          if (!GEO.map) return;
+          GEO.map.setView([p.lat, p.lng], Math.max(GEO.map.getZoom(), 17));
+          openPinCard(p);
+        }, 250);
+      });
+      root.appendChild(el);
+    });
+  }
+
   if (!items.length) {
-    const st = emptyState('🌾', 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = 'к программе';
-    btn.addEventListener('click', () => switchView('schedule'));
-    st.appendChild(btn);
-    root.appendChild(st);
+    if (!myNear.length) {
+      const st = emptyState('🌾', 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'к программе';
+      btn.addEventListener('click', () => switchView('schedule'));
+      st.appendChild(btn);
+      root.appendChild(st);
+    }
     root.appendChild(geoHelpEl());
     return;
   }
@@ -503,6 +818,7 @@ function switchView(view) {
 // следующее открытие вкладки перерисует всё из свежего GEO.data
 function resetMapLayers() {
   if (GEO.map) { GEO.map.remove(); GEO.map = null; }
+  GEO.preview = null;
   GEO.layerGroups = {};
   GEO.zoneById = {};
   GEO.pointById = {};
