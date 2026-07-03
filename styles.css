@@ -295,6 +295,7 @@ button { font-family: inherit; cursor: pointer; }
   font-family: var(--mono);
 }
 .btn:active { filter: brightness(.92); }
+a.btn { display: block; text-align: center; text-decoration: none; box-sizing: border-box; }
 .btn:disabled { opacity: .45; }
 .btn.ghost { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
 .btn.danger { color: var(--danger); }

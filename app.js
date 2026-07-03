@@ -1241,8 +1241,17 @@ async function boot() {
   registerSW();
   updateNotifStatus();
   handleIncomingPin(); // открыли по чужой #pin=-ссылке — предложить добавить
-  // ссылка может прилететь и в уже открытое приложение (same-document навигация)
-  window.addEventListener('hashchange', handleIncomingPin);
+  handleImportHash();  // гайд «связь на поляне» ведёт на форму импорта меток
+  // ссылки могут прилетать и в уже открытое приложение (same-document навигация)
+  window.addEventListener('hashchange', () => { handleIncomingPin() || handleImportHash(); });
+}
+
+// ./#import-pins (из mesh.html): открыть «добавить из текста» с фокусом в поле
+function handleImportHash() {
+  if (location.hash !== '#import-pins') return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  openPinImport();
+  return true;
 }
 
 document.addEventListener('DOMContentLoaded', () => boot().catch(err => {
