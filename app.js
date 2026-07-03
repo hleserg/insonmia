@@ -230,6 +230,8 @@ function render() {
 }
 
 function renderNow(root) {
+  // полоса дат в «сейчас» — индикатор текущих суток, не фильтр
+  buildDayStrip(true, pickDefaultDay());
   const n = getNow();
   const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
   const live = window.InsomniaCore.getCurrent(evs, n);
@@ -392,15 +394,19 @@ function emptyState(icon, text) {
 }
 
 /* ---------- day strip ---------- */
-function buildDayStrip() {
+// readonly-режим — для «сейчас»: полоса показывает ТЕКУЩИЕ фестивальные
+// сутки (activeDay), остальные даты заглушены и некликабельны; выбор дня
+// в «программе» (state.day) при этом не трогаем — вернётся как был
+function buildDayStrip(readonly = false, activeDay = state.day) {
   const strip = $('#dayStrip');
   strip.innerHTML = '';
   (state.program._days || []).forEach(date => {
     const p = dayParts(date);
     const btn = document.createElement('button');
-    btn.className = 'day-btn' + (date === state.day ? ' active' : '');
+    btn.className = 'day-btn' + (date === activeDay ? ' active' : '');
     btn.innerHTML = `<span class="dow">${WD[p.dow]}</span><span>${p.day} ${MON[p.mo]}</span>`;
-    btn.addEventListener('click', () => { state.day = date; render(); });
+    if (readonly) btn.disabled = true;
+    else btn.addEventListener('click', () => { state.day = date; render(); });
     strip.appendChild(btn);
   });
 }
