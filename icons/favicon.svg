@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Упрощённый вариант для favicon (16-48px): только глаз, без окна
+       терминала — в мелких размерах читается «тёмный квадрат + зелёный глаз». -->
+  <rect width="512" height="512" fill="#0d1117"/>
+  <g stroke="#3fb950" stroke-width="30" fill="none" stroke-linecap="round">
+    <path d="M56,256 Q256,84 456,256"/>
+    <path d="M56,256 Q256,428 456,256"/>
+    <circle cx="256" cy="256" r="86"/>
+  </g>
+  <circle cx="256" cy="256" r="38" fill="#3fb950"/>
+  <circle cx="240" cy="240" r="14" fill="#0d1117"/>
+</svg>

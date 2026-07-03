@@ -487,3 +487,6 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .emoji-row button.active { border-color: #d29922; background: rgba(210,153,34,.12); }
 .pin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .pin-import-row { padding: 6px 0; border-top: 1px solid var(--line); color: var(--text); }
+
+/* логотип-глаз в шапке: наследует высоту строки заголовка */
+.brand-eye { width: 1.15em; height: 1.15em; vertical-align: -0.22em; margin-right: 6px; }
