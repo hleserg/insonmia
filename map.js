@@ -829,15 +829,18 @@ function bestKnownPos() {
   return null;
 }
 
-// строка «📍 мои координаты: lat, lng» + 🔗 (для потеряшек). Без фикса —
-// «включить геолокацию» (тап = запрос), 🔗 неактивна.
+// строка «📍 lat, lng» + 🔗 (для потеряшек). Без фикса — «включить геолокацию»
+// (тап = запрос), 🔗 неактивна. Показываем ГОЛЫЕ координаты без подписи «мои
+// координаты:» — иначе на 360px подпись съедала ширину и долгота обрезалась
+// многоточием (а именно цифры нужно прочитать/продиктовать). Пин 📍 + место
+// под фильтрами карты и так говорят, что это твоя точка.
 function updateMyCoordRow() {
   const txt = $('#myCoordText'), share = $('#myCoordShare');
   if (!txt || !share) return;
   const pos = bestKnownPos();
   if (pos) {
     if (!GEO.myCoord) GEO.myCoord = { lat: pos.lat, lng: pos.lng }; // засеяли из «Рядом»
-    txt.textContent = `📍 мои координаты: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
     share.disabled = false;
   } else {
     txt.textContent = '📍 включить геолокацию';

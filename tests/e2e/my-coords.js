@@ -41,9 +41,15 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   await page.click('#myCoordText');
   await page.waitForTimeout(500);
   const txt = await page.textContent('#myCoordText');
-  assert.match(txt, /мои координаты:\s*54\.680\d+,\s*35\.089\d+/, 'координаты в строке: ' + txt);
+  assert.match(txt, /📍\s*54\.680\d+,\s*35\.089\d+/, 'координаты в строке: ' + txt);
   assert.ok(!(await page.evaluate(() => document.querySelector('#myCoordShare').disabled)), '🔗 активна после фикса');
-  console.log('✓ 2. «включить геолокацию» → фикс, координаты в строке, 🔗 активна');
+  // координаты НЕ обрезаются многоточием (весь текст влезает в свой бокс)
+  const clipped = await page.evaluate(() => {
+    const el = document.querySelector('#myCoordText');
+    return el.scrollWidth > el.clientWidth + 1;
+  });
+  assert.ok(!clipped, 'координаты обрезаются многоточием (scrollWidth > clientWidth)');
+  console.log('✓ 2. фикс → координаты видны целиком (не обрезаны), 🔗 активна');
 
   // --- 3. тап по координатам копирует «lat, lng»
   await page.click('#myCoordText');
