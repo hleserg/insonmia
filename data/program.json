@@ -1,7 +1,7 @@
 {
  "festival": "Бессонница 2026",
  "meta": {
-  "version": "2026-07-03T19:55:05Z",
+  "version": "2026-07-04T09:03:36Z",
   "source": "insomniafest.ru"
  },
  "year": 2026,
@@ -7180,7 +7180,7 @@
    ]
   },
   {
-   "id": "ccd4c7be",
+   "id": "f18da562",
    "type": "program",
    "date": "2026-07-10",
    "start": "00:30",
@@ -7188,7 +7188,7 @@
    "startISO": "2026-07-11T00:30:00",
    "endISO": "2026-07-11T02:00:00",
    "venue": "Сцена (уточняется)",
-   "title": "Egor Efremov",
+   "title": "Sverhnovaya Supernova",
    "description": "",
    "films": [],
    "age": "16+"
@@ -10919,7 +10919,7 @@
    "age": "16+"
   },
   {
-   "id": "b4ab1292",
+   "id": "4041bffd",
    "type": "program",
    "date": "2026-07-11",
    "start": "20:00",
@@ -10927,7 +10927,7 @@
    "startISO": "2026-07-11T20:00:00",
    "endISO": "2026-07-11T21:30:00",
    "venue": "Сцена (уточняется)",
-   "title": "T_error 404",
+   "title": "Georgy Orlov-Davydovsky",
    "description": "",
    "films": [],
    "age": "16+"
@@ -11341,7 +11341,7 @@
    ]
   },
   {
-   "id": "0855c86c",
+   "id": "d3954ca9",
    "type": "program",
    "date": "2026-07-11",
    "start": "22:30",
@@ -11349,7 +11349,7 @@
    "startISO": "2026-07-11T22:30:00",
    "endISO": "2026-07-12T00:00:00",
    "venue": "Сцена (уточняется)",
-   "title": "Georgy Orlov-Davydovsky",
+   "title": "T_error404",
    "description": "",
    "films": [],
    "age": "16+"
@@ -11666,7 +11666,7 @@
    ]
   },
   {
-   "id": "4a21027e",
+   "id": "2c5e1eef",
    "type": "program",
    "date": "2026-07-11",
    "start": "00:00",
@@ -11674,7 +11674,7 @@
    "startISO": "2026-07-12T00:00:00",
    "endISO": "2026-07-12T01:30:00",
    "venue": "Сцена (уточняется)",
-   "title": "ХЛАДНА",
+   "title": "8Hz",
    "description": "",
    "films": [],
    "age": "16+"
@@ -13185,7 +13185,7 @@
    ]
   },
   {
-   "id": "59e9afbf",
+   "id": "817743f7",
    "type": "program",
    "date": "2026-07-12",
    "start": "13:00",
@@ -13193,7 +13193,7 @@
    "startISO": "2026-07-12T13:00:00",
    "endISO": "2026-07-12T14:30:00",
    "venue": "Сцена (уточняется)",
-   "title": "Sverhnovaya Supernova",
+   "title": "ЖЙВА",
    "description": "",
    "films": [],
    "age": "16+"
@@ -14701,7 +14701,7 @@
    ]
   },
   {
-   "id": "fe0228e9",
+   "id": "22c34a4b",
    "type": "program",
    "date": "2026-07-12",
    "start": "19:00",
@@ -14709,10 +14709,10 @@
    "startISO": "2026-07-12T19:00:00",
    "endISO": "2026-07-12T20:30:00",
    "venue": "Сцена (уточняется)",
-   "title": "ЖЙВА",
+   "title": "KISSER",
    "description": "",
    "films": [],
-   "age": "0+"
+   "age": "16+"
   },
   {
    "id": "eb2e3a6c",
