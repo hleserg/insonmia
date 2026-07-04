@@ -207,13 +207,16 @@ const SHARE_MOCK = () => {
   const warnTxt = (await page.evaluate(() => document.querySelector('#programExport .sheet-body').innerText)).toLowerCase();
   assert.ok(/напоминани[ея].*не будут|не будут включены/.test(warnTxt), 'предупреждение: напоминаний не будет');
   assert.ok(/не обнов|разовый снимок/.test(warnTxt), 'предупреждение: разовый снимок');
-  // [Отмена] реально отменяет — модалка закрыта, ничего не выгружено
+  // отмена — крестик в шапке (нижней кнопки «Отмена» больше нет): модалка
+  // закрыта, ничего не выгружено; внизу только две зелёные кнопки выбора
   await page.evaluate(() => { window.__share = null; });
-  await page.click('#programExport .btn.ghost[data-close]');
+  assert.equal(await page.$$eval('#programExport .detail-actions [data-close]', b => b.length), 0,
+    'внизу нет отдельной кнопки «Отмена» (отмена — крестик в шапке)');
+  await page.click('#programExport .sheet-titlebar .icon-btn[data-close]');
   await page.waitForTimeout(200);
-  assert.ok(!(await page.isVisible('#programExport')), '[Отмена] закрывает модалку');
-  assert.equal(await page.evaluate(() => window.__share), null, '[Отмена] ничего не выгружает');
-  console.log('✓ модалка: оба предупреждения, [Отмена] отменяет');
+  assert.ok(!(await page.isVisible('#programExport')), 'крестик в шапке закрывает модалку');
+  assert.equal(await page.evaluate(() => window.__share), null, 'крестик ничего не выгружает');
+  console.log('✓ модалка: оба предупреждения, крестик отменяет, нижней «Отмена» нет');
   // подтверждаем → полный ICS без VALARM
   await page.click('#btnProgramExport');
   await page.waitForTimeout(200);
@@ -227,6 +230,24 @@ const SHARE_MOCK = () => {
   assert.equal((full.text.match(/BEGIN:VCALENDAR/g) || []).length, 1, 'один VCALENDAR');
   assert.ok(!(await page.isVisible('#programExport')), 'после выгрузки модалка закрыта');
   console.log('✓ вся программа:', fullN, 'VEVENT, 0 VALARM, один файл');
+
+  // --- 3b-dl: ⬇️ рядом с «в календарь» → та же модалка, но mode=download →
+  //           принудительное СКАЧИВАНИЕ файла (не share)
+  assert.ok(await page.isVisible('#btnProgramDownload'), 'кнопка ⬇️ рядом с «вся программа в календарь»');
+  await page.click('#btnProgramDownload');
+  await page.waitForTimeout(200);
+  assert.ok(await page.isVisible('#programExport'), 'по ⬇️ — та же модалка с предупреждениями');
+  await page.evaluate(() => { window.__share = null; });
+  const [dlFull] = await Promise.all([
+    page.waitForEvent('download'),
+    page.click('#programExportGo'),
+  ]);
+  const dlText = require('fs').readFileSync(await dlFull.path(), 'utf8');
+  assert.equal(await page.evaluate(() => window.__share), null, 'режим download НЕ идёт через share');
+  assert.equal(dlFull.suggestedFilename(), 'insomnia-full-program.ics', 'скачан insomnia-full-program.ics');
+  assert.ok((dlText.match(/BEGIN:VEVENT/g) || []).length > 600, 'скачано 600+ VEVENT');
+  assert.equal((dlText.match(/BEGIN:VALARM/g) || []).length, 0, 'скачанная программа — 0 VALARM');
+  console.log('✓ ⬇️ режим download: та же модалка, скачивание файла (без share)');
 
   // --- 3c. Huawei-кейс: canShare({files})=true, но share({files}) кидает
   //         NotAllowedError → повтор шэра ТОЛЬКО текстом (без файла) ---
