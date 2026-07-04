@@ -98,6 +98,14 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   console.log('✓ 4c. фолбэк-поле шаринга без залипшего превью/импорта');
   await ctx.setGeolocation(PT); // вернём исходную точку для остальных сценариев
 
+  // --- 4d. провал фикса (таймаут GPS) инвалидирует строку: 🔗 гаснет, не врёт старой точкой
+  await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, err) => err({ code: 3, message: 'timeout' }); });
+  await page.click('#myCoordShare');
+  await page.waitForTimeout(300);
+  assert.match(await page.textContent('#myCoordText'), /включить геолокацию/, 'после таймаута строка сброшена');
+  assert.ok(await page.evaluate(() => document.querySelector('#myCoordShare').disabled), '🔗 неактивна после провала фикса');
+  console.log('✓ 4d. провал фикса (таймаут) гасит строку — 🔗 не врёт старой точкой');
+
   // --- 5. открытие этого же #pin= офлайн → входящая точка «Я здесь»
   const hash = clipShare.split('\n').find(l => l.includes('#pin='));
   await page.goto(hash, { waitUntil: 'load' });

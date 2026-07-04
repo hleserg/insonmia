@@ -16,6 +16,7 @@ const GEO = {
   highlight: null,
   selfMarker: null,
   myCoord: null,       // последняя точка GPS для строки «мои координаты» + шаринга
+  myCoordAt: 0,        // время фикса myCoord (TTL как у «Рядом», POS_FRESH_MS)
   filters: null,       // Set включённых категорий
   nearby: { pos: null, posAt: 0, error: null, radius: 300 }, // watch — в core.createGeoWatcher
   mock: null,          // ?mockgeo=lat,lng
@@ -567,9 +568,10 @@ function openPinEditor(seed) {
   selectPinEmoji((seed && seed.emoji) || '📍');
   $('#pinWarn').classList.add('hidden');
   showSheet('#pinEditor');
-  // без автофокуса на «название»: иначе клавиатура выскакивает сразу и
-  // перекрывает форму (иконки/координаты/«взять позицию»). Сохранение (✓)
-  // теперь в шапке и клавиатурой не перекрывается — фокус юзер даёт сам.
+  // фокус — на ✓ (кнопка, не поле): без автофокуса на «название» клавиатура
+  // не выскакивает и не перекрывает форму, но фокус ВХОДИТ в модальный диалог
+  // (a11y: клавиатура/скринридер не остаются на карте под модалкой).
+  setTimeout(() => { const s = $('#pinSave'); if (s) s.focus(); }, 60);
 }
 
 function savePinFromEditor() {
@@ -791,7 +793,7 @@ async function geoDenied() {
 function getPosition(opts) {
   return new Promise((resolve, reject) => {
     if (GEO.mock) return resolve(GEO.mock);
-    if (!navigator.geolocation) return reject({ code: 2 });
+    if (!navigator.geolocation) return reject({ code: 0 }); // код 0 = API нет вовсе (как в startNearbyWatch)
     navigator.geolocation.getCurrentPosition(
       pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       err => reject(err),
@@ -816,6 +818,7 @@ async function locateMe() {
     showSelfMarker(pos);
     GEO.map.setView([pos.lat, pos.lng], Math.max(GEO.map.getZoom(), 16));
     GEO.myCoord = { lat: pos.lat, lng: pos.lng }; // питает строку «мои координаты»
+    GEO.myCoordAt = Date.now();
     updateMyCoordRow();
   } catch (err) {
     toast(geoErrorText(err), 8000); // текст длинный — даём время прочитать
@@ -824,10 +827,13 @@ async function locateMe() {
 
 // «свежая известная» позиция для строки: свой фикс (🎯), а если его нет —
 // недавний фикс из «Рядом» (тот же прибор уже знает координаты; без этого
-// строка врала бы «включить геолокацию» после перехода с «Рядом»)
+// строка врала бы «включить геолокацию» после перехода с «Рядом»).
+// TTL POS_FRESH_MS — единая политика свежести с «Рядом»: протухший фикс не
+// показываем как актуальный (иначе строка врёт часовой давности точкой).
 function bestKnownPos() {
-  if (GEO.myCoord) return GEO.myCoord;
-  if (GEO.nearby.pos && Date.now() - GEO.nearby.posAt < POS_FRESH_MS) return GEO.nearby.pos;
+  const fresh = t => Date.now() - t < POS_FRESH_MS;
+  if (GEO.myCoord && fresh(GEO.myCoordAt || 0)) return GEO.myCoord;
+  if (GEO.nearby.pos && fresh(GEO.nearby.posAt)) return GEO.nearby.pos;
   return null;
 }
 
@@ -841,7 +847,8 @@ function updateMyCoordRow() {
   if (!txt || !share) return;
   const pos = bestKnownPos();
   if (pos) {
-    if (!GEO.myCoord) GEO.myCoord = { lat: pos.lat, lng: pos.lng }; // засеяли из «Рядом»
+    // показываем свежую известную точку; сам фикс под действие всё равно
+    // перезапрашивается (freshPosForAction), поэтому здесь только отображение
     txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
     share.disabled = false;
   } else {
@@ -862,8 +869,14 @@ function invalidateMyCoord() {
 // иначе берёт новый; при провале — инвалидируем, чтобы 🔗 не врала старой точкой.
 async function freshPosForAction() {
   if (await geoDenied()) { invalidateMyCoord(); throw { code: 1 }; }
-  const pos = await getPosition({ maximumAge: 0 }); // без кэша — «Я здесь» = сейчас
+  let pos;
+  // ЛЮБОЙ провал (таймаут/нет фикса/нет API), не только отказ доступа — гасим
+  // строку, чтобы 🔗 не осталась активной поверх старой точки (первый захват
+  // GPS на поляне идёт минуту-две — это штатный таймаут, не только code 1)
+  try { pos = await getPosition({ maximumAge: 0 }); }
+  catch (err) { invalidateMyCoord(); throw err; }
   GEO.myCoord = { lat: pos.lat, lng: pos.lng };
+  GEO.myCoordAt = Date.now();
   showSelfMarker(pos);
   updateMyCoordRow();
   return GEO.myCoord;
