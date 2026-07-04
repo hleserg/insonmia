@@ -59,4 +59,6 @@ const PORT = 8096;
   if (watches > 0) { console.log('FAIL: geo-watch утёк (вкладка не «рядом»)'); process.exit(1); }
   console.log('Ф5 perf: OK');
   await b.close();
+  try { srv.kill('SIGKILL'); } catch { /* уже мёртв */ }
+  process.exit(0); // иначе живой http-server держит event loop и тест «висит»
 })().catch(e => { console.error('FAIL:', e.message); process.exit(1); });
