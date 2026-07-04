@@ -1169,33 +1169,60 @@ function updateDataInfo() {
 /* ---------- service worker & install ---------- */
 async function registerSW() {
   if (!('serviceWorker' in navigator)) return;
+  // был ли контроллер на момент загрузки: если нет — ПЕРВЫЙ controllerchange
+  // это первая установка SW (перезагружать не надо, просто «теперь контроллер
+  // есть»); все ПОСЛЕДУЮЩИЕ controllerchange = обновление кода → тихий reload
+  let hasController = !!navigator.serviceWorker.controller;
   try {
     state.swReg = await navigator.serviceWorker.register('sw.js');
     setTimeout(checkOfflineReady, 2500); // прекэш к этому моменту обычно уже едет
-    state.swReg.addEventListener('updatefound', () => {
-      const nw = state.swReg.installing;
-      nw && nw.addEventListener('statechange', () => {
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-          showAppUpdateBanner();
-        }
-      });
-    });
-    if (state.swReg.waiting && navigator.serviceWorker.controller) showAppUpdateBanner();
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      // Перезагружаемся ТОЛЬКО когда обновление запросил пользователь кнопкой.
-      // Первая установка SW (clients.claim) тоже даёт controllerchange —
-      // молча продолжаем без перезагрузки.
-      if (!window.__wantReloadAfterUpdate || window.__reloadingForUpdate) return;
-      window.__reloadingForUpdate = true;
-      location.reload();
+      if (!hasController) { hasController = true; return; } // первая установка
+      armSilentReload();
     });
   } catch (err) { /* offline / unsupported */ }
 }
 
-function showAppUpdateBanner() {
-  const bar = $('#appUpdateBar');
-  if (!bar) return;
-  bar.classList.remove('hidden');
+/* ---------- тихое авто-обновление кода ----------
+   Новый SW делает skipWaiting → берёт контроль → controllerchange. Мы
+   перезагружаем страницу САМИ, но только в безопасный момент: без открытых
+   модалок и после паузы без действий (чтобы не дёрнуть под пальцами).
+   Избранное/метки живут в localStorage и переживают reload. */
+let __reloadArmed = false;
+let __reloadTimer = null;
+
+function anyModalOpen() {
+  // все модалки — .sheet; открытая = без класса hidden
+  return [...document.querySelectorAll('.sheet')].some(s => !s.classList.contains('hidden'));
+}
+
+function armSilentReload() {
+  if (window.__reloadingForUpdate) return;
+  __reloadArmed = true;
+  scheduleSilentReload();
+}
+
+function scheduleSilentReload() {
+  if (!__reloadArmed || window.__reloadingForUpdate) return;
+  clearTimeout(__reloadTimer);
+  // перезагрузка только после паузы без действий И без открытых модалок
+  __reloadTimer = setTimeout(() => {
+    if (!__reloadArmed || window.__reloadingForUpdate) return;
+    if (anyModalOpen()) return; // ждём: закрытие модалки — интеракция → перепланируем
+    window.__reloadingForUpdate = true;
+    location.reload();
+  }, 2500);
+}
+
+// любое действие пользователя откладывает тихую перезагрузку (debounce);
+// возвращение из фона — тоже подходящий момент проверить простой
+function wireSilentReloadIdle() {
+  const bump = () => { if (__reloadArmed) scheduleSilentReload(); };
+  ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'].forEach(ev =>
+    window.addEventListener(ev, bump, { passive: true, capture: true }));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && __reloadArmed) scheduleSilentReload();
+  });
 }
 
 /* ---------- установка: плашка + кнопки, переживающие отказ ---------- */
@@ -1515,14 +1542,9 @@ function wireUI() {
   $('#simPlusDay').addEventListener('click', () => setSim(getNow() + 86400000));
   $('#simReset').addEventListener('click', clearSim);
 
-  // обновление приложения
-  $('#appUpdateBtn').addEventListener('click', () => {
-    if (state.swReg && state.swReg.waiting) {
-      window.__wantReloadAfterUpdate = true;
-      state.swReg.waiting.postMessage('SKIP_WAITING');
-    }
-    $('#appUpdateBar').classList.add('hidden');
-  });
+  // обновление приложения теперь тихое (без баннера) — см. armSilentReload;
+  // здесь только навешиваем «простой»-детекторы для отложенной перезагрузки
+  wireSilentReloadIdle();
 
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideAllSheets(); });
 }
