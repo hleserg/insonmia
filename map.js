@@ -797,21 +797,15 @@ function renderNearby(root) {
     });
   }
 
+  // items — это ТОЧКИ в радиусе (getNearby оставляет точку, даже если её
+  // события отфильтрованы по цензу — фильтр режет только под-строки событий,
+  // а не сами точки). Значит пустой items = «в радиусе нет точек», и причина
+  // всегда радиус, а не ценз — сообщение про ценз тут было бы враньём.
   if (!items.length) {
     if (!myNear.length) {
-      const filtered = ageFilterActive();
-      const st = emptyState('🌾', filtered
-        ? 'В этом радиусе нет событий выбранного ценза. Расширьте круг или снимите фильтр.'
-        : 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
-      if (filtered) {
-        const reset = document.createElement('button');
-        reset.className = 'btn';
-        reset.textContent = 'Сбросить фильтры';
-        reset.addEventListener('click', resetFilters);
-        st.appendChild(reset);
-      }
+      const st = emptyState('🌾', 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
       const btn = document.createElement('button');
-      btn.className = 'btn ghost';
+      btn.className = 'btn';
       btn.textContent = 'к программе';
       btn.addEventListener('click', () => switchView('schedule'));
       st.appendChild(btn);

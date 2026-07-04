@@ -260,7 +260,48 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   assert.equal(lsKeys.length, 0, 'фильтры не пишутся в localStorage: ' + JSON.stringify(lsKeys));
   console.log('✓ 12. память сессии: перезагрузка сбрасывает фильтры, localStorage чист');
 
-  await ctx.close(); await browser.close();
+  await ctx.close();
+
+  // --- 13. «Рядом»: ценз режет ТОЛЬКО под-строки событий, точки и свои метки
+  //   остаются (getNearby оставляет точку в радиусе, даже если её события
+  //   отфильтрованы). Индикатор воронки в шапке — единственный и честный
+  //   признак активного фильтра; ложного «нет событий выбранного ценза»
+  //   (когда причина на деле — радиус) быть не должно.
+  const PT = { latitude: 54.681149, longitude: 35.091007 }; // «Экран полевой»
+  const ctx2 = await browser.newContext({
+    viewport: { width: 360, height: 740 }, timezoneId: 'UTC',
+    serviceWorkers: 'block', geolocation: PT, permissions: ['geolocation'],
+  });
+  await ctx2.addInitScript(([lat, lng]) => {
+    localStorage.setItem('insomnia.pins', JSON.stringify([{ lat, lng, name: 'Наш лагерь', emoji: '⛺' }]));
+    Object.defineProperty(navigator, 'standalone', { get: () => true });
+  }, [PT.latitude, PT.longitude]);
+  const page2 = await ctx2.newPage();
+  await page2.clock.install({ time: T });
+  page2.on('pageerror', e => { console.error('pageerror2:', e.message); process.exitCode = 1; });
+  await page2.goto(BASE + '/', { waitUntil: 'load' });
+  await page2.waitForTimeout(700);
+  await page2.click('.tab[data-view="nearby"]');
+  await page2.waitForTimeout(900); // дождаться позиции
+  const beforePts = await page2.$$eval('.map-point', els => els.length);
+  const hasPin = await page2.$eval('#content', el => /Наш лагерь/.test(el.innerText)).catch(() => false);
+  assert.ok(hasPin, 'своя метка «Наш лагерь» должна быть в радиусе (предусловие)');
+  assert.ok(beforePts >= 1, 'в радиусе есть точки (предусловие)');
+  // ценз: снять все → под-строки событий пропадают, точки и метка остаются
+  await page2.click('#btnFilter');
+  await page2.waitForTimeout(150);
+  await page2.click('#filterClear');
+  await page2.click('#filterApply');
+  await page2.waitForTimeout(400);
+  const nb = await page2.$eval('#content', el => el.innerText);
+  assert.ok(/Наш лагерь/.test(nb), 'своя метка по-прежнему видна при активном цензе');
+  assert.ok((await page2.$$eval('.map-point', els => els.length)) >= 1, 'точки в радиусе остаются (фильтр режет только события)');
+  assert.ok(!/выбранного ценза/.test(nb), 'НЕ должно быть ложного «нет событий выбранного ценза» (причина — не радиус)');
+  assert.ok(!(await page2.$eval('#filterDot', el => el.classList.contains('hidden'))), 'индикатор воронки активен — честный признак фильтра');
+  await ctx2.close();
+  console.log('✓ 13. «рядом»: ценз режет только события, точки/метки остаются, ложного пустого нет');
+
+  await browser.close();
   try { srv.kill('SIGKILL'); } catch {}
   console.log('\n=== ФИЛЬТРЫ ЦЕНЗ/ЛОКАЦИЯ: ВСЁ ОК ===');
   process.exit(0);
