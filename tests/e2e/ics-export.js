@@ -23,7 +23,8 @@ const SHARE_MOCK = () => {
   navigator.canShare = (d) => !!(d && d.files && d.files.length);
   navigator.share = async (d) => {
     const f = d.files && d.files[0];
-    window.__share = { title: d.title, name: f && f.name, type: f && f.type, text: f ? await f.text() : null };
+    // msg — текст сообщения (🔗 «поделиться»); text — содержимое .ics-файла
+    window.__share = { title: d.title, msg: d.text || null, name: f && f.name, type: f && f.type, text: f ? await f.text() : null };
   };
 };
 
@@ -66,9 +67,9 @@ const SHARE_MOCK = () => {
   await page.click('.tab[data-view="schedule"]');
   await page.waitForTimeout(400);
   assert.ok((await page.$$('.fav-btn')).length >= 2, 'на дне должно быть ≥2 события');
-  await page.click('.event:nth-of-type(1) .fav-btn');
+  await page.locator('.event').first().locator('.fav-btn').click();
   await page.waitForTimeout(200);
-  await page.click('.event:not(.is-past) .fav-btn:not(.on) >> nth=0'); // второе, ещё не отмеченное
+  await page.click('.event .fav-btn:not(.on) >> nth=0'); // второе, ещё не отмеченное
   await page.waitForTimeout(200);
   const favCount = await page.evaluate(() => JSON.parse(localStorage.getItem('insomnia.favs') || '[]').length);
   assert.equal(favCount, 2, 'должно быть ровно 2 избранных, а не ' + favCount);
@@ -77,6 +78,7 @@ const SHARE_MOCK = () => {
   await page.click('.event-main >> nth=0');
   await page.waitForTimeout(300);
   assert.ok(await page.isVisible('#detailCal'), 'кнопка «в календарь» есть в деталях');
+  assert.ok(await page.isVisible('#detailShare'), 'кнопка «поделиться» есть');
   assert.ok(await page.isVisible('#detailIcs'), 'кнопка «скачать .ics» есть');
   await page.click('#detailCal');
   await page.waitForTimeout(200);
@@ -85,7 +87,26 @@ const SHARE_MOCK = () => {
   assert.match(shared.name, /^insomnia-.+\.ics$/, 'имя файла латиницей .ics: ' + shared.name);
   assert.equal(shared.type, 'text/calendar', 'MIME text/calendar');
   assert.ok(/BEGIN:VCALENDAR[\s\S]*BEGIN:VEVENT[\s\S]*DTSTART:\d{8}T\d{6}Z[\s\S]*BEGIN:VALARM[\s\S]*END:VCALENDAR/.test(shared.text), 'валидный VCALENDAR с VEVENT/VALARM');
+  assert.equal(shared.msg, null, '📅 «в календарь» — без текста сообщения (только файл)');
   console.log('✓ 📅 share: файл', shared.name, '—', shared.text.match(/BEGIN:VEVENT/g).length, 'VEVENT');
+
+  // --- 1b. 🔗 «поделиться»: текст самодостаточен + файл ---
+  await page.evaluate(() => { window.__share = null; });
+  await page.click('#detailShare');
+  await page.waitForTimeout(200);
+  const shareLink = await page.evaluate(() => window.__share);
+  assert.ok(shareLink && shareLink.msg, '🔗 должна передать текст сообщения');
+  assert.ok(/МСК/.test(shareLink.msg) && /Бессонница 2026/.test(shareLink.msg), 'текст самодостаточен (дата/МСК/фест): ' + JSON.stringify(shareLink.msg));
+  assert.ok(shareLink.text && shareLink.text.includes('BEGIN:VEVENT'), '🔗 прикладывает и .ics-файл');
+  console.log('✓ 🔗 share: текст +', shareLink.name);
+
+  // 🔗 текст ночного события содержит пометку «ночь на …» (как в карточке)
+  const nightMsg = await page.evaluate(() => {
+    const e = state.program.events.find(x => window.InsomniaCore.nightInfo(x));
+    return e ? eventShareText(e) : null;
+  });
+  assert.ok(nightMsg && /ночь на/i.test(nightMsg), 'ночное событие: текст шэра с пометкой «ночь на …»: ' + JSON.stringify(nightMsg));
+  console.log('✓ 🔗 ночное событие помечено в тексте');
 
   // --- 2. ⬇️ .ics — принудительное скачивание, читаем содержимое ---
   const [dl] = await Promise.all([
@@ -139,7 +160,40 @@ const SHARE_MOCK = () => {
   const vevents = (routeShared.text.match(/BEGIN:VEVENT/g) || []).length;
   assert.equal(vevents, 2, 'два избранных → 2 VEVENT в одном файле');
   assert.equal((routeShared.text.match(/BEGIN:VCALENDAR/g) || []).length, 1, 'один VCALENDAR');
-  console.log('✓ маршрут: один файл,', vevents, 'VEVENT');
+  // избранное СОХРАНЯЕТ VALARM (флаг withAlarm не сломал осознанный выбор)
+  assert.equal((routeShared.text.match(/BEGIN:VALARM/g) || []).length, 2, 'у избранного напоминания на месте');
+  console.log('✓ маршрут: один файл,', vevents, 'VEVENT, VALARM на месте');
+
+  // --- 3b. ВСЯ ПРОГРАММА: модалка-предупреждение, Отмена, затем выгрузка без VALARM ---
+  await page.click('.tab[data-view="schedule"]');
+  await page.waitForTimeout(400);
+  assert.ok(await page.isVisible('#btnProgramExport'), 'кнопка «вся программа в календарь» в разделе Программа');
+  await page.click('#btnProgramExport');
+  await page.waitForTimeout(250);
+  assert.ok(await page.isVisible('#programExport'), 'по тапу — модалка-предупреждение (не сразу выгрузка)');
+  const warnTxt = (await page.evaluate(() => document.querySelector('#programExport .sheet-body').innerText)).toLowerCase();
+  assert.ok(/напоминани[ея].*не будут|не будут включены/.test(warnTxt), 'предупреждение: напоминаний не будет');
+  assert.ok(/не обнов|разовый снимок/.test(warnTxt), 'предупреждение: разовый снимок');
+  // [Отмена] реально отменяет — модалка закрыта, ничего не выгружено
+  await page.evaluate(() => { window.__share = null; });
+  await page.click('#programExport .btn.ghost[data-close]');
+  await page.waitForTimeout(200);
+  assert.ok(!(await page.isVisible('#programExport')), '[Отмена] закрывает модалку');
+  assert.equal(await page.evaluate(() => window.__share), null, '[Отмена] ничего не выгружает');
+  console.log('✓ модалка: оба предупреждения, [Отмена] отменяет');
+  // подтверждаем → полный ICS без VALARM
+  await page.click('#btnProgramExport');
+  await page.waitForTimeout(200);
+  await page.click('#programExportGo');
+  await page.waitForTimeout(400);
+  const full = await page.evaluate(() => window.__share);
+  assert.ok(full && full.name === 'insomnia-full-program.ics', 'файл insomnia-full-program.ics: ' + (full && full.name));
+  const fullN = (full.text.match(/BEGIN:VEVENT/g) || []).length;
+  assert.ok(fullN > 600, 'вся программа: 600+ VEVENT (получили ' + fullN + ')');
+  assert.equal((full.text.match(/BEGIN:VALARM/g) || []).length, 0, 'вся программа — НИ ОДНОГО VALARM');
+  assert.equal((full.text.match(/BEGIN:VCALENDAR/g) || []).length, 1, 'один VCALENDAR');
+  assert.ok(!(await page.isVisible('#programExport')), 'после выгрузки модалка закрыта');
+  console.log('✓ вся программа:', fullN, 'VEVENT, 0 VALARM, один файл');
 
   // --- 4. ОФЛАЙН: убиваем сервер, генерация и скачивание всё равно работают ---
   killSrv();

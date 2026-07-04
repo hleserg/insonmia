@@ -290,9 +290,15 @@ button { font-family: inherit; cursor: pointer; }
 .venue-about { color: var(--muted); font-size: 0.87rem; white-space: pre-wrap; }
 .detail-actions { display: flex; gap: 10px; margin-top: 18px; }
 .detail-actions .btn { flex: 1; }
-/* календарь: вторичный ряд под «в избранное» */
+/* календарь: вторичный ряд под «в избранное» (три действия) */
 .detail-actions.cal-row { margin-top: 10px; }
+.detail-actions.cal-row .btn { padding-left: 8px; padding-right: 8px; font-size: 0.82rem; }
 .detail-actions.cal-row .cal-dl { flex: 0 0 auto; width: auto; padding-left: 16px; padding-right: 16px; }
+/* «вся программа в календарь» — над списком в разделе «Программа» */
+.program-export { margin: 2px 0 10px; }
+.program-export .btn { margin-top: 0; }
+.warn-list { margin: 8px 0 4px; padding-left: 20px; }
+.warn-list li { margin-bottom: 8px; line-height: 1.4; }
 /* «весь маршрут в календарь» в избранном */
 .route-actions { display: flex; gap: 10px; margin: 4px 0 14px; }
 .route-actions .btn { margin-top: 0; }

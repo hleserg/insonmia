@@ -32,6 +32,31 @@ test('1. 11.07 17:00 МСК → DTSTART 14:00Z, VALARM по умолчанию -
   assert.ok(L.includes('BEGIN:VALARM') && L.includes('END:VALARM'));
 });
 
+test('withAlarm=false → НИ ОДНОГО VALARM (полная выгрузка программы)', () => {
+  const many = [1, 2, 3, 4, 5].map(i => ev({ id: 'p' + i }));
+  const ics = C.buildICS(many, { ...opts, withAlarm: false });
+  const L = lines(ics);
+  assert.equal(L.filter(l => l === 'BEGIN:VALARM').length, 0, 'без будильников');
+  assert.equal(L.filter(l => l === 'BEGIN:VEVENT').length, 5, 'события на месте');
+  assert.equal(L.filter(l => l.startsWith('TRIGGER:')).length, 0, 'нет TRIGGER');
+  // UID стабильны и в режиме без будильника — повторный импорт не плодит дубли
+  assert.ok(L.includes('UID:p1@insonmia') && L.includes('UID:p5@insonmia'));
+});
+
+test('withAlarm по умолчанию true (одиночное/избранное) — VALARM на месте', () => {
+  const L = lines(C.buildICS([ev()], opts));
+  assert.equal(L.filter(l => l === 'BEGIN:VALARM').length, 1, 'по умолчанию с будильником');
+  // явный true — тоже
+  assert.equal(lines(C.buildICS([ev()], { ...opts, withAlarm: true })).filter(l => l === 'BEGIN:VALARM').length, 1);
+});
+
+test('одинаковый UID в режимах с будильником и без (нет дублей при смешанном импорте)', () => {
+  const withA = lines(C.buildICS([ev()], opts)).find(l => l.startsWith('UID:'));
+  const noA = lines(C.buildICS([ev()], { ...opts, withAlarm: false })).find(l => l.startsWith('UID:'));
+  assert.equal(withA, noA, 'UID совпадает: календарь видит одно событие');
+  assert.equal(withA, 'UID:abc123@insonmia');
+});
+
 test('VALARM берёт выбранное пользователем время (opts.leadMin)', () => {
   assert.ok(lines(C.buildICS([ev()], { ...opts, leadMin: 30 })).includes('TRIGGER:-PT30M'), '30 мин');
   assert.ok(lines(C.buildICS([ev()], { ...opts, leadMin: 5 })).includes('TRIGGER:-PT5M'), '5 мин');
