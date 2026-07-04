@@ -100,6 +100,14 @@ const SHARE_MOCK = () => {
   assert.ok(shareLink.text && shareLink.text.includes('BEGIN:VEVENT'), '🔗 прикладывает и .ics-файл');
   console.log('✓ 🔗 share: текст +', shareLink.name);
 
+  // 🔗 текст ночного события содержит пометку «ночь на …» (как в карточке)
+  const nightMsg = await page.evaluate(() => {
+    const e = state.program.events.find(x => window.InsomniaCore.nightInfo(x));
+    return e ? eventShareText(e) : null;
+  });
+  assert.ok(nightMsg && /ночь на/i.test(nightMsg), 'ночное событие: текст шэра с пометкой «ночь на …»: ' + JSON.stringify(nightMsg));
+  console.log('✓ 🔗 ночное событие помечено в тексте');
+
   // --- 2. ⬇️ .ics — принудительное скачивание, читаем содержимое ---
   const [dl] = await Promise.all([
     page.waitForEvent('download'),

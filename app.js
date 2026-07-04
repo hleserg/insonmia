@@ -559,7 +559,11 @@ function eventShareText(e) {
   const p = dayParts(e._festDay);
   const dateStr = `${WD[p.dow]}, ${p.day} ${MON[p.mo]}`;
   const timeStr = e.end ? `${e.start}–${e.end}` : e.start;
-  const parts = [e.title, `${dateStr}, ${timeStr} МСК`];
+  // ночная пометка — как в карточке: без неё «00:30» на фест-сутках
+  // читается двусмысленно тем, кто не знает про 06:00-границу
+  const night = typeof nightInfo === 'function' ? nightInfo(e) : null;
+  const when = `${dateStr}, ${timeStr} МСК` + (night ? ` (${night.marker})` : '');
+  const parts = [e.title, when];
   if (e.venue) parts.push(`📍 ${e.venue}`);
   parts.push('— Бессонница 2026');
   return parts.join('\n');
