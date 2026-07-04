@@ -567,7 +567,9 @@ function openPinEditor(seed) {
   selectPinEmoji((seed && seed.emoji) || '📍');
   $('#pinWarn').classList.add('hidden');
   showSheet('#pinEditor');
-  if (!$('#pinName').value) setTimeout(() => $('#pinName').focus(), 60);
+  // без автофокуса на «название»: иначе клавиатура выскакивает сразу и
+  // перекрывает форму (иконки/координаты/«взять позицию»). Сохранение (✓)
+  // теперь в шапке и клавиатурой не перекрывается — фокус юзер даёт сам.
 }
 
 function savePinFromEditor() {

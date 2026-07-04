@@ -373,7 +373,10 @@
       <div class="sheet-titlebar">
         <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
         <div class="sheet-titlebar-label" id="pinEditorTitle">~/метки/новая</div>
-        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
+        <!-- сохранение — в закреплённой шапке (✓), чтобы клавиатура снизу его
+             не перекрывала; ✕ — отмена. Нижней кнопки «Сохранить» больше нет. -->
+        <button class="icon-btn" data-close aria-label="Отмена" title="Отмена">✕</button>
+        <button id="pinSave" class="icon-btn filter-apply-btn" aria-label="Сохранить метку" title="Сохранить">✓</button>
       </div>
       <div class="sheet-body pin-form">
         <label>название
@@ -388,7 +391,6 @@
           <textarea id="pinNote" rows="2" maxlength="200" placeholder="за жёлтым шатром"></textarea>
         </label>
         <div id="pinWarn" class="muted small hidden">⚠️ это далеко от поляны — сохранится, но проверьте координаты</div>
-        <button id="pinSave" class="btn">Сохранить</button>
       </div>
     </div>
   </div>
