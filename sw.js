@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v40';
+const CACHE = 'insomnia-2026-v41';
 const ASSETS = [
   './',
   'index.html',
@@ -14,6 +14,9 @@ const ASSETS = [
   'map.js',
   'vendor/leaflet.js',
   'vendor/leaflet.css',
+  'vendor/leaflet.markercluster.js',
+  'vendor/MarkerCluster.css',
+  'vendor/MarkerCluster.Default.css',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',

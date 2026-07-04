@@ -6,7 +6,8 @@
 const GEO = {
   data: null,          // data/geo.json
   map: null,           // Leaflet instance
-  layerGroups: {},     // category -> L.LayerGroup
+  layerGroups: {},     // category -> L.LayerGroup (зоны/дороги/мои)
+  clusterGroup: null,  // L.MarkerClusterGroup — все точки-метки (кластеризация)
   zoneById: {},        // geo id -> L.Polygon
   pointById: {},       // geo id -> {marker, point}
   highlight: null,
@@ -146,12 +147,22 @@ function ensureMap() {
       : { color: '#8b949e', weight: 2, opacity: 0.5, dashArray: '4 6' });
     grp(r.type === 'auto' ? 'roads-auto' : 'roads-foot').addLayer(line);
   });
+  // Точки-метки — в кластерную группу: на дальнем зуме близкие метки
+  // схлопываются в кружок с числом, при приближении/тапе раскрываются.
+  // Категорийный фильтр действует по-маркерно (applyMapFilters), зоны/дороги
+  // остаются обычными группами (полигоны не кластеризуются).
+  GEO.clusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 50,       // площадки различимы раньше, чем у дефолтных 80
+    showCoverageOnHover: false, // на тач-поляне ховера нет, а заливка мешает
+    spiderfyOnMaxZoom: true,    // совпавшие в точку метки разводятся «пауком»
+    iconCreateFunction: clusterIcon,
+  });
   GEO.data.points.forEach(p => {
     const mk = L.marker([p.lat, p.lng], { icon: markerIcon(p.category) });
     mk.on('click', () => openPointCard(p));
     GEO.pointById[p.id] = { marker: mk, point: p };
-    grp(p.category).addLayer(mk);
   });
+  map.addLayer(GEO.clusterGroup);
 
   GEO.layerGroups = groups;
   GEO.map = map;
@@ -162,17 +173,43 @@ function ensureMap() {
   // лонгтап (contextmenu на тач-устройствах) — новая метка в этом месте
   map.on('contextmenu', (e) => openPinEditor({ lat: e.latlng.lat, lng: e.latlng.lng }));
 
-  const lats = GEO.data.points.map(p => p.lat);
-  const lngs = GEO.data.points.map(p => p.lng);
-  map.fitBounds([[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]], { padding: [20, 20] });
+  // Открываем на фестивальном ядре (медиана точек — устойчива к выбросам,
+  // тогда как bbox-центр уезжает к дальним меткам и даёт «всё в комок»),
+  // на зуме, где площадки различимы. Кластеры схлопывают дальние метки.
+  const lats = GEO.data.points.map(p => p.lat).sort((a, b) => a - b);
+  const lngs = GEO.data.points.map(p => p.lng).sort((a, b) => a - b);
+  const mid = a => a[Math.floor(a.length / 2)];
+  map.setView([mid(lats), mid(lngs)], 15);
+}
+
+// Иконка кластера в терминальной теме: тёмный кружок, зелёная рамка,
+// читаемое зелёное число (без серого дефолта markercluster).
+function clusterIcon(cluster) {
+  const n = cluster.getChildCount();
+  const size = n < 10 ? 34 : n < 50 ? 40 : 46;
+  return L.divIcon({
+    html: `<div class="cluster-inner">${n}</div>`,
+    className: 'geo-cluster',
+    iconSize: [size, size],
+  });
 }
 
 function applyMapFilters() {
   if (!GEO.map) return;
+  // зоны/дороги/мои — целыми группами
   Object.entries(GEO.layerGroups).forEach(([cat, g]) => {
     if (GEO.filters.has(cat)) GEO.map.addLayer(g);
     else GEO.map.removeLayer(g);
   });
+  // точки — по-маркерно внутри кластера (только видимые кластеризуются)
+  if (GEO.clusterGroup) {
+    Object.values(GEO.pointById).forEach(({ marker, point }) => {
+      const show = GEO.filters.has(point.category);
+      const has = GEO.clusterGroup.hasLayer(marker);
+      if (show && !has) GEO.clusterGroup.addLayer(marker);
+      else if (!show && has) GEO.clusterGroup.removeLayer(marker);
+    });
+  }
 }
 
 function highlightPoint(id, { open = false } = {}) {
@@ -183,7 +220,11 @@ function highlightPoint(id, { open = false } = {}) {
   if (zone) { zone.setStyle({ weight: 3, fillOpacity: 0.3 }); GEO.highlight = zone; }
   if (rec) {
     GEO.map.setView([rec.point.lat, rec.point.lng], Math.max(GEO.map.getZoom(), 17));
-    if (open) openPointCard(rec.point);
+    // метка может быть спрятана внутри кластера — раскрываем его, чтобы
+    // карточка открылась над видимым маркером, а не над «схлопнутым» кружком
+    if (GEO.clusterGroup && GEO.clusterGroup.hasLayer(rec.marker)) {
+      GEO.clusterGroup.zoomToShowLayer(rec.marker, () => { if (open) openPointCard(rec.point); });
+    } else if (open) openPointCard(rec.point);
   } else if (zone) {
     GEO.map.fitBounds(zone.getBounds());
   }
@@ -852,6 +893,7 @@ function resetMapLayers() {
   if (GEO.map) { GEO.map.remove(); GEO.map = null; }
   GEO.preview = null;
   GEO.layerGroups = {};
+  GEO.clusterGroup = null;
   GEO.zoneById = {};
   GEO.pointById = {};
   GEO.highlight = null;

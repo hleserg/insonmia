@@ -22,8 +22,10 @@ const BASE = `http://127.0.0.1:${PORT}`;
   await page.click('.tab[data-view="map"]');
   await page.waitForTimeout(1200);
 
+  // точки теперь в кластерной группе — считаем ВИДИМЫЕ точки по её слоям,
+  // а не по DOM (в DOM часть меток схлопнута в кружки-кластеры .geo-cluster)
   const stats = () => page.evaluate(() => ({
-    markers: document.querySelectorAll('.leaflet-marker-pane .geo-marker').length,
+    markers: GEO.clusterGroup ? GEO.clusterGroup.getLayers().length : 0,
     activeChips: document.querySelectorAll('#mapChips .chip[data-cat].active').length,
     totalChips: document.querySelectorAll('#mapChips .chip[data-cat]').length,
     filters: GEO.filters.size,
@@ -45,9 +47,14 @@ const BASE = `http://127.0.0.1:${PORT}`;
   await page.click('#mapChips .chip[data-cat="wc"]');
   await page.waitForTimeout(300);
   const wc = await stats();
-  const wcMarkers = await page.evaluate(() =>
-    [...document.querySelectorAll('.leaflet-marker-pane .geo-pin')].every(p => p.textContent.trim() === '🚻'));
-  console.log('одни туалеты:', JSON.stringify(wc), 'все маркеры 🚻:', wcMarkers);
+  // все видимые точки (в кластерной группе) — категории wc
+  const wcMarkers = await page.evaluate(() => {
+    const shown = new Set(GEO.clusterGroup.getLayers());
+    return Object.values(GEO.pointById)
+      .filter(r => shown.has(r.marker))
+      .every(r => r.point.category === 'wc');
+  });
+  console.log('одни туалеты:', JSON.stringify(wc), 'все точки 🚻:', wcMarkers);
   assert.ok(wc.markers > 5 && wcMarkers, 'должны остаться только туалеты');
   assert.equal(wc.activeChips, 1, 'активен ровно один чип');
 
