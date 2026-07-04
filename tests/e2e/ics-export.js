@@ -164,6 +164,39 @@ const SHARE_MOCK = () => {
   assert.equal((routeShared.text.match(/BEGIN:VALARM/g) || []).length, 2, 'у избранного напоминания на месте');
   console.log('✓ маршрут: один файл,', vevents, 'VEVENT, VALARM на месте');
 
+  // --- 3a. 🔗 «поделиться маршрутом»: текст-список + .ics с VALARM ---
+  assert.ok(await page.isVisible('#routeShare'), 'кнопка «поделиться маршрутом» есть');
+  await page.evaluate(() => { window.__share = null; });
+  await page.click('#routeShare');
+  await page.waitForTimeout(200);
+  const routeMsg = await page.evaluate(() => window.__share);
+  assert.ok(routeMsg && routeMsg.msg, '🔗 маршрут: есть текст-сообщение');
+  assert.ok(/Мой маршрут на Бессоннице/.test(routeMsg.msg), 'заголовок списка');
+  assert.ok(/Сгенерено в приложении/.test(routeMsg.msg), 'подпись в конце');
+  assert.equal((routeMsg.text.match(/BEGIN:VEVENT/g) || []).length, 2, '🔗 приложен .ics избранного (2 VEVENT)');
+  assert.equal((routeMsg.text.match(/BEGIN:VALARM/g) || []).length, 2, '🔗 маршрут: VALARM сохранён');
+  console.log('✓ 🔗 маршрут: текст-список + .ics с напоминаниями');
+
+  // группировка по фест-дням + ночная пометка (крафтовый набор через routeShareText)
+  const routeText = await page.evaluate(() => {
+    const C = window.InsomniaCore;
+    const mk = (iso, title, venue) => { const ms = C.epochFromISO(iso); return { _startMs: ms, _festDay: C.getFestivalDay(ms), start: iso.slice(11, 16), title, venue }; };
+    return routeShareText([
+      mk('2026-07-10T19:00', 'Открытие', 'Главная'),
+      mk('2026-07-10T22:00', 'Ночной показ', 'Экран 1'),
+      mk('2026-07-11T02:00', 'Полночный джаз', 'Чайка'), // 02:00 сб → фест-день пятницы
+      mk('2026-07-11T17:00', 'Карнавал', 'Сбор у Чайки'),
+    ]);
+  });
+  assert.ok(/Пт 10\.07[\s\S]*Сб 11\.07/.test(routeText), 'дни сгруппированы и по порядку: ' + JSON.stringify(routeText));
+  // 02:00-событие идёт в блоке пятницы (до заголовка субботы) и помечено 🌙
+  const idxNight = routeText.indexOf('Полночный джаз');
+  const idxSat = routeText.indexOf('Сб 11.07');
+  assert.ok(idxNight > 0 && idxNight < idxSat, 'ночное 02:00 под фест-днём пятницы, не субботы');
+  assert.ok(/• 02:00 🌙 Полночный джаз/.test(routeText), 'ночное событие помечено 🌙: ' + JSON.stringify(routeText));
+  assert.ok(/• 19:00 Открытие — Главная/.test(routeText), 'строка события: время, название, площадка');
+  console.log('✓ 🔗 маршрут: группировка по дням + ночная пометка');
+
   // --- 3b. ВСЯ ПРОГРАММА: модалка-предупреждение, Отмена, затем выгрузка без VALARM ---
   await page.click('.tab[data-view="schedule"]');
   await page.waitForTimeout(400);
@@ -195,6 +228,49 @@ const SHARE_MOCK = () => {
   assert.ok(!(await page.isVisible('#programExport')), 'после выгрузки модалка закрыта');
   console.log('✓ вся программа:', fullN, 'VEVENT, 0 VALARM, один файл');
 
+  // --- 3c. Диагностика Web Share: панель показывает значения API ---
+  await page.click('#btnSettings');
+  await page.waitForTimeout(200);
+  await page.click('#btnShareDiag');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#diagPanel'), 'диаг-панель появилась');
+  const diagTxt = await page.evaluate(() => document.querySelector('#diagPanel pre').textContent);
+  assert.ok(/typeof navigator\.share:/.test(diagTxt) && /canShare\(\{files\}\):/.test(diagTxt), 'панель содержит ключевые значения: ' + JSON.stringify(diagTxt.slice(0, 120)));
+  await page.click('#diagPanel .btn'); // закрыть (или скопировать) — панель есть
+  await page.waitForTimeout(100);
+  await page.evaluate(() => { const p = document.getElementById('diagPanel'); if (p) p.remove(); });
+  await page.click('#settings .icon-btn[data-close]');
+  await page.waitForTimeout(150);
+  console.log('✓ диагностика: панель со значениями Web Share');
+
+  // --- 3d. Фолбэк БЕЗ navigator.share → скачивание + внятный тост (не немой) ---
+  {
+    const ctxN = await browser.newContext({ viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block', acceptDownloads: true });
+    await ctxN.addInitScript(STANDALONE);
+    await ctxN.addInitScript(() => { try { delete navigator.share; } catch {}; try { delete navigator.canShare; } catch {}; Object.defineProperty(navigator, 'share', { get: () => undefined, configurable: true }); });
+    const pN = await ctxN.newPage();
+    await pN.clock.install({ time: T });
+    await pN.goto(BASE + '/', { waitUntil: 'load' });
+    await pN.waitForTimeout(500);
+    await pN.click('.tab[data-view="schedule"]');
+    await pN.waitForTimeout(300);
+    await pN.locator('.event').first().locator('.fav-btn').click();
+    await pN.waitForTimeout(150);
+    await pN.click('.tab[data-view="favorites"]');
+    await pN.waitForTimeout(300);
+    const [dlN] = await Promise.all([
+      pN.waitForEvent('download'),
+      pN.click('#routeShare'),
+    ]);
+    await dlN.saveAs(path.join(os.tmpdir(), 'ics-noshare-' + Date.now() + '.ics'));
+    await pN.waitForTimeout(200);
+    const noShareToast = (await pN.evaluate(() => document.querySelector('#toast')?.textContent || '')).trim();
+    assert.ok(/недоступн/i.test(noShareToast) && /(буфер|скопирован|скачан)/i.test(noShareToast), 'фолбэк без share — внятный тост, не немой: ' + JSON.stringify(noShareToast));
+    console.log('✓ фолбэк без Web Share: скачивание +', JSON.stringify(noShareToast.slice(0, 60)));
+    await ctxN.close();
+  }
+  // сервер ещё жив — офлайн-часть ниже сама его убьёт
+
   // --- 4. ОФЛАЙН: убиваем сервер, генерация и скачивание всё равно работают ---
   killSrv();
   await page.waitForTimeout(300);
@@ -224,14 +300,17 @@ const SHARE_MOCK = () => {
   await p3.waitForTimeout(500);
   await p3.click('.tab[data-view="favorites"]');
   await p3.waitForTimeout(300);
-  const disabled = await p3.evaluate(() => {
-    const b = document.querySelector('#routeCal');
-    return b ? b.disabled : null;
-  });
-  assert.equal(disabled, true, 'при пустом избранном «в календарь» неактивна');
-  const hint = await p3.getAttribute('#routeCal', 'title');
+  const disabled = await p3.evaluate(() => ({
+    cal: document.querySelector('#routeCal')?.disabled,
+    share: document.querySelector('#routeShare')?.disabled,
+    ics: document.querySelector('#routeIcs')?.disabled,
+  }));
+  assert.equal(disabled.cal, true, 'при пустом избранном «в календарь» неактивна');
+  assert.equal(disabled.share, true, 'при пустом избранном «поделиться маршрутом» неактивна');
+  assert.equal(disabled.ics, true, 'при пустом избранном скачивание неактивно');
+  const hint = await p3.getAttribute('#routeShare', 'title');
   assert.ok(hint && /избранное/i.test(hint), 'есть подсказка почему неактивна');
-  console.log('✓ пустое избранное: кнопка неактивна с подсказкой');
+  console.log('✓ пустое избранное: все три кнопки неактивны с подсказкой');
   try { srv2.kill('SIGKILL'); } catch {}
 
   await ctx.close(); await ctx2.close(); await browser.close();

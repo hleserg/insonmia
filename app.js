@@ -344,11 +344,13 @@ function renderFavorites(root) {
   routeActions.className = 'route-actions';
   const dis = favs.length ? '' : 'disabled title="Сначала добавьте события в избранное"';
   routeActions.innerHTML = `
-    <button class="btn ghost" id="routeCal" ${dis}>📅 Весь маршрут в календарь</button>
-    <button class="btn ghost cal-dl" id="routeIcs" aria-label="Скачать всё .ics" ${dis}>⬇️</button>`;
+    <button class="btn ghost" id="routeCal" ${dis}>📅 в календарь</button>
+    <button class="btn ghost" id="routeShare" ${dis}>🔗 поделиться</button>
+    <button class="btn ghost cal-dl" id="routeIcs" aria-label="Скачать весь маршрут .ics" ${dis}>⬇️</button>`;
   root.appendChild(routeActions);
   if (favs.length) {
     routeActions.querySelector('#routeCal').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics'));
+    routeActions.querySelector('#routeShare').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics', { shareText: routeShareText(favs) }));
     routeActions.querySelector('#routeIcs').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics', { forceDownload: true }));
   }
 
@@ -569,6 +571,29 @@ function eventShareText(e) {
   return parts.join('\n');
 }
 
+// самодостаточный список маршрута для «🔗 поделиться маршрутом»:
+// сгруппирован по фестивальным дням (_festDay из core), сорт по времени;
+// ночные события (02:00) идут под своим фест-днём с маркером 🌙
+function routeShareText(events) {
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+  const pad = n => String(n).padStart(2, '0');
+  const evs = (events || []).filter(e => e._startMs != null).slice().sort(sortByStart);
+  const lines = ['🌙 Мой маршрут на Бессоннице', ''];
+  let lastDay = null;
+  evs.forEach(e => {
+    if (e._festDay !== lastDay) {
+      lastDay = e._festDay;
+      const p = dayParts(e._festDay);
+      lines.push(`${cap(WD[p.dow])} ${pad(p.day)}.${pad(p.mo + 1)}`);
+    }
+    const night = typeof nightInfo === 'function' ? nightInfo(e) : null;
+    const venue = e.venue ? ` — ${e.venue}` : '';
+    lines.push(`• ${e.start}${night ? ' 🌙' : ''} ${e.title}${venue}`);
+  });
+  lines.push('', 'Сгенерено в приложении программы феста');
+  return lines.join('\n');
+}
+
 async function exportICS(events, filename, opts = {}) {
   // forceDownload — принудительно качать; shareText — «поделиться» с текстом;
   // withAlarm — ставить ли VALARM (false для полной выгрузки программы)
@@ -597,18 +622,96 @@ async function exportICS(events, filename, opts = {}) {
         await navigator.share(data);
         return;
       } catch (err) {
-        // осознанная отмена — уважаем, не навязываем скачивание;
-        // любая иная ошибка → фолбэк на download ниже
-        if (err && err.name === 'AbortError') return;
+        if (err && err.name === 'AbortError') return; // осознанная отмена — тихо
+        // НЕ молчим: показываем, что именно случилось, и что дальше
+        await fallbackDownload(blob, filename, shareText, `Не удалось поделиться (${(err && err.name) || 'ошибка'}).`);
+        return;
       }
     }
   }
 
-  // 2) фолбэк/принудительно: скачивание в «Загрузки».
-  //    На части устройств (Huawei и др.) шэр файлов не поддержан — тогда
-  //    сюда попадает и кнопка «в календарь»; подсказываем, что делать дальше
+  // сюда: принудительное скачивание, либо шэр недоступен/нечего шэрить
+  const why = forceDownload ? ''
+    : !navigator.share ? 'Функция «Поделиться» недоступна в этом браузере.'
+    : 'Прямая отправка файла недоступна.';
+  await fallbackDownload(blob, filename, shareText, why);
+}
+
+// Единый фолбэк: скачивание + (для «поделиться») текст в буфер, и КАЖДЫЙ
+// путь показывает тост с причиной и подсказкой — никаких немых скачиваний.
+async function fallbackDownload(blob, filename, shareText, why) {
   downloadBlob(blob, filename);
-  toast('Файл скачан — откройте его, чтобы добавить в календарь', 4000);
+  const prefix = why ? why + ' ' : '';
+  if (shareText && navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      toast(prefix + 'Текст скопирован в буфер, файл .ics скачан — вставьте в мессенджер.', 5000);
+      return;
+    } catch { /* буфер недоступен (нет прав/insecure) — честно скажем ниже */ }
+    toast(prefix + 'Буфер недоступен — файл .ics скачан в «Загрузки».', 5000);
+    return;
+  }
+  toast(prefix + 'Файл .ics скачан — откройте его, чтобы добавить в календарь.', 5000);
+}
+
+/* ---------- ВРЕМЕННО: диагностика Web Share на реальном устройстве ----------
+   Показывает фактические значения API и реальную ошибку share() — чтобы
+   понять, почему на конкретном телефоне (напр. Huawei без GMS) шэр не
+   открывается. Удалить после диагностики. */
+async function shareDiag() {
+  const L = [];
+  let testFile = null;
+  try { if (typeof File === 'function') testFile = new File(['BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n'], 'diag.ics', { type: 'text/calendar' }); }
+  catch (e) { L.push('new File() threw: ' + e.name); }
+  L.push('UA: ' + navigator.userAgent);
+  L.push('typeof navigator.share: ' + typeof navigator.share);
+  L.push('typeof navigator.canShare: ' + typeof navigator.canShare);
+  L.push('typeof File: ' + typeof File);
+  L.push('typeof navigator.clipboard: ' + typeof navigator.clipboard);
+  L.push('isSecureContext: ' + window.isSecureContext);
+  try { L.push('canShare({text}): ' + (navigator.canShare ? navigator.canShare({ text: 'test' }) : 'нет canShare')); }
+  catch (e) { L.push('canShare({text}) threw: ' + e.name); }
+  try { L.push('canShare({files}): ' + (navigator.canShare && testFile ? navigator.canShare({ files: [testFile] }) : 'нет canShare/File')); }
+  catch (e) { L.push('canShare({files}) threw: ' + e.name); }
+  // реальная попытка (жест — этот тап): ловим точную ошибку
+  if (navigator.share && testFile) {
+    try {
+      await navigator.share({ title: 'diag', text: 'diag', files: [testFile] });
+      L.push('share({text,files}): УСПЕХ (шторка открылась/поделились)');
+    } catch (e) {
+      L.push('share({text,files}) catch: ' + e.name + ' — ' + (e.message || '(без текста)'));
+    }
+  } else {
+    L.push('share() не вызывался: ' + (!navigator.share ? 'нет navigator.share' : 'нет File'));
+  }
+  showDiagPanel(L.join('\n'));
+}
+
+function showDiagPanel(text) {
+  let p = document.getElementById('diagPanel');
+  if (!p) {
+    p = document.createElement('div');
+    p.id = 'diagPanel';
+    document.body.appendChild(p);
+  }
+  p.innerHTML = '';
+  const pre = document.createElement('pre');
+  pre.textContent = text;
+  const row = document.createElement('div');
+  row.className = 'diag-row';
+  const copy = document.createElement('button');
+  copy.className = 'btn ghost';
+  copy.textContent = 'Скопировать';
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(text); copy.textContent = 'Скопировано ✓'; }
+    catch { copy.textContent = 'буфер недоступен'; }
+  });
+  const close = document.createElement('button');
+  close.className = 'btn';
+  close.textContent = 'Закрыть';
+  close.addEventListener('click', () => p.remove());
+  row.appendChild(copy); row.appendChild(close);
+  p.appendChild(pre); p.appendChild(row);
 }
 
 // «Программа» → вся программа в календарь: сперва предупреждаем (нет
@@ -1360,6 +1463,8 @@ function wireUI() {
   // подтверждение выгрузки всей программы (кнопка #btnProgramExport —
   // динамическая, навешана в renderSchedule)
   $('#programExportGo').addEventListener('click', doProgramExport);
+  // ВРЕМЕННО: диагностика Web Share
+  $('#btnShareDiag').addEventListener('click', shareDiag);
 
   // notifications
   $('#btnEnableNotif').addEventListener('click', requestNotifications);
