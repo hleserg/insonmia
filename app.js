@@ -289,13 +289,16 @@ function restoreFilterState() {
     $$('#typeChips .chip[data-type]').forEach(c => c.classList.toggle('active', c.dataset.type === state.type));
   }
   const f = state.filters;
+  // Пустой массив = юзер осознанно «снял всё» (показывает ничего) — восстанавливаем
+  // как есть. Непустой массив, но НИ одно значение больше не существует в данных
+  // (сменилась вселенная) — НЕ сужаем ложно, оставляем полный набор.
   if (f && Array.isArray(data.age)) {
     const valid = data.age.filter(a => f._ages.includes(a));
-    if (valid.length) f.age = new Set(valid);
+    if (data.age.length === 0 || valid.length) f.age = new Set(valid);
   }
   if (f && Array.isArray(data.venue)) {
     const valid = data.venue.filter(v => f._venues.includes(v));
-    if (valid.length) f.venue = new Set(valid);
+    if (data.venue.length === 0 || valid.length) f.venue = new Set(valid);
   }
   if (data.query) {
     state.query = data.query;

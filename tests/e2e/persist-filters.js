@@ -60,6 +60,16 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   assert.ok(!(await dotHidden(page)), '✓6: индикатор фильтра восстановлен после рефреша');
   console.log('✓ 2/6. ценз-воронка переживает рефреш + индикатор восстановлен');
 
+  // --- 2b. «снять всё» (пустой ценз) тоже переживает рефреш, не восстанавливается как «всё»
+  await page.evaluate(() => { openFilterSheet(); filterDraft.age = new Set(); applyFilters(); });
+  await page.waitForTimeout(200);
+  assert.equal((await getState(page)).ageSize, 0, 'ценз снят полностью (0)');
+  await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(700);
+  assert.equal((await getState(page)).ageSize, 0, '«снято всё» пережило рефреш (НЕ сброшено на «всё»)');
+  console.log('✓ 2b. «снять всё» переживает рефреш (пустой фильтр не теряется)');
+  await page.evaluate(() => { openFilterSheet(); filterDraft.age = new Set(state.filters._ages); applyFilters(); });
+  await page.waitForTimeout(150); // вернём полный ценз для следующих сценариев
+
   // --- 4. тип + поиск + день вместе → всё переживает рефреш
   await page.click('#typeChips .chip[data-type="animation"]'); await page.waitForTimeout(150);
   await page.click('#btnSearch'); await page.waitForTimeout(120);
