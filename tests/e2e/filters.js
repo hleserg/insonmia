@@ -340,10 +340,14 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   await page.waitForTimeout(500);
   await page.click('.tab[data-view="schedule"]');
   await page.waitForTimeout(200);
-  assert.ok(await dotHidden(), 'после перезагрузки фильтр сброшен к «всё» (в localStorage не храним)');
+  // фильтр ПЕРЕЖИВАЕТ рефреш (sessionStorage): F5/тихий reload не сбрасывают;
+  // сброс — только при НОВОЙ сессии (см. persist-filters.js)
+  assert.ok(!(await dotHidden()), 'после перезагрузки фильтр СОХРАНЁН (sessionStorage), не сброшен');
   const lsKeys = await page.evaluate(() => Object.keys(localStorage).filter(k => /filter/i.test(k)));
-  assert.equal(lsKeys.length, 0, 'фильтры не пишутся в localStorage: ' + JSON.stringify(lsKeys));
-  console.log('✓ 12. память сессии: перезагрузка сбрасывает фильтры, localStorage чист');
+  assert.equal(lsKeys.length, 0, 'фильтры не в localStorage (сессионные): ' + JSON.stringify(lsKeys));
+  const ssHas = await page.evaluate(() => !!sessionStorage.getItem('insomnia.filters'));
+  assert.ok(ssHas, 'фильтры лежат в sessionStorage (переживают рефреш, чистятся при закрытии)');
+  console.log('✓ 12. фильтр переживает рефреш (sessionStorage), localStorage чист');
 
   await ctx.close();
 
