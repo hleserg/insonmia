@@ -1005,7 +1005,7 @@ function renderNearby(root) {
     const b = document.createElement('button');
     b.className = 'chip' + (GEO.nearby.radius === r ? ' active' : '');
     b.textContent = r ? `${r} м` : 'всё';
-    b.addEventListener('click', () => { GEO.nearby.radius = r; render(); });
+    b.addEventListener('click', () => { GEO.nearby.radius = r; saveFilterState(); render(); });
     radRow.appendChild(b);
   });
   root.appendChild(radRow);
@@ -1134,6 +1134,7 @@ function renderNearby(root) {
 function switchView(view) {
   state.view = view;
   $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === view));
+  saveFilterState(); // вкладка переживает рефреш вместе с фильтрами
   render();
 }
 

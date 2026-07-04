@@ -253,6 +253,86 @@ function passesAge(e) { return !state.filters || state.filters.age.has(ageKey(e)
 function passesVenue(e) { return !state.filters || state.filters.venue.has(venueKey(e)); }
 function passesFilters(e) { return passesAge(e) && passesVenue(e); }
 
+/* ---------- сохранение фильтров/дня/радиуса/поиска (sessionStorage) ----------
+   Задача: рефреш (F5/свайп/тихий reload SW) НЕ должен сбрасывать настроенный
+   фильтр. sessionStorage подходит идеально: переживает reload в рамках сессии,
+   но чистится при закрытии вкладки/приложения → НОВЫЙ запуск открывается на
+   «всё» (иначе юзер решит «событий нет», забыв про вчерашний фильтр). */
+const FILT_KEY = 'insomnia.filters';
+
+function saveFilterState() {
+  try {
+    const f = state.filters;
+    const data = {
+      type: state.type,
+      view: state.view,       // вкладку тоже помним — тихий reload не должен бросать на «Сейчас»
+      day: state.day || null,
+      query: state.query || '',
+      radius: (typeof GEO !== 'undefined' && GEO.nearby) ? GEO.nearby.radius : undefined,
+    };
+    // ценз/локацию пишем ТОЛЬКО когда сужены — иначе смена вселенной данных
+    // потащила бы устаревшее сужение; «всё» = отсутствие ключа
+    if (f && ageFilterActive()) data.age = [...f.age];
+    if (f && venueFilterActive()) data.venue = [...f.venue];
+    sessionStorage.setItem(FILT_KEY, JSON.stringify(data));
+  } catch { /* приватный режим/квота — просто не переживёт рефреш, не критично */ }
+}
+
+// восстановление в boot ПОСЛЕ initEventFilters (у state.filters уже полные
+// _ages/_venues от текущих данных); сужения пересекаем с актуальной вселенной —
+// исчезнувшие после смены данных значения молча отбрасываем
+function restoreFilterState() {
+  let data;
+  try { data = JSON.parse(sessionStorage.getItem(FILT_KEY) || 'null'); } catch { data = null; }
+  if (!data) return;
+  if (['all', 'program', 'animation'].includes(data.type)) {
+    state.type = data.type;
+    $$('#typeChips .chip[data-type]').forEach(c => c.classList.toggle('active', c.dataset.type === state.type));
+  }
+  const f = state.filters;
+  // Пустой массив = юзер осознанно «снял всё» (показывает ничего) — восстанавливаем
+  // как есть. Непустой массив, но НИ одно значение больше не существует в данных
+  // (сменилась вселенная) — НЕ сужаем ложно, оставляем полный набор.
+  if (f && Array.isArray(data.age)) {
+    const valid = data.age.filter(a => f._ages.includes(a));
+    if (data.age.length === 0 || valid.length) f.age = new Set(valid);
+  }
+  if (f && Array.isArray(data.venue)) {
+    const valid = data.venue.filter(v => f._venues.includes(v));
+    if (data.venue.length === 0 || valid.length) f.venue = new Set(valid);
+  }
+  if (data.query) {
+    state.query = data.query;
+    const inp = $('#searchInput'); if (inp) inp.value = data.query;
+    const bar = $('#searchBar'); if (bar) bar.classList.remove('hidden');
+  }
+  if (data.day && state.program && state.program.events.some(e => e._festDay === data.day)) {
+    state.day = data.day;
+  }
+  if (typeof GEO !== 'undefined' && GEO.nearby && Number.isFinite(data.radius)) {
+    GEO.nearby.radius = data.radius;
+  }
+  if (['now', 'schedule', 'favorites', 'map', 'nearby'].includes(data.view)) {
+    state.view = data.view; // render() ниже отрисует нужную вкладку
+    $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === state.view));
+  }
+}
+
+// смена вселенной данных (импорт нового файла / сброс к встроенной версии):
+// полный сброс сужения к «всё» — устаревший тип/ценз/локация/поиск на новых
+// данных мог бы дать пустой экран без объяснения (напр. фильтр «анимация» на
+// файле только с дневной программой). Индикатор и сохранённое состояние тоже.
+function resetFiltersToAll() {
+  initEventFilters(); // ценз/локация → полные наборы новой вселенной
+  state.type = 'all';
+  $$('#typeChips .chip[data-type]').forEach(c => c.classList.toggle('active', c.dataset.type === 'all'));
+  state.query = '';
+  const si = $('#searchInput'); if (si) si.value = '';
+  const sb = $('#searchBar'); if (sb) sb.classList.add('hidden');
+  state.day = null;
+  saveFilterState();
+}
+
 function liveFavCount() {
   // считаем только избранное, которое существует в текущей программе —
   // после обновления данных часть id может осиротеть
@@ -523,7 +603,7 @@ function buildDayStrip(readonly = false, activeDay = state.day) {
     btn.className = 'day-btn' + (date === activeDay ? ' active' : '');
     btn.innerHTML = `<span class="dow">${WD[p.dow]}</span><span>${p.day} ${MON[p.mo]}</span>`;
     if (readonly) btn.disabled = true;
-    else btn.addEventListener('click', () => { state.day = date; render(); });
+    else btn.addEventListener('click', () => { state.day = date; saveFilterState(); render(); });
     strip.appendChild(btn);
   });
   strip.scrollLeft = keepScroll;
@@ -885,12 +965,14 @@ function filterGroupBulk(group, selectAll) {
 function applyFilters() {
   state.filters.age = new Set(filterDraft.age);
   state.filters.venue = new Set(filterDraft.venue);
+  saveFilterState();
   hideSheet('#filterSheet');
   render();
 }
 function resetFilters() {
   state.filters.age = new Set(state.filters._ages);
   state.filters.venue = new Set(state.filters._venues);
+  saveFilterState();
   render();
 }
 // Кнопка-воронка живёт в ряду переключателей: в «сейчас/программа» — первой
@@ -935,6 +1017,7 @@ function clearSearch() {
   $('#searchBar').classList.add('hidden');
   $('#searchInput').value = '';
   state.query = '';
+  saveFilterState();
   render();
   window.scrollTo(0, 0);
 }
@@ -1389,10 +1472,9 @@ function applyImportedProgram(program, msg, persist = true) {
   if (persist) localStorage.setItem(LS.program, JSON.stringify(program));
   else localStorage.removeItem(LS.program);
   state.program = decorateProgram(program);
-  initEventFilters(); // вселенная ценз/локации сменилась → сбрасываем воронку к «всё»
   // избранное НЕ чистим: осиротевшие отметки живут в плашке «избранного»
   // и переживают откат/повтор обновления данных
-  state.day = null;
+  resetFiltersToAll(); // вселенная сменилась → тип/ценз/локация/день/поиск → «всё»
   localStorage.removeItem(LS.notified);
   if (notifGranted()) state.favs.forEach(scheduleNotification);
   $('#importStatus').textContent = msg;
@@ -1415,11 +1497,10 @@ function resetData() {
   localStorage.removeItem(LS.notified);
   loadProgram().then(p => {
     state.program = decorateProgram(p);
-    initEventFilters();
     const ids = new Set(p.events.map(e => e.id));
     state.favs = new Set([...state.favs].filter(id => ids.has(id)));
     saveFavs();
-    state.day = null;
+    resetFiltersToAll(); // вернулись к встроенной версии → тип/ценз/локация/день/поиск → «всё»
     updateDataInfo();
     toast('Возвращена встроенная версия');
     render();
@@ -1719,6 +1800,7 @@ function wireUI() {
     $$('#typeChips .chip[data-type]').forEach(x => x.classList.remove('active'));
     c.classList.add('active');
     state.type = c.dataset.type;
+    saveFilterState();
     render();
   }));
 
@@ -1734,6 +1816,7 @@ function wireUI() {
   let searchDebounce = null;
   $('#searchInput').addEventListener('input', (e) => {
     state.query = e.target.value.trim();
+    saveFilterState();
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => {
       render();
@@ -1938,7 +2021,8 @@ async function boot() {
   }
   initEventFilters();
   noteDataVersion(state.program);
-  state.day = pickDefaultDay();
+  restoreFilterState();          // фильтры/день/радиус/поиск переживают рефреш (sessionStorage)
+  if (!state.day) state.day = pickDefaultDay(); // день не восстановили → дефолт
   initMockGeo();
   GEO.data = await loadGeo();
   GEO.basemap = await loadBasemap();
