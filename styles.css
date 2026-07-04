@@ -382,7 +382,7 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   display: inline-block; padding: 15px 8px; margin: -13px -6px;
 }
 
-/* ---- Sim bar / update bar ---- */
+/* ---- Sim bar ---- */
 .sim-bar {
   position: fixed; left: 10px; right: 10px; bottom: calc(10px + var(--safe-bottom));
   z-index: 90; display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -390,7 +390,6 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   padding: 8px 12px; font-family: var(--mono); font-size: 0.8rem;
   box-shadow: 0 8px 30px rgba(0,0,0,.5);
 }
-.sim-bar.update { border-color: var(--green-dim); bottom: calc(58px + var(--safe-bottom)); }
 .sim-actions { display: flex; gap: 6px; }
 .sim-btn {
   background: var(--bg); border: 1px solid var(--line); color: var(--text);

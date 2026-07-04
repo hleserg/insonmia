@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v35';
+const CACHE = 'insomnia-2026-v36';
 const ASSETS = [
   './',
   'index.html',
@@ -24,7 +24,10 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  // без skipWaiting: активация новой версии — по кнопке «обновить» в приложении
+  // skipWaiting: новая версия активируется сразу, не ждёт закрытия вкладок.
+  // Перезагрузку страницы делает приложение по controllerchange — но только
+  // в безопасный момент (без открытых модалок, в простое). См. app.js.
+  self.skipWaiting();
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
 });
 
