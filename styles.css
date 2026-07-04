@@ -595,11 +595,15 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   background: var(--green); color: #04260f; border-radius: 10px;
   padding: 10px 12px; font-family: var(--mono); font-size: 0.82rem; font-weight: 700;
   box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  /* полоса-подсказка не должна перехватывать тап по карте под ней (в режиме
+     «точкой» именно туда и целятся) — кликабельна только кнопка «отмена» */
+  pointer-events: none;
 }
 .map-place-hint .place-cancel {
   flex: 0 0 auto; background: rgba(4,38,15,.15); border: 1px solid #04260f;
   color: #04260f; border-radius: 8px; padding: 6px 10px; font-family: var(--mono);
   font-size: 0.8rem; min-height: 32px;
+  pointer-events: auto;
 }
 /* подсказка «поставь метку», пока своих меток нет — снизу карты, закрываемая */
 .map-pin-hint {
@@ -607,9 +611,11 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   display: flex; align-items: center; gap: 8px;
   background: var(--card-2); border: 1px solid var(--green-dim); border-radius: 10px;
   padding: 8px 6px 8px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  /* та же полоса не должна красть тапы по маркерам/кластерам под ней */
+  pointer-events: none;
 }
 .map-pin-hint span { flex: 1; color: var(--text); font-size: 0.8rem; line-height: 1.35; }
-.map-pin-hint .icon-btn { flex: 0 0 auto; min-width: 36px; height: 36px; }
+.map-pin-hint .icon-btn { flex: 0 0 auto; min-width: 36px; height: 36px; pointer-events: auto; }
 .pin-form label {
   display: block; margin: 10px 0 4px;
   font-family: var(--mono); font-size: 0.78rem; color: var(--muted);

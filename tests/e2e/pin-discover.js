@@ -75,6 +75,24 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   assert.equal(pinCount, 1, 'метка создана: ' + pinCount);
   console.log('✓ 2. «выбрать точкой» → режим → тап ставит метку');
 
+  // --- 2b. режим «точкой» не залипает: передумал и открыл меню/другой способ →
+  //     placeMode сброшен, следующий обычный тап по карте НЕ ставит метку
+  await page.click('#btnAddPin'); await page.waitForTimeout(120);
+  await page.click('#pinAddTap'); await page.waitForTimeout(120);
+  assert.equal(await page.evaluate(() => GEO.placeMode), true, 'режим включился');
+  await page.click('#btnAddPin'); await page.waitForTimeout(120); // передумал — снова меню
+  assert.equal(await page.evaluate(() => GEO.placeMode), false, 'повторное меню сбросило режим');
+  assert.ok(!(await page.isVisible('#mapPlaceHint')), 'подсказка режима скрылась');
+  await page.click('#pinAddCoords'); await page.waitForTimeout(120); // выбрал другой способ
+  await page.click('#pinEditor .icon-btn[data-close]'); await page.waitForTimeout(120);
+  const before = await page.evaluate(() => (state.pins || []).length);
+  await page.evaluate(() => GEO.map.fire('click', { latlng: { lat: 54.6819, lng: 35.0909 } }));
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => (state.pins || []).length);
+  assert.equal(after, before, 'обычный тап по карте не должен ставить метку после сброса режима');
+  assert.ok(!(await page.isVisible('#pinEditor')), 'редактор не открылся ложно');
+  console.log('✓ 2b. режим «точкой» не залипает (меню/другой способ сбрасывают)');
+
   // --- 3. Лонгтап (contextmenu) всё ещё работает — открывает редактор
   await page.evaluate(() => GEO.map.fire('contextmenu', { latlng: { lat: 54.682, lng: 35.09 } }));
   await page.waitForTimeout(200);

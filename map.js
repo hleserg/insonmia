@@ -162,8 +162,21 @@ function ensureMap() {
   });
   GEO.data.points.forEach(p => {
     const mk = L.marker([p.lat, p.lng], { icon: markerIcon(p.category) });
-    mk.on('click', () => openPointCard(p));
+    // в режиме «точкой» тап по маркеру не всплывает в map.on('click')
+    // (Leaflet: bubblingMouseEvents=false) — ставим метку прямо здесь,
+    // иначе режим молча залипает и следующий тап поставит ложную метку
+    mk.on('click', () => {
+      if (GEO.placeMode) { exitPlaceMode(); openPinEditor({ lat: p.lat, lng: p.lng }); return; }
+      openPointCard(p);
+    });
     GEO.pointById[p.id] = { marker: mk, point: p };
+  });
+  // тап по кластеру в режиме «точкой» — тоже метка (иначе кластер только зумит,
+  // а режим остаётся включённым)
+  GEO.clusterGroup.on('clusterclick', (a) => {
+    if (!GEO.placeMode) return; // не в режиме — обычный зум markercluster
+    exitPlaceMode();
+    openPinEditor({ lat: a.latlng.lat, lng: a.latlng.lng });
   });
   map.addLayer(GEO.clusterGroup);
 
@@ -705,7 +718,9 @@ function wirePinUI() {
   });
   // ➕ теперь открывает МЕНЮ способов (обнаруживаемо), а не сразу форму.
   // Лонгтап по карте остаётся быстрым путём для знающих.
-  $('#btnAddPin').addEventListener('click', () => showSheet('#pinAddMenu'));
+  // повторное открытие меню сбрасывает недоведённый режим «точкой» — иначе он
+  // залипал бы (зелёная подсказка + прицел остаются, следующий тап ставит метку)
+  $('#btnAddPin').addEventListener('click', () => { exitPlaceMode(); showSheet('#pinAddMenu'); });
   $('#pinAddCoords').addEventListener('click', () => { hideSheet('#pinAddMenu'); openPinEditor(null); });
   $('#pinAddGps').addEventListener('click', async () => {
     hideSheet('#pinAddMenu');
