@@ -605,8 +605,69 @@ function openDetail(id) {
   showSheet('#sheet');
 }
 
-function showSheet(sel) { $(sel).classList.remove('hidden'); }
-function hideSheet(sel) { $(sel).classList.add('hidden'); }
+/* ---------- модалки + перехват системного «назад» (History API) ----------
+   Боль: на Android «назад» при открытом описании события выкидывал из приложения
+   вместо закрытия. Решение: каждая открытая модалка = одна запись в истории.
+   Аппаратный «назад»/свайп (popstate) закрывает ВЕРХНЮЮ модалку и остаётся в
+   приложении; когда модалок нет — «назад» штатный (сворачивает PWA/уходит).
+   Крестик/тап-вне закрывают ту же модалку и снимают её запись (history.go),
+   чтобы «назад» потом не требовал лишних нажатий. Переход «закрыл A → открыл B»
+   в один тик ПЕРЕИСПОЛЬЗУЕТ запись — без гонки back+push и без мусора в истории. */
+const _sheetStack = [];        // селекторы открытых модалок (в порядке открытия)
+let _histSelfPop = 0;          // ждём столько программных popstate (наш go) — проглотить
+let _histTrimPending = 0;      // отложенно снять столько записей (микротаск)
+let _histTrimScheduled = false;
+
+function _scheduleHistTrim(n) {
+  _histTrimPending += n;
+  if (_histTrimScheduled) return;
+  _histTrimScheduled = true;
+  // микротаск: если в этом же тике откроют новую модалку, она «съест» pending
+  // (переиспользует запись) — тогда триммить будет нечего или меньше
+  queueMicrotask(() => {
+    _histTrimScheduled = false;
+    const k = _histTrimPending; _histTrimPending = 0;
+    if (k > 0) { _histSelfPop++; history.go(-k); }
+  });
+}
+
+function showSheet(sel) {
+  const el = $(sel);
+  if (!el) return;
+  const wasHidden = el.classList.contains('hidden');
+  el.classList.remove('hidden');
+  if (!wasHidden) return;                        // уже открыт — историю не трогаем
+  if (_histTrimPending > 0) _histTrimPending--;  // переход A→B: переиспользуем запись
+  else history.pushState({ sheet: sel }, '');
+  _sheetStack.push(sel);
+}
+
+function _hideSheetEl(sel) {                      // синхронно скрыть + снять со стека
+  const el = $(sel);
+  if (!el || el.classList.contains('hidden')) return false;
+  el.classList.add('hidden');
+  const i = _sheetStack.lastIndexOf(sel);
+  if (i !== -1) _sheetStack.splice(i, 1);
+  return true;
+}
+
+function hideSheet(sel) {
+  if (_hideSheetEl(sel)) _scheduleHistTrim(1);   // снять нашу запись из истории
+}
+
+function hideAllSheets() {
+  const n = _sheetStack.length;
+  while (_sheetStack.length) _hideSheetEl(_sheetStack[_sheetStack.length - 1]);
+  $$('.sheet').forEach(s => s.classList.add('hidden')); // добить всё, что мимо стека
+  if (n > 0) _scheduleHistTrim(n);
+}
+
+// системный «назад»/свайп: закрыть ВЕРХНЮЮ модалку, не покидая приложение;
+// стек пуст → ничего не перехватываем (браузер уже ушёл назад / свернул PWA)
+window.addEventListener('popstate', () => {
+  if (_histSelfPop > 0) { _histSelfPop--; return; } // наш программный откат — уже скрыли
+  if (_sheetStack.length) _hideSheetEl(_sheetStack[_sheetStack.length - 1]);
+});
 
 /* ---------- экспорт в календарь (.ics, всё офлайн на клиенте) ---------- */
 function downloadBlob(blob, filename) {
@@ -1684,10 +1745,12 @@ function wireUI() {
 
   // settings sheet
   $('#btnSettings').addEventListener('click', () => { updateNotifStatus(); updateDataInfo(); showSheet('#settings'); });
-  // закрывает СВОЙ шит (крестик/светофор/бэкдроп лежат внутри .sheet)
+  // закрывает СВОЙ шит (крестик/светофор/бэкдроп лежат внутри .sheet); идёт через
+  // hideSheet, чтобы снять запись истории — крестик и «назад» дают одно и то же
   $$('[data-close]').forEach(el => el.addEventListener('click', () => {
     const sheet = el.closest('.sheet');
-    if (sheet) sheet.classList.add('hidden');
+    if (sheet && sheet.id) hideSheet('#' + sheet.id);
+    else if (sheet) sheet.classList.add('hidden');
   }));
 
   // подтверждение выгрузки всей программы (кнопка #btnProgramExport —
