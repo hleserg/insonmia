@@ -717,6 +717,12 @@ function showSheet(sel) {
   const wasHidden = el.classList.contains('hidden');
   el.classList.remove('hidden');
   if (!wasHidden) return;                        // уже открыт — историю не трогаем
+  // свежее открытие переиспользуемой модалки → её скролл-контейнер в самый верх,
+  // иначе описание нового события открывается прокрученным от прошлого (тот же
+  // #sheet наполняется новым контентом, а scrollTop .sheet-card залипает).
+  // При ре-открытии УЖЕ открытой модалки (напр. toggle ⭐ в описании) не трогаем.
+  const card = el.querySelector('.sheet-card');
+  if (card) card.scrollTop = 0;
   if (_histTrimPending > 0) _histTrimPending--;  // переход A→B: переиспользуем запись
   else history.pushState({ sheet: sel }, '');
   _sheetStack.push(sel);
