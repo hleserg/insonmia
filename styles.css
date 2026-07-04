@@ -301,6 +301,7 @@ button { font-family: inherit; cursor: pointer; }
 .program-export .btn { margin-top: 0; }
 .warn-list { margin: 8px 0 4px; padding-left: 20px; }
 .warn-list li { margin-bottom: 8px; line-height: 1.4; }
+#installedNote { color: var(--green); font-family: var(--mono); }
 /* ВРЕМЕННО: панель диагностики Web Share */
 #diagPanel { position: fixed; inset: auto 8px 8px 8px; z-index: 200; background: var(--card-2);
   border: 1px solid var(--green-dim); border-radius: 12px; padding: 12px; max-height: 70vh; overflow: auto;

@@ -1310,6 +1310,25 @@ function updateInstallBar() {
   }
 }
 
+// в настройках: если приложение уже установлено (standalone) — прячем
+// кнопку/инструкцию установки, чтобы не путать; показываем «✓ установлено».
+// Индикатор офлайн-готовности (#offlineStatus) остаётся в любом случае.
+function updateInstallSection() {
+  const installed = isStandalone();
+  // intro и кнопку переключаем в обе стороны
+  ['#installIntro', '#btnInstall'].forEach(sel => {
+    const el = $(sel);
+    if (el) el.classList.toggle('hidden', installed);
+  });
+  // подсказку и браузер-варнинг только ПРЯЧЕМ при установке; показ ими
+  // управляют свои места (iOS-инструкция, updateInstallBar)
+  if (installed) {
+    ['#installHint', '#browserWarn'].forEach(sel => { const el = $(sel); if (el) el.classList.add('hidden'); });
+  }
+  const note = $('#installedNote');
+  if (note) note.classList.toggle('hidden', !installed);
+}
+
 // показать инструкцию по месту клика; кнопки при этом остаются живыми
 function installShowInstruction(context) {
   const txt = installInstructionText();
@@ -1530,7 +1549,8 @@ function wireUI() {
   $('#gateInstall').addEventListener('click', () => promptInstall('gate'));
   $('#btnInstall').addEventListener('click', () => promptInstall('settings'));
   updateInstallBar();
-  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+  updateInstallSection();
+  if (!isStandalone() && /iphone|ipad|ipod/i.test(navigator.userAgent)) {
     $('#installHint').textContent = installInstructionText();
     $('#installHint').classList.remove('hidden');
   }
