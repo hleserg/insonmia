@@ -265,6 +265,7 @@ function saveFilterState() {
     const f = state.filters;
     const data = {
       type: state.type,
+      view: state.view,       // вкладку тоже помним — тихий reload не должен бросать на «Сейчас»
       day: state.day || null,
       query: state.query || '',
       radius: (typeof GEO !== 'undefined' && GEO.nearby) ? GEO.nearby.radius : undefined,
@@ -311,6 +312,25 @@ function restoreFilterState() {
   if (typeof GEO !== 'undefined' && GEO.nearby && Number.isFinite(data.radius)) {
     GEO.nearby.radius = data.radius;
   }
+  if (['now', 'schedule', 'favorites', 'map', 'nearby'].includes(data.view)) {
+    state.view = data.view; // render() ниже отрисует нужную вкладку
+    $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === state.view));
+  }
+}
+
+// смена вселенной данных (импорт нового файла / сброс к встроенной версии):
+// полный сброс сужения к «всё» — устаревший тип/ценз/локация/поиск на новых
+// данных мог бы дать пустой экран без объяснения (напр. фильтр «анимация» на
+// файле только с дневной программой). Индикатор и сохранённое состояние тоже.
+function resetFiltersToAll() {
+  initEventFilters(); // ценз/локация → полные наборы новой вселенной
+  state.type = 'all';
+  $$('#typeChips .chip[data-type]').forEach(c => c.classList.toggle('active', c.dataset.type === 'all'));
+  state.query = '';
+  const si = $('#searchInput'); if (si) si.value = '';
+  const sb = $('#searchBar'); if (sb) sb.classList.add('hidden');
+  state.day = null;
+  saveFilterState();
 }
 
 function liveFavCount() {
@@ -1452,11 +1472,9 @@ function applyImportedProgram(program, msg, persist = true) {
   if (persist) localStorage.setItem(LS.program, JSON.stringify(program));
   else localStorage.removeItem(LS.program);
   state.program = decorateProgram(program);
-  initEventFilters(); // вселенная ценз/локации сменилась → сбрасываем воронку к «всё»
   // избранное НЕ чистим: осиротевшие отметки живут в плашке «избранного»
   // и переживают откат/повтор обновления данных
-  state.day = null;
-  saveFilterState(); // смена вселенной данных → сбрасываем сохранённое сужение
+  resetFiltersToAll(); // вселенная сменилась → тип/ценз/локация/день/поиск → «всё»
   localStorage.removeItem(LS.notified);
   if (notifGranted()) state.favs.forEach(scheduleNotification);
   $('#importStatus').textContent = msg;
@@ -1479,12 +1497,10 @@ function resetData() {
   localStorage.removeItem(LS.notified);
   loadProgram().then(p => {
     state.program = decorateProgram(p);
-    initEventFilters();
     const ids = new Set(p.events.map(e => e.id));
     state.favs = new Set([...state.favs].filter(id => ids.has(id)));
     saveFavs();
-    state.day = null;
-    saveFilterState(); // вернулись к встроенной версии → сброс сохранённого сужения
+    resetFiltersToAll(); // вернулись к встроенной версии → тип/ценз/локация/день/поиск → «всё»
     updateDataInfo();
     toast('Возвращена встроенная версия');
     render();

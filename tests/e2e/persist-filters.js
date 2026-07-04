@@ -24,7 +24,7 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
     ageTotal: state.filters ? state.filters._ages.length : -1,
     venueSize: state.filters ? state.filters.venue.size : -1,
     venueTotal: state.filters ? state.filters._venues.length : -1,
-    day: state.day, query: state.query,
+    day: state.day, query: state.query, view: state.view,
     radius: (typeof GEO !== 'undefined' && GEO.nearby) ? GEO.nearby.radius : null,
     typeChipActive: (document.querySelector('#typeChips .chip.active[data-type]') || {}).dataset ? document.querySelector('#typeChips .chip.active[data-type]').dataset.type : null,
   }));
@@ -93,6 +93,28 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   s = await getState(page);
   assert.equal(s.radius, 150, 'радиус «рядом» пережил рефреш: ' + s.radius);
   console.log('✓ 5. радиус «рядом» переживает рефреш');
+
+  // --- 8. смена вселенной данных (импорт/сброс) сбрасывает ВСЁ сужение, вкл. тип и поиск
+  await page.click('.tab[data-view="schedule"]'); await page.waitForTimeout(150);
+  await page.click('#typeChips .chip[data-type="animation"]'); await page.waitForTimeout(120);
+  await page.click('#btnSearch'); await page.waitForTimeout(100);
+  await page.fill('#searchInput', 'тест'); await page.waitForTimeout(300);
+  await page.evaluate(() => resetFiltersToAll()); // как при импорте нового файла / сбросе к встроенной
+  await page.waitForTimeout(150);
+  let sr = await getState(page);
+  assert.equal(sr.type, 'all', 'смена данных сбросила тип на «всё» (не будет пустого экрана)');
+  assert.equal(sr.query, '', 'смена данных сбросила поиск');
+  assert.equal(sr.ageSize, sr.ageTotal, 'смена данных вернула полный ценз');
+  const persistedType = await page.evaluate(() => JSON.parse(sessionStorage.getItem('insomnia.filters') || '{}').type);
+  assert.equal(persistedType, 'all', 'sessionStorage: устаревший тип не остался');
+  console.log('✓ 8. смена вселенной данных сбрасывает тип/ценз/поиск (нет пустого экрана после импорта)');
+
+  // --- 9. вкладка переживает рефреш (тихий reload не бросает на «Сейчас»)
+  await page.click('.tab[data-view="favorites"]'); await page.waitForTimeout(200);
+  await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(700);
+  assert.equal((await getState(page)).view, 'favorites', 'вкладка пережила рефреш: не «Сейчас»');
+  assert.ok(await page.evaluate(() => document.querySelector('.tab[data-view="favorites"]').classList.contains('active')), 'таб «избранное» активен после рефреша');
+  console.log('✓ 9. вкладка переживает рефреш (консистентно с фильтрами)');
 
   // --- 3. НОВАЯ сессия (закрыл приложение) → sessionStorage пуст → дефолт «всё»
   const ctx2 = await browser.newContext({

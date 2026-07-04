@@ -1134,6 +1134,7 @@ function renderNearby(root) {
 function switchView(view) {
   state.view = view;
   $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === view));
+  saveFilterState(); // вкладка переживает рефреш вместе с фильтрами
   render();
 }
 
