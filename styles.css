@@ -302,14 +302,6 @@ button { font-family: inherit; cursor: pointer; }
 .warn-list { margin: 8px 0 4px; padding-left: 20px; }
 .warn-list li { margin-bottom: 8px; line-height: 1.4; }
 #installedNote { color: var(--green); font-family: var(--mono); }
-/* ВРЕМЕННО: панель диагностики Web Share */
-#diagPanel { position: fixed; inset: auto 8px 8px 8px; z-index: 200; background: var(--card-2);
-  border: 1px solid var(--green-dim); border-radius: 12px; padding: 12px; max-height: 70vh; overflow: auto;
-  box-shadow: 0 8px 30px rgba(0,0,0,.6); }
-#diagPanel pre { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 0.74rem;
-  color: var(--text); margin: 0 0 10px; }
-#diagPanel .diag-row { display: flex; gap: 10px; }
-#diagPanel .diag-row .btn { margin-top: 0; }
 /* «весь маршрут в календарь» в избранном */
 .route-actions { display: flex; gap: 10px; margin: 4px 0 14px; }
 .route-actions .btn { margin-top: 0; padding-left: 8px; padding-right: 8px; font-size: 0.82rem; }

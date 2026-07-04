@@ -228,20 +228,41 @@ const SHARE_MOCK = () => {
   assert.ok(!(await page.isVisible('#programExport')), 'после выгрузки модалка закрыта');
   console.log('✓ вся программа:', fullN, 'VEVENT, 0 VALARM, один файл');
 
-  // --- 3c. Диагностика Web Share: панель показывает значения API ---
-  await page.click('#btnSettings');
-  await page.waitForTimeout(200);
-  await page.click('#btnShareDiag');
-  await page.waitForTimeout(300);
-  assert.ok(await page.isVisible('#diagPanel'), 'диаг-панель появилась');
-  const diagTxt = await page.evaluate(() => document.querySelector('#diagPanel pre').textContent);
-  assert.ok(/typeof navigator\.share:/.test(diagTxt) && /canShare\(\{files\}\):/.test(diagTxt), 'панель содержит ключевые значения: ' + JSON.stringify(diagTxt.slice(0, 120)));
-  await page.click('#diagPanel .btn'); // закрыть (или скопировать) — панель есть
-  await page.waitForTimeout(100);
-  await page.evaluate(() => { const p = document.getElementById('diagPanel'); if (p) p.remove(); });
-  await page.click('#settings .icon-btn[data-close]');
-  await page.waitForTimeout(150);
-  console.log('✓ диагностика: панель со значениями Web Share');
+  // --- 3c. Huawei-кейс: canShare({files})=true, но share({files}) кидает
+  //         NotAllowedError → повтор шэра ТОЛЬКО текстом (без файла) ---
+  {
+    const ctxH = await browser.newContext({ viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block' });
+    await ctxH.addInitScript(STANDALONE);
+    await ctxH.addInitScript(() => {
+      window.__shareCalls = [];
+      navigator.canShare = () => true; // «умеет всё» (как врёт Huawei)
+      navigator.share = async (d) => {
+        const hasFiles = !!(d.files && d.files.length);
+        window.__shareCalls.push({ hasFiles, text: d.text || null });
+        if (hasFiles) { const e = new Error('Permission denied'); e.name = 'NotAllowedError'; throw e; } // файл — запрещён
+        // без файла — успех
+      };
+    });
+    const pH = await ctxH.newPage();
+    await pH.clock.install({ time: T });
+    await pH.goto(BASE + '/', { waitUntil: 'load' });
+    await pH.waitForTimeout(500);
+    await pH.click('.tab[data-view="schedule"]');
+    await pH.waitForTimeout(300);
+    await pH.locator('.event').first().locator('.fav-btn').click();
+    await pH.waitForTimeout(150);
+    await pH.click('.tab[data-view="favorites"]');
+    await pH.waitForTimeout(300);
+    await pH.click('#routeShare');
+    await pH.waitForTimeout(300);
+    const calls = await pH.evaluate(() => window.__shareCalls);
+    assert.equal(calls.length, 2, 'должно быть 2 вызова share: сперва с файлом, потом только текст');
+    assert.equal(calls[0].hasFiles, true, 'первый вызов — с файлом');
+    assert.equal(calls[1].hasFiles, false, 'второй вызов — БЕЗ файла (только текст)');
+    assert.ok(calls[1].text && /Мой маршрут/.test(calls[1].text), 'текст-фолбэк самодостаточен: ' + JSON.stringify(calls[1].text));
+    console.log('✓ Huawei-кейс: файл-шэр NotAllowedError → успешный шэр только текстом');
+    await ctxH.close();
+  }
 
   // --- 3d. Фолбэк БЕЗ navigator.share → скачивание + внятный тост (не немой) ---
   {
