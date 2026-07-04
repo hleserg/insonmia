@@ -515,7 +515,7 @@ function openPinCard(pin) {
     <div class="muted small">${(+pin.lat).toFixed(5)}, ${(+pin.lng).toFixed(5)}</div>
     ${window.InsomniaCore.pinOutsideFest(pin) ? '<div class="muted small">⚠️ далеко от поляны</div>' : ''}
     <div class="pin-actions">
-      <button class="btn" id="pinCardShare">поделиться</button>
+      <button class="btn" id="pinCardShare">${window.InsomniaCore.shareIcon()} поделиться</button>
       <button class="btn ghost" id="pinCardEdit">редактировать</button>
       <button class="btn ghost danger" id="pinCardDel">удалить</button>
     </div>`;
@@ -829,15 +829,18 @@ function bestKnownPos() {
   return null;
 }
 
-// строка «📍 мои координаты: lat, lng» + 🔗 (для потеряшек). Без фикса —
-// «включить геолокацию» (тап = запрос), 🔗 неактивна.
+// строка «📍 lat, lng» + 🔗 (для потеряшек). Без фикса — «включить геолокацию»
+// (тап = запрос), 🔗 неактивна. Показываем ГОЛЫЕ координаты без подписи «мои
+// координаты:» — иначе на 360px подпись съедала ширину и долгота обрезалась
+// многоточием (а именно цифры нужно прочитать/продиктовать). Пин 📍 + место
+// под фильтрами карты и так говорят, что это твоя точка.
 function updateMyCoordRow() {
   const txt = $('#myCoordText'), share = $('#myCoordShare');
   if (!txt || !share) return;
   const pos = bestKnownPos();
   if (pos) {
     if (!GEO.myCoord) GEO.myCoord = { lat: pos.lat, lng: pos.lng }; // засеяли из «Рядом»
-    txt.textContent = `📍 мои координаты: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
     share.disabled = false;
   } else {
     txt.textContent = '📍 включить геолокацию';

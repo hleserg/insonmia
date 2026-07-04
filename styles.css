@@ -388,6 +388,9 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .btn:disabled { opacity: .45; }
 .btn.ghost { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
 .btn.danger { color: var(--danger); }
+/* иконка «поделиться» в текстовой кнопке: выровнять по строке + отступ от слова */
+.share-ico { vertical-align: -3px; }
+.btn .share-ico { margin-right: 6px; }
 .setting-block { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 12px; }
 .setting-block:first-of-type { border-top: none; }
 /* FAQ: свёрнутый блок «❓ Частые вопросы» — аккордеон вопрос-ответ */
