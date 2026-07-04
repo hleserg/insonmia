@@ -173,6 +173,18 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---- Модалка фильтров (ценз/локация) ---- */
 .filter-block { margin-bottom: 6px; }
+/* строка-заголовок группы: имя слева, ссылки-действия справа */
+.filter-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.filter-group-head h3 { margin: 12px 0 4px; }
+.group-actions { display: flex; gap: 2px; flex: 0 0 auto; }
+/* ссылка-действие: мелкая, зелёная (не серая — читаемость), тап ≥44px за счёт padding */
+.group-link {
+  background: none; border: none; color: var(--green); font-family: var(--mono);
+  font-size: 0.76rem; padding: 12px 8px; min-height: var(--tap);
+  text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
+}
+.group-link:active { color: var(--green-dim); }
+.filter-divider { height: 1px; background: var(--line); margin: 8px 0; }
 #filterVenueSearch {
   width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
   border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; font-family: var(--mono);
@@ -188,10 +200,12 @@ button { font-family: inherit; cursor: pointer; }
 }
 .fchip.on { background: var(--green); color: #04260f; border-color: var(--green); font-weight: 700; }
 .fchip.on::before { content: "✓ "; }
-.filter-actions {
-  display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;
-  margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line);
+/* применение вынесено в шапку модалки (sticky): зелёная ✓ справа от ✕,
+   всегда видна при прокрутке длинного списка площадок */
+.filter-apply-btn {
+  background: var(--green); color: #04260f; border-color: var(--green); font-weight: 700;
 }
+.filter-apply-btn:active { background: var(--green-dim); }
 #programExportFilterNote { color: var(--amber-2); margin: 0 0 8px; }
 /* служебные «☑ все»/«☐ ничего» на карте: действие, а не состояние —
    не подсвечиваются, слегка отделены от чипов категорий */

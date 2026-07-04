@@ -236,24 +236,32 @@
       <div class="sheet-titlebar">
         <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
         <div class="sheet-titlebar-label">~/фильтры</div>
-        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
+        <button class="icon-btn" data-close aria-label="Отмена" title="Отмена">✕</button>
+        <button class="icon-btn filter-apply-btn" id="filterApply" aria-label="Применить фильтры" title="Применить">✓</button>
       </div>
       <div class="sheet-body">
         <section class="filter-block" id="filterAgeBlock">
-          <h3>возрастной ценз</h3>
+          <div class="filter-group-head">
+            <h3>Возраст</h3>
+            <div class="group-actions">
+              <button type="button" class="group-link" id="ageSelectAll">выбрать все</button>
+              <button type="button" class="group-link" id="ageClear">снять все</button>
+            </div>
+          </div>
           <div class="chip-multi" id="filterAgeChips"></div>
         </section>
         <section class="filter-block" id="filterVenueBlock">
-          <h3>локация</h3>
+          <div class="filter-divider"></div>
+          <div class="filter-group-head">
+            <h3>Площадка</h3>
+            <div class="group-actions">
+              <button type="button" class="group-link" id="venueSelectAll">выбрать все</button>
+              <button type="button" class="group-link" id="venueClear">снять все</button>
+            </div>
+          </div>
           <input id="filterVenueSearch" type="search" placeholder="найти площадку…" autocomplete="off" />
           <div class="chip-multi scroll" id="filterVenueChips"></div>
         </section>
-        <div class="filter-actions">
-          <button class="btn ghost" id="filterClear">Снять все</button>
-          <button class="btn ghost" id="filterSelectAll">Выбрать все</button>
-          <button class="btn ghost" data-close>Отмена</button>
-          <button class="btn" id="filterApply">ОК</button>
-        </div>
       </div>
     </div>
   </div>
