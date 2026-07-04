@@ -786,11 +786,11 @@ function renderFilterChips() {
   buildFilterChips($('#filterAgeChips'), state.filters._ages, filterDraft.age, '');
   buildFilterChips($('#filterVenueChips'), state.filters._venues, filterDraft.venue, q);
 }
-// «Снять все»/«Выбрать все» — на видимые секции (в «рядом» только ценз)
-function filterBulk(selectAll) {
-  const nearby = state.view === 'nearby';
-  filterDraft.age = selectAll ? new Set(state.filters._ages) : new Set();
-  if (!nearby) filterDraft.venue = selectAll ? new Set(state.filters._venues) : new Set();
+// «выбрать все»/«снять все» — ПО ГРУППАМ: ссылка действует только на свою
+// группу (ценз или площадка), не трогая соседнюю
+function filterGroupBulk(group, selectAll) {
+  if (group === 'age') filterDraft.age = selectAll ? new Set(state.filters._ages) : new Set();
+  else filterDraft.venue = selectAll ? new Set(state.filters._venues) : new Set();
   renderFilterChips();
 }
 function applyFilters() {
@@ -1634,8 +1634,11 @@ function wireUI() {
   // фильтры-воронка
   $('#btnFilter').addEventListener('click', openFilterSheet);
   $('#filterApply').addEventListener('click', applyFilters);
-  $('#filterClear').addEventListener('click', () => filterBulk(false));
-  $('#filterSelectAll').addEventListener('click', () => filterBulk(true));
+  // групповые ссылки «выбрать все»/«снять все» — каждая на свою группу
+  $('#ageSelectAll').addEventListener('click', () => filterGroupBulk('age', true));
+  $('#ageClear').addEventListener('click', () => filterGroupBulk('age', false));
+  $('#venueSelectAll').addEventListener('click', () => filterGroupBulk('venue', true));
+  $('#venueClear').addEventListener('click', () => filterGroupBulk('venue', false));
   $('#filterVenueSearch').addEventListener('input', renderFilterChips);
 
   // notifications

@@ -131,8 +131,8 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   await page.waitForTimeout(80);
   console.log(`✓ 2б. контраст чипов: выбран ${contrast.on}:1, не выбран ${contrast.off}:1 (≥4.5)`);
 
-  // --- 3. Откат: снять все → Отмена → ничего не изменилось
-  await page.click('#filterClear');
+  // --- 3. Откат: снять все (в группе) → Отмена → ничего не изменилось
+  await page.click('#ageClear');
   await page.waitForTimeout(100);
   assert.equal(await page.$$eval('#filterAgeChips .fchip.on', e => e.length), 0, 'снять все обнулило ценз');
   await page.click('#filterSheet .icon-btn[data-close]');
@@ -140,6 +140,58 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   assert.equal(await eventCount(), baselineDay, 'Отмена не должна применять черновик');
   assert.ok(await dotHidden(), 'после отмены индикатор погашен');
   console.log('✓ 3. черновик откатывается по «Отмена»');
+
+  // --- 3б. Групповые «снять/выбрать все» действуют ТОЛЬКО на свою группу
+  await clickFilter();
+  await page.waitForTimeout(150);
+  const nA = AGES.length, nV = N_VENUES;
+  // ценз «снять все» → ценз 0, площадки целы
+  await page.click('#ageClear');
+  await page.waitForTimeout(80);
+  assert.equal(await page.$$eval('#filterAgeChips .fchip.on', e => e.length), 0, '3б-1: ценз снят');
+  assert.equal(await page.$$eval('#filterVenueChips .fchip.on', e => e.length), nV, '3б-1: площадки НЕ тронуты');
+  // площадка «снять все» → площадки 0, ценз всё ещё 0 (не восстановился)
+  await page.click('#venueClear');
+  await page.waitForTimeout(80);
+  assert.equal(await page.$$eval('#filterVenueChips .fchip.on', e => e.length), 0, '3б-2: площадки сняты');
+  assert.equal(await page.$$eval('#filterAgeChips .fchip.on', e => e.length), 0, '3б-2: ценз остался снятым');
+  // ценз «выбрать все» → ценз полный, площадки всё ещё 0
+  await page.click('#ageSelectAll');
+  await page.waitForTimeout(80);
+  assert.equal(await page.$$eval('#filterAgeChips .fchip.on', e => e.length), nA, '3б-3: ценз выбран весь');
+  assert.equal(await page.$$eval('#filterVenueChips .fchip.on', e => e.length), 0, '3б-3: площадки НЕ тронуты');
+  // применение вынесено в шапку: ✓ и ✕ в титлбаре, снизу кнопок нет
+  assert.equal(await page.$$eval('#filterSheet .filter-actions', e => e.length), 0, '3б-4: снизу нет блока Отмена/ОК');
+  assert.ok(await page.isVisible('#filterSheet .sheet-titlebar #filterApply.filter-apply-btn'), '3б-4: ✓ применить — в шапке');
+  assert.ok(await page.isVisible('#filterSheet .sheet-titlebar .icon-btn[data-close]'), '3б-4: ✕ отмена — в шапке');
+  // шапка sticky: при прокрутке тела ✓ остаётся на месте (position sticky)
+  const stickyOk = await page.$eval('#filterSheet .sheet-titlebar', el => getComputedStyle(el).position === 'sticky');
+  assert.ok(stickyOk, '3б-5: шапка модалки закреплена (sticky)');
+  // контраст: ссылка-действие, зелёная ✓ и ✕ — все на тёмном читаемы; тап ≥44
+  const meta = await page.evaluate(() => {
+    const lum = (r, g, b) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    const parse = s => s.match(/\d+(\.\d+)?/g).map(Number);
+    const contr = el => {
+      let bg = parse(getComputedStyle(el).backgroundColor), node = el;
+      while ((bg.length === 4 && bg[3] === 0) && node.parentElement) { node = node.parentElement; bg = parse(getComputedStyle(node).backgroundColor); }
+      const fg = parse(getComputedStyle(el).color).slice(0, 3);
+      const a = lum(...fg) + 0.05, b = lum(...bg.slice(0, 3)) + 0.05;
+      return +(Math.max(a, b) / Math.min(a, b)).toFixed(2);
+    };
+    const link = document.querySelector('.group-link');
+    const ok = document.querySelector('#filterApply');
+    const x = document.querySelector('#filterSheet .icon-btn[data-close]');
+    return { link: contr(link), linkH: link.getBoundingClientRect().height, apply: contr(ok), close: contr(x) };
+  });
+  assert.ok(meta.link >= 4.5, `3б-6: контраст ссылки ${meta.link} < 4.5`);
+  assert.ok(meta.apply >= 4.5, `3б-6: контраст ✓ ${meta.apply} < 4.5`);
+  assert.ok(meta.close >= 4.5, `3б-6: контраст ✕ ${meta.close} < 4.5`);
+  assert.ok(meta.linkH >= 44, `3б-7: тап-таргет ссылки ${meta.linkH}px < 44`);
+  await page.click('#filterSheet .icon-btn[data-close]'); // откат, не применяем
+  await page.waitForTimeout(150);
+  const linkMeta = { contrast: meta.link, h: meta.linkH };
+  assert.ok(await dotHidden(), '3б: после отмены фильтр не активен');
+  console.log(`✓ 3б. групповые действия изолированы; применение в шапке (sticky ✓/✕); ссылка ${linkMeta.contrast}:1, ${Math.round(linkMeta.h)}px`);
 
   // --- 4. Фильтр ценза 18+: деселект остальных, применяем
   await clickFilter();
@@ -172,7 +224,8 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   // --- 6. Пустой результат → «Ничего не найдено» + сброс
   await clickFilter();
   await page.waitForTimeout(150);
-  await page.click('#filterClear');
+  await page.click('#ageClear');
+  await page.click('#venueClear');
   await page.waitForTimeout(100);
   await chip('#filterAgeChips', EMPTY_AGE).click();
   await chip('#filterVenueChips', EMPTY_VENUE).click();
@@ -229,7 +282,8 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   // --- 10. Без фильтра — модалка как раньше (одна кнопка, всё)
   await clickFilter();
   await page.waitForTimeout(150);
-  await page.click('#filterSelectAll');
+  await page.click('#ageSelectAll');
+  await page.click('#venueSelectAll');
   await page.click('#filterApply');
   await page.waitForTimeout(200);
   assert.ok(await dotHidden(), 'после «выбрать все» фильтр неактивен');
@@ -305,7 +359,8 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   // ценз: снять все → под-строки событий пропадают, точки и метка остаются
   await page2.locator('.filter-chip-btn:visible').first().click();
   await page2.waitForTimeout(150);
-  await page2.click('#filterClear');
+  assert.ok(!(await page2.isVisible('#filterVenueBlock')), 'в «рядом» группа площадок скрыта');
+  await page2.click('#ageClear'); // в «рядом» только ценз
   await page2.click('#filterApply');
   await page2.waitForTimeout(400);
   const nb = await page2.$eval('#content', el => el.innerText);
