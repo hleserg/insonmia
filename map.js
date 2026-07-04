@@ -15,6 +15,7 @@ const GEO = {
   pointById: {},       // geo id -> {marker, point}
   highlight: null,
   selfMarker: null,
+  myCoord: null,       // последняя точка GPS для строки «мои координаты» + шаринга
   filters: null,       // Set включённых категорий
   nearby: { pos: null, posAt: 0, error: null, radius: 300 }, // watch — в core.createGeoWatcher
   mock: null,          // ?mockgeo=lat,lng
@@ -385,6 +386,8 @@ function renderMapView() {
     if (GEO.map) { GEO.map.invalidateSize(); applyMapFilters(); }
   });
   updatePinHint(); // подсказка «поставь метку», если своих меток ещё нет
+  $('#myCoordRow').classList.remove('hidden');
+  updateMyCoordRow(); // строка «мои координаты» (или «включить геолокацию»)
 }
 
 function hideMapView() {
@@ -736,6 +739,8 @@ function wirePinUI() {
     localStorage.setItem('insomnia.pinHintDismissed', '1');
     $('#mapPinHint').classList.add('hidden');
   });
+  $('#myCoordText').addEventListener('click', copyMyCoord);
+  $('#myCoordShare').addEventListener('click', shareMyCoord);
   $('#pinFromGps').addEventListener('click', async () => {
     if (await geoDenied()) { toast(geoErrorText({ code: 1 }), 8000); return; }
     try {
@@ -797,19 +802,81 @@ function getPosition() {
   });
 }
 
+function showSelfMarker(pos) {
+  if (!GEO.map) return;
+  if (GEO.selfMarker) GEO.selfMarker.remove();
+  GEO.selfMarker = L.marker([pos.lat, pos.lng], {
+    icon: L.divIcon({ className: 'geo-marker', html: '<div class="geo-self"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+  }).addTo(GEO.map);
+}
+
 async function locateMe() {
   if (await geoDenied()) { toast(geoErrorText({ code: 1 })); return; }
   try {
     const pos = await getPosition();
     if (!GEO.map) return;
-    if (GEO.selfMarker) GEO.selfMarker.remove();
-    GEO.selfMarker = L.marker([pos.lat, pos.lng], {
-      icon: L.divIcon({ className: 'geo-marker', html: '<div class="geo-self"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
-    }).addTo(GEO.map);
+    showSelfMarker(pos);
     GEO.map.setView([pos.lat, pos.lng], Math.max(GEO.map.getZoom(), 16));
+    GEO.myCoord = { lat: pos.lat, lng: pos.lng }; // питает строку «мои координаты»
+    updateMyCoordRow();
   } catch (err) {
     toast(geoErrorText(err), 8000); // текст длинный — даём время прочитать
   }
+}
+
+// строка «📍 мои координаты: lat, lng» + 🔗 (для потеряшек). Без фикса —
+// «включить геолокацию» (тап = запрос), 🔗 неактивна.
+function updateMyCoordRow() {
+  const txt = $('#myCoordText'), share = $('#myCoordShare');
+  if (!txt || !share) return;
+  if (GEO.myCoord) {
+    const { lat, lng } = GEO.myCoord;
+    txt.textContent = `📍 мои координаты: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    share.disabled = false;
+  } else {
+    txt.textContent = '📍 включить геолокацию';
+    share.disabled = true;
+  }
+}
+
+// тап по координатам копирует их (без буфера — показываем, чтобы переписать)
+async function copyMyCoord() {
+  if (!GEO.myCoord) { locateMe(); return; } // ещё нет фикса — «включить геолокацию»
+  const { lat, lng } = GEO.myCoord;
+  const line = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(line);
+      toast('> координаты скопированы'); return;
+    }
+  } catch { /* буфер недоступен */ }
+  toast(line, 6000);
+}
+
+// 🔗 «Я здесь»: navigator.share (текст + #pin=-диплинк + geo:), с фолбэком
+// в буфер (Huawei без сервисов Google share'а файлов не даёт — а текст даёт
+// не всегда, поэтому явный откат в буфер, затем в поле)
+async function shareMyCoord() {
+  if (!GEO.myCoord) return;
+  const { lat, lng } = GEO.myCoord;
+  const la = lat.toFixed(5), lo = lng.toFixed(5);
+  const url = pinUrl({ lat, lng, name: 'Я здесь', emoji: '📍' });
+  const text = `Я здесь: ${la}, ${lo}\n${url}\ngeo:${la},${lo}`;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Я здесь', text }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; /* сам отменил */ }
+    // share упал (нет сервисов) — падаем в буфер
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      toast('> координаты скопированы'); return;
+    }
+  } catch { /* буфер тоже недоступен */ }
+  hideAllSheets();
+  $('#pinImportText').value = text;
+  showSheet('#pinImport');
+  toast('Буфер недоступен — координаты в поле, скопируйте', 5000);
 }
 
 // сворачиваемая подсказка для «рядом» и карты; открытость переживает
