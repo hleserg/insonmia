@@ -306,8 +306,11 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   await page.waitForTimeout(200);
   assert.ok(await page.isVisible('#filterAgeBlock'), 'в «рядом» ценз есть');
   assert.ok(!(await page.isVisible('#filterVenueBlock')), 'в «рядом» локация скрыта');
+  // разделитель живёт внутри блока площадки → в «рядом» его тоже не видно
+  // (иначе висит сиротская полоска под группой ценза)
+  assert.ok(!(await page.isVisible('#filterSheet .filter-divider')), 'в «рядом» нет сиротского разделителя');
   await page.click('#filterSheet .icon-btn[data-close]');
-  console.log('✓ 11. «рядом» → воронка только по цензу');
+  console.log('✓ 11. «рядом» → воронка только по цензу, без сиротского разделителя');
 
   // --- 12. Память сессии: перезагрузка сбрасывает фильтры к «всё»
   await page.click('.tab[data-view="schedule"]');
