@@ -228,6 +228,49 @@ const SHARE_MOCK = () => {
   assert.ok(!(await page.isVisible('#programExport')), 'после выгрузки модалка закрыта');
   console.log('✓ вся программа:', fullN, 'VEVENT, 0 VALARM, один файл');
 
+  // --- 3c. Диагностика Web Share: панель показывает значения API ---
+  await page.click('#btnSettings');
+  await page.waitForTimeout(200);
+  await page.click('#btnShareDiag');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#diagPanel'), 'диаг-панель появилась');
+  const diagTxt = await page.evaluate(() => document.querySelector('#diagPanel pre').textContent);
+  assert.ok(/typeof navigator\.share:/.test(diagTxt) && /canShare\(\{files\}\):/.test(diagTxt), 'панель содержит ключевые значения: ' + JSON.stringify(diagTxt.slice(0, 120)));
+  await page.click('#diagPanel .btn'); // закрыть (или скопировать) — панель есть
+  await page.waitForTimeout(100);
+  await page.evaluate(() => { const p = document.getElementById('diagPanel'); if (p) p.remove(); });
+  await page.click('#settings .icon-btn[data-close]');
+  await page.waitForTimeout(150);
+  console.log('✓ диагностика: панель со значениями Web Share');
+
+  // --- 3d. Фолбэк БЕЗ navigator.share → скачивание + внятный тост (не немой) ---
+  {
+    const ctxN = await browser.newContext({ viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block', acceptDownloads: true });
+    await ctxN.addInitScript(STANDALONE);
+    await ctxN.addInitScript(() => { try { delete navigator.share; } catch {}; try { delete navigator.canShare; } catch {}; Object.defineProperty(navigator, 'share', { get: () => undefined, configurable: true }); });
+    const pN = await ctxN.newPage();
+    await pN.clock.install({ time: T });
+    await pN.goto(BASE + '/', { waitUntil: 'load' });
+    await pN.waitForTimeout(500);
+    await pN.click('.tab[data-view="schedule"]');
+    await pN.waitForTimeout(300);
+    await pN.locator('.event').first().locator('.fav-btn').click();
+    await pN.waitForTimeout(150);
+    await pN.click('.tab[data-view="favorites"]');
+    await pN.waitForTimeout(300);
+    const [dlN] = await Promise.all([
+      pN.waitForEvent('download'),
+      pN.click('#routeShare'),
+    ]);
+    await dlN.saveAs(path.join(os.tmpdir(), 'ics-noshare-' + Date.now() + '.ics'));
+    await pN.waitForTimeout(200);
+    const noShareToast = (await pN.evaluate(() => document.querySelector('#toast')?.textContent || '')).trim();
+    assert.ok(/недоступн/i.test(noShareToast) && /(буфер|скопирован|скачан)/i.test(noShareToast), 'фолбэк без share — внятный тост, не немой: ' + JSON.stringify(noShareToast));
+    console.log('✓ фолбэк без Web Share: скачивание +', JSON.stringify(noShareToast.slice(0, 60)));
+    await ctxN.close();
+  }
+  // сервер ещё жив — офлайн-часть ниже сама его убьёт
+
   // --- 4. ОФЛАЙН: убиваем сервер, генерация и скачивание всё равно работают ---
   killSrv();
   await page.waitForTimeout(300);
