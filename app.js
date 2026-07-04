@@ -666,7 +666,11 @@ function hideAllSheets() {
 // стек пуст → ничего не перехватываем (браузер уже ушёл назад / свернул PWA)
 window.addEventListener('popstate', () => {
   if (_histSelfPop > 0) { _histSelfPop--; return; } // наш программный откат — уже скрыли
-  if (_sheetStack.length) _hideSheetEl(_sheetStack[_sheetStack.length - 1]);
+  // popstate = одна израсходованная запись истории → снимаем ровно один слой со
+  // стека БЕЗУСЛОВНО (даже если элемент уже скрыт иным путём), чтобы стек модалок
+  // не рассинхронился с историей и «назад» не залипал холостыми нажатиями
+  const sel = _sheetStack.pop();
+  if (sel) { const el = $(sel); if (el) el.classList.add('hidden'); }
 });
 
 /* ---------- экспорт в календарь (.ics, всё офлайн на клиенте) ---------- */
@@ -945,11 +949,7 @@ function queryEmptyState(icon, prefix) {
   st.appendChild(b);
   return st;
 }
-// перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
-// иначе шиты наслаиваются и фокус уезжает в невидимое поле
-function hideAllSheets() { $$('.sheet').forEach(s => s.classList.add('hidden')); }
-
-/* ---------- favorites ---------- */
+//* ---------- favorites ---------- */
 function isStandalone() {
   // тот же детект, что и для установочной логики: PWA с главного экрана
   return window.matchMedia('(display-mode: standalone)').matches

@@ -105,12 +105,28 @@ const BASE = `http://127.0.0.1:${PORT}`;
   assert.equal(hByCross, hByBack, `крестик и «назад» → одинаковая история: ${hByCross} vs ${hByBack}`);
   console.log('✓ 6. крестик == «назад» (одинаковое состояние истории, без лишних записей)');
 
-  // --- 7. нет открытых модалок → «назад» ШТАТНО уходит из приложения
+  // --- 6b. переход через hideAllSheets+showSheet (как импорт/входящая метка) синхронен
+  await page.evaluate(() => { showSheet('#settings'); });
+  await page.waitForTimeout(120);
+  await page.evaluate(() => { hideAllSheets(); showSheet('#pinImport'); }); // один тик — как openPinImport
+  await page.waitForTimeout(150);
+  assert.ok(await vis('#pinImport') && !(await vis('#settings')), 'переход: импорт открыт, настройки закрыты');
+  await back();
+  assert.ok(!(await vis('#pinImport')), '«назад» закрыл импорт (переход не накопил лишнего)');
+  assert.ok(await alive(), 'после перехода живы');
+  console.log('✓ 6b. hideAllSheets+showSheet переход синхронен истории (флоу карты)');
+
+  // --- 7. Escape (hideAllSheets) НЕ оставляет фантом: без модалок «назад» ВЫХОДИТ
+  await page.click('.tab[data-view="schedule"]'); await page.waitForTimeout(200);
+  await page.click('.event'); await page.waitForTimeout(200);
+  assert.ok(await vis('#sheet'), 'событие открыто');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(220);
+  assert.ok(!(await vis('#sheet')), 'Escape (hideAllSheets) закрыл описание');
   assert.equal(await page.evaluate(() => document.querySelectorAll('.sheet:not(.hidden)').length), 0, 'модалок нет');
   await page.evaluate(() => history.back()); await page.waitForTimeout(300);
-  const leftApp = await page.evaluate(() => !document.querySelector('#tabs')); // ушли со страницы приложения
-  assert.ok(leftApp, 'без модалок «назад» покидает приложение (не перехватываем выход)');
-  console.log('✓ 7. нет модалок → «назад» штатно выходит (интерцепт не насильный)');
+  const leftApp = await page.evaluate(() => !document.querySelector('#tabs')); // ушли со страницы
+  assert.ok(leftApp, 'после Escape/hideAllSheets стек чист → «назад» ВЫХОДИТ (не холостое нажатие, не залипший фантом)');
+  console.log('✓ 7. hideAllSheets чистит стек — без модалок «назад» штатно выходит');
 
   // --- 8. офлайн: «назад» закрывает модалку без сети, приложение не конфликтует
   await boot(); // вернёмся в приложение
