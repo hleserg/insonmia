@@ -399,7 +399,7 @@ function renderFavorites(root) {
   const dis = favs.length ? '' : 'disabled title="Сначала добавьте события в избранное"';
   routeActions.innerHTML = `
     <button class="btn ghost" id="routeCal" ${dis}>📅 в календарь</button>
-    <button class="btn ghost" id="routeShare" ${dis}>🔗 поделиться</button>
+    <button class="btn ghost" id="routeShare" ${dis}>${window.InsomniaCore.shareIcon()} поделиться</button>
     <button class="btn ghost cal-dl" id="routeIcs" aria-label="Скачать весь маршрут .ics" ${dis}>⬇️</button>`;
   root.appendChild(routeActions);
   if (favs.length) {
@@ -584,7 +584,7 @@ function openDetail(id) {
     </div>
     <div class="detail-actions cal-row">
       <button class="btn ghost" id="detailCal" aria-label="Добавить в календарь">📅 в календарь</button>
-      <button class="btn ghost" id="detailShare" aria-label="Поделиться">🔗 поделиться</button>
+      <button class="btn ghost" id="detailShare" aria-label="Поделиться">${window.InsomniaCore.shareIcon()} поделиться</button>
       <button class="btn ghost cal-dl" id="detailIcs" aria-label="Скачать .ics">⬇️</button>
     </div>
   `;

@@ -515,7 +515,7 @@ function openPinCard(pin) {
     <div class="muted small">${(+pin.lat).toFixed(5)}, ${(+pin.lng).toFixed(5)}</div>
     ${window.InsomniaCore.pinOutsideFest(pin) ? '<div class="muted small">⚠️ далеко от поляны</div>' : ''}
     <div class="pin-actions">
-      <button class="btn" id="pinCardShare">поделиться</button>
+      <button class="btn" id="pinCardShare">${window.InsomniaCore.shareIcon()} поделиться</button>
       <button class="btn ghost" id="pinCardEdit">редактировать</button>
       <button class="btn ghost danger" id="pinCardDel">удалить</button>
     </div>`;
