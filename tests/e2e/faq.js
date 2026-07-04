@@ -34,15 +34,15 @@ const BASE = `http://127.0.0.1:${PORT}`;
   await page.click('.faq > summary');
   await page.waitForTimeout(150);
   const nQ = await page.$$eval('.faq-list > details', els => els.length);
-  assert.equal(nQ, 7, `в FAQ 7 вопросов, а не ${nQ}`);
+  assert.equal(nQ, 8, `в FAQ 8 вопросов, а не ${nQ}`);
   const qVisible = await page.$eval('.faq-list summary', el => el.offsetParent !== null);
   assert.ok(qVisible, 'после раскрытия вопросы видны');
   console.log(`✓ раскрывается, ${nQ} вопросов`);
 
   // 3. вопрос раскрывает ответ; ссылка на bitchat-гайд есть
-  await page.click('.faq-list details:nth-of-type(6) > summary'); // «поделиться местом лагеря»
+  await page.click('.faq-list details:nth-of-type(7) > summary'); // «поделиться местом лагеря»
   await page.waitForTimeout(120);
-  const ansTxt = await page.$eval('.faq-list details:nth-of-type(6) p', el => el.innerText);
+  const ansTxt = await page.$eval('.faq-list details:nth-of-type(7) p', el => el.innerText);
   assert.ok(ansTxt.length > 10, 'ответ раскрылся');
   const meshLink = await page.$('.faq-list a[href="mesh.html"]');
   assert.ok(meshLink, 'в FAQ есть ссылка на bitchat-гайд (mesh.html)');
@@ -62,7 +62,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
     return {
       head: contr(document.querySelector('.faq > summary')),
       q: contr(document.querySelector('.faq-list summary')),
-      a: contr(document.querySelector('.faq-list details:nth-of-type(6) p')),
+      a: contr(document.querySelector('.faq-list details:nth-of-type(7) p')),
     };
   });
   assert.ok(contrast.head >= 4.5, `контраст заголовка FAQ ${contrast.head} < 4.5`);

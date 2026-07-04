@@ -10,6 +10,7 @@ const GEO = {
   clusterGroup: null,  // L.MarkerClusterGroup — все точки-метки (кластеризация)
   searchLayers: [],    // зоны/метки, показанные поштучно под активный поиск
   pinMarkers: [],      // [{marker, pin}] — свои метки (для поиска по имени)
+  placeMode: false,    // «выбрать точкой на карте»: следующий тап ставит метку
   zoneById: {},        // geo id -> L.Polygon
   pointById: {},       // geo id -> {marker, point}
   highlight: null,
@@ -174,6 +175,12 @@ function ensureMap() {
 
   // лонгтап (contextmenu на тач-устройствах) — новая метка в этом месте
   map.on('contextmenu', (e) => openPinEditor({ lat: e.latlng.lat, lng: e.latlng.lng }));
+  // режим «выбрать точкой»: обычный тап ставит метку (иначе тап — как всегда)
+  map.on('click', (e) => {
+    if (!GEO.placeMode) return;
+    exitPlaceMode();
+    openPinEditor({ lat: e.latlng.lat, lng: e.latlng.lng });
+  });
 
   // Открываем на фестивальном ядре (медиана точек — устойчива к выбросам,
   // тогда как bbox-центр уезжает к дальним меткам и даёт «всё в комок»),
@@ -364,10 +371,31 @@ function renderMapView() {
     ensureMap();
     if (GEO.map) { GEO.map.invalidateSize(); applyMapFilters(); }
   });
+  updatePinHint(); // подсказка «поставь метку», если своих меток ещё нет
 }
 
 function hideMapView() {
   $('#mapWrap').classList.add('hidden');
+  exitPlaceMode(); // покидание карты сбрасывает режим «выбрать точкой»
+}
+
+// «выбрать точкой на карте»: следующий тап по карте ставит метку
+function enterPlaceMode() {
+  GEO.placeMode = true;
+  $('#mapPlaceHint').classList.remove('hidden');
+  if (GEO.map) L.DomUtil.addClass(GEO.map.getContainer(), 'placing');
+}
+function exitPlaceMode() {
+  GEO.placeMode = false;
+  const h = $('#mapPlaceHint'); if (h) h.classList.add('hidden');
+  if (GEO.map) L.DomUtil.removeClass(GEO.map.getContainer(), 'placing');
+}
+// подсказка внизу карты, пока у пользователя НЕТ своих меток (и не закрыта)
+function updatePinHint() {
+  const el = $('#mapPinHint');
+  if (!el) return;
+  const dismissed = localStorage.getItem('insomnia.pinHintDismissed') === '1';
+  el.classList.toggle('hidden', !((state.pins || []).length === 0 && !dismissed));
 }
 
 function buildMapChips() {
@@ -459,6 +487,7 @@ function pinsChanged() {
   // группа «мои» снята с карты — clearLayers в drawPins не убирает их с самой
   // карты. Пере-применяем фильтры, чтобы удалённая/правленая метка не залипла.
   else if (state.view === 'map' && GEO.map) applyMapFilters();
+  updatePinHint(); // появилась первая метка → подсказка уходит (и наоборот)
 }
 
 function openPinCard(pin) {
@@ -674,7 +703,24 @@ function wirePinUI() {
     b.addEventListener('click', () => selectPinEmoji(e));
     row.appendChild(b);
   });
-  $('#btnAddPin').addEventListener('click', () => openPinEditor(null));
+  // ➕ теперь открывает МЕНЮ способов (обнаруживаемо), а не сразу форму.
+  // Лонгтап по карте остаётся быстрым путём для знающих.
+  $('#btnAddPin').addEventListener('click', () => showSheet('#pinAddMenu'));
+  $('#pinAddCoords').addEventListener('click', () => { hideSheet('#pinAddMenu'); openPinEditor(null); });
+  $('#pinAddGps').addEventListener('click', async () => {
+    hideSheet('#pinAddMenu');
+    if (await geoDenied()) { toast(geoErrorText({ code: 1 }), 8000); return; }
+    try {
+      const pos = await getPosition();
+      openPinEditor({ lat: pos.lat, lng: pos.lng });
+    } catch (err) { toast(geoErrorText(err), 8000); }
+  });
+  $('#pinAddTap').addEventListener('click', () => { hideSheet('#pinAddMenu'); enterPlaceMode(); });
+  $('#mapPlaceCancel').addEventListener('click', exitPlaceMode);
+  $('#mapPinHintClose').addEventListener('click', () => {
+    localStorage.setItem('insomnia.pinHintDismissed', '1');
+    $('#mapPinHint').classList.add('hidden');
+  });
   $('#pinFromGps').addEventListener('click', async () => {
     if (await geoDenied()) { toast(geoErrorText({ code: 1 }), 8000); return; }
     try {

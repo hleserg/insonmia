@@ -91,8 +91,16 @@
     <div id="mapStatus" class="muted small" style="padding:0 14px;"></div>
     <div class="map-stage">
       <div id="leafletMap"></div>
+      <div id="mapPlaceHint" class="map-place-hint hidden">
+        <span>👆 коснитесь карты, где поставить метку</span>
+        <button id="mapPlaceCancel" class="place-cancel">отмена</button>
+      </div>
       <button id="btnAddPin" class="icon-btn pin-add-btn" title="новая метка" aria-label="новая метка">➕</button>
       <button id="btnLocate" class="icon-btn locate-btn" title="я где?" aria-label="я где?">🎯</button>
+      <div id="mapPinHint" class="map-pin-hint hidden">
+        <span>💡 Зажмите карту или нажмите ➕, чтобы поставить свою метку (лагерь, машина, точка встречи)</span>
+        <button id="mapPinHintClose" class="icon-btn" aria-label="Скрыть подсказку">✕</button>
+      </div>
     </div>
   </div>
 
@@ -161,6 +169,10 @@
               <details>
                 <summary>Не работает геолокация / «рядом» пустой?</summary>
                 <p>Включи геолокацию и дай доступ приложению. На открытой поляне GPS ловит до пары минут — подожди под небом. Яндекс Браузер капризен с гео — надёжнее открыть в Chrome.</p>
+              </details>
+              <details>
+                <summary>Как поставить свою метку на карте?</summary>
+                <p>На вкладке <b>«Карта»</b> нажми <b>➕</b> (справа) и выбери способ: по GPS, точкой на карте или ввести координаты. Ещё быстрее — <b>зажми</b> нужное место пальцем. Метку можно назвать (лагерь / машина / точка встречи) и поделиться ссылкой — у друга добавится в один тап.</p>
               </details>
               <details>
                 <summary>Как поделиться местом лагеря?</summary>
@@ -326,6 +338,25 @@
           <button id="programExportGo" class="btn">Выгрузить всё</button>
           <button id="programExportFiltered" class="btn hidden">Только отфильтрованные</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Меню способов поставить метку (по тапу ➕) -->
+  <div id="pinAddMenu" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/метки/добавить</div>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
+      </div>
+      <div class="sheet-body pin-add-menu">
+        <p class="muted small">Своя метка — лагерь, машина, точка встречи. Как поставить:</p>
+        <button id="pinAddGps" class="btn">📡 в моём месте (по GPS)</button>
+        <button id="pinAddTap" class="btn ghost">👆 выбрать точкой на карте</button>
+        <button id="pinAddCoords" class="btn ghost">⌨️ ввести координаты</button>
+        <p class="muted small">Ещё быстрее — зажать нужное место на карте пальцем.</p>
       </div>
     </div>
   </div>
