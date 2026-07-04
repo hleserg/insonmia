@@ -284,10 +284,11 @@
           <li>напоминания <b>не будут включены</b> — событий слишком много, поставьте их сами на то, что выберете;</li>
           <li>при изменениях в программе события в календаре <b>не обновятся</b> автоматически — это разовый снимок.</li>
         </ul>
-        <div class="detail-actions">
+        <!-- отмена — крестик в шапке; внизу только две зелёные кнопки выбора
+             (в ряд, на узких экранах в столбик, чтобы подписи не резались) -->
+        <div class="detail-actions program-export-actions">
           <button id="programExportGo" class="btn">Выгрузить всё</button>
           <button id="programExportFiltered" class="btn hidden">Только отфильтрованные</button>
-          <button class="btn ghost" data-close>Отмена</button>
         </div>
       </div>
     </div>

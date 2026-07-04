@@ -357,8 +357,17 @@ button { font-family: inherit; cursor: pointer; }
 .detail-actions.cal-row .btn { padding-left: 8px; padding-right: 8px; font-size: 0.82rem; }
 .detail-actions.cal-row .cal-dl { flex: 0 0 auto; width: auto; padding-left: 16px; padding-right: 16px; }
 /* «вся программа в календарь» — над списком в разделе «Программа» */
-.program-export { margin: 2px 0 10px; }
+.program-export { margin: 2px 0 10px; display: flex; gap: 10px; }
 .program-export .btn { margin-top: 0; }
+.program-export #btnProgramExport { flex: 1; }
+.program-export .cal-dl { flex: 0 0 auto; width: auto; padding-left: 16px; padding-right: 16px; }
+/* низ модалки «вся программа»: две зелёные кнопки в ряд, на узких — в столбик
+   (двухэтажные подписи «Только отфильтрованные (112)» не режутся) */
+.program-export-actions { flex-wrap: wrap; }
+.program-export-actions .btn { flex: 1 1 100%; }
+@media (min-width: 400px) {
+  .program-export-actions .btn { flex: 1 1 0; }
+}
 .warn-list { margin: 8px 0 4px; padding-left: 20px; }
 .warn-list li { margin-bottom: 8px; line-height: 1.4; }
 #installedNote { color: var(--green); font-family: var(--mono); }

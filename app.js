@@ -351,8 +351,11 @@ function renderSchedule(root) {
   // предупредит); показываем всегда в «Программе», даже если день пуст
   const progExport = document.createElement('div');
   progExport.className = 'program-export';
-  progExport.innerHTML = `<button class="btn ghost" id="btnProgramExport" aria-label="Выгрузить всю программу в календарь">📅 вся программа в календарь</button>`;
-  progExport.querySelector('#btnProgramExport').addEventListener('click', openProgramExport);
+  progExport.innerHTML = `
+    <button class="btn ghost" id="btnProgramExport" aria-label="Выгрузить всю программу в календарь">📅 вся программа в календарь</button>
+    <button class="btn ghost cal-dl" id="btnProgramDownload" aria-label="Скачать всю программу .ics">⬇️</button>`;
+  progExport.querySelector('#btnProgramExport').addEventListener('click', () => openProgramExport('calendar'));
+  progExport.querySelector('#btnProgramDownload').addEventListener('click', () => openProgramExport('download'));
   root.appendChild(progExport);
 
   const evs = filteredEvents()
@@ -735,7 +738,11 @@ async function fallbackDownload(blob, filename, shareText, why) {
 function funnelFilteredAll() {
   return (state.program.events || []).filter(e => e._startMs != null && passesFilters(e));
 }
-function openProgramExport() {
+// режим финального действия модалки: 'calendar' (share/открыть в календаре)
+// или 'download' (принудительно скачать .ics). Тексты/развилка кнопок общие.
+let programExportMode = 'calendar';
+function openProgramExport(mode) {
+  programExportMode = mode === 'download' ? 'download' : 'calendar';
   const active = anyFilterActive();
   const all = (state.program.events || []).filter(e => e._startMs != null);
   const filtered = active ? all.filter(passesFilters) : all;
@@ -757,7 +764,10 @@ async function doProgramExport(filteredOnly) {
   let list = (state.program.events || []).filter(e => e._startMs != null);
   if (filteredOnly) list = list.filter(passesFilters);
   if (!list.length) { toast('Нет событий для выгрузки'); return; }
-  await exportICS(list, filteredOnly ? 'insomnia-filtered.ics' : 'insomnia-full-program.ics', { withAlarm: false });
+  // формат/UID одинаковы; различается лишь финальный экшен — календарь
+  // (share) или принудительное скачивание. Полная выгрузка — без VALARM.
+  await exportICS(list, filteredOnly ? 'insomnia-filtered.ics' : 'insomnia-full-program.ics',
+    { withAlarm: false, forceDownload: programExportMode === 'download' });
 }
 
 /* ---------- модалка фильтров ----------
