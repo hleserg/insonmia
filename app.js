@@ -344,11 +344,13 @@ function renderFavorites(root) {
   routeActions.className = 'route-actions';
   const dis = favs.length ? '' : 'disabled title="Сначала добавьте события в избранное"';
   routeActions.innerHTML = `
-    <button class="btn ghost" id="routeCal" ${dis}>📅 Весь маршрут в календарь</button>
-    <button class="btn ghost cal-dl" id="routeIcs" aria-label="Скачать всё .ics" ${dis}>⬇️</button>`;
+    <button class="btn ghost" id="routeCal" ${dis}>📅 в календарь</button>
+    <button class="btn ghost" id="routeShare" ${dis}>🔗 поделиться</button>
+    <button class="btn ghost cal-dl" id="routeIcs" aria-label="Скачать весь маршрут .ics" ${dis}>⬇️</button>`;
   root.appendChild(routeActions);
   if (favs.length) {
     routeActions.querySelector('#routeCal').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics'));
+    routeActions.querySelector('#routeShare').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics', { shareText: routeShareText(favs) }));
     routeActions.querySelector('#routeIcs').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics', { forceDownload: true }));
   }
 
@@ -569,6 +571,29 @@ function eventShareText(e) {
   return parts.join('\n');
 }
 
+// самодостаточный список маршрута для «🔗 поделиться маршрутом»:
+// сгруппирован по фестивальным дням (_festDay из core), сорт по времени;
+// ночные события (02:00) идут под своим фест-днём с маркером 🌙
+function routeShareText(events) {
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+  const pad = n => String(n).padStart(2, '0');
+  const evs = (events || []).filter(e => e._startMs != null).slice().sort(sortByStart);
+  const lines = ['🌙 Мой маршрут на Бессоннице', ''];
+  let lastDay = null;
+  evs.forEach(e => {
+    if (e._festDay !== lastDay) {
+      lastDay = e._festDay;
+      const p = dayParts(e._festDay);
+      lines.push(`${cap(WD[p.dow])} ${pad(p.day)}.${pad(p.mo + 1)}`);
+    }
+    const night = typeof nightInfo === 'function' ? nightInfo(e) : null;
+    const venue = e.venue ? ` — ${e.venue}` : '';
+    lines.push(`• ${e.start}${night ? ' 🌙' : ''} ${e.title}${venue}`);
+  });
+  lines.push('', 'Сгенерено в приложении программы феста');
+  return lines.join('\n');
+}
+
 async function exportICS(events, filename, opts = {}) {
   // forceDownload — принудительно качать; shareText — «поделиться» с текстом;
   // withAlarm — ставить ли VALARM (false для полной выгрузки программы)
@@ -608,6 +633,14 @@ async function exportICS(events, filename, opts = {}) {
   //    На части устройств (Huawei и др.) шэр файлов не поддержан — тогда
   //    сюда попадает и кнопка «в календарь»; подсказываем, что делать дальше
   downloadBlob(blob, filename);
+  // «поделиться» без Web Share: кладём текст в буфер, чтобы вставить в чат
+  if (shareText && navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      toast('Текст скопирован в буфер, файл .ics скачан', 4000);
+      return;
+    } catch { /* буфер недоступен — обычная подсказка ниже */ }
+  }
   toast('Файл скачан — откройте его, чтобы добавить в календарь', 4000);
 }
 
