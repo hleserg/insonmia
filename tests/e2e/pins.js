@@ -30,6 +30,7 @@ const serverOn = () => { server = spawn('python3', ['-m', 'http.server', String(
   await page.click('.tab[data-view="map"]');
   await page.waitForTimeout(900);
   await page.click('#btnAddPin');
+  await page.click('#pinAddCoords'); // ➕ теперь открывает меню способов
   await page.fill('#pinName', 'Наш лагерь');
   await page.fill('#pinCoords', '54,68120 35,09110');
   await page.click('#pinEmojiRow button[data-emoji="⛺"]');
@@ -100,6 +101,7 @@ const serverOn = () => { server = spawn('python3', ['-m', 'http.server', String(
 
   // 7. повторное имя обновляет, не дублирует (через ту же форму)
   await page.click('#btnAddPin');
+  await page.click('#pinAddCoords'); // ➕ теперь открывает меню способов
   await page.fill('#pinName', 'наш лагерь'); // другой регистр
   await page.fill('#pinCoords', '54.68800, 35.08000');
   await page.click('#pinEmojiRow button[data-emoji="🔥"]');
@@ -138,6 +140,7 @@ const serverOn = () => { server = spawn('python3', ['-m', 'http.server', String(
 
   // 10. переполнение вёрстки на 360px с открытым редактором
   await page.click('#btnAddPin').catch(() => {});
+  await page.click('#pinAddCoords').catch(() => {}); // меню → форма
   const over = await page.evaluate(() => document.documentElement.scrollWidth > 362);
   assert.ok(!over, 'горизонтальный перелив 360px');
   console.log('10. 360px: OK');
