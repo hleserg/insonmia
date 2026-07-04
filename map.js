@@ -544,9 +544,7 @@ function sharePin(pin) {
   copy.then(() => toast('> ссылка на метку скопирована'))
     .catch(() => {
       // буфер недоступен — отдаём ссылку в выделяемое поле, не в тост
-      hideAllSheets();
-      $('#pinImportText').value = url;
-      showSheet('#pinImport');
+      showTextInImportField(url);
       toast('Буфер недоступен — ссылка в поле, скопируйте руками', 5000);
     });
 }
@@ -652,9 +650,7 @@ function exportPinsLine() {
     ? navigator.clipboard.writeText(line) : Promise.reject();
   copy.then(() => toast(`> ${pins.length} мет. одной строкой — в буфере`))
     .catch(() => {
-      hideAllSheets();
-      $('#pinImportText').value = line;
-      showSheet('#pinImport');
+      showTextInImportField(line);
       toast('Буфер недоступен — строка в поле импорта, скопируйте руками', 5000);
     });
 }
@@ -790,7 +786,7 @@ async function geoDenied() {
   } catch { return false; }
 }
 
-function getPosition() {
+function getPosition(opts) {
   return new Promise((resolve, reject) => {
     if (GEO.mock) return resolve(GEO.mock);
     if (!navigator.geolocation) return reject({ code: 2 });
@@ -798,7 +794,7 @@ function getPosition() {
       pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       err => reject(err),
       // GPS, не сетевое определение — оно без интернета не работает
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000, ...(opts || {}) });
   });
 }
 
@@ -824,14 +820,24 @@ async function locateMe() {
   }
 }
 
+// «свежая известная» позиция для строки: свой фикс (🎯), а если его нет —
+// недавний фикс из «Рядом» (тот же прибор уже знает координаты; без этого
+// строка врала бы «включить геолокацию» после перехода с «Рядом»)
+function bestKnownPos() {
+  if (GEO.myCoord) return GEO.myCoord;
+  if (GEO.nearby.pos && Date.now() - GEO.nearby.posAt < POS_FRESH_MS) return GEO.nearby.pos;
+  return null;
+}
+
 // строка «📍 мои координаты: lat, lng» + 🔗 (для потеряшек). Без фикса —
 // «включить геолокацию» (тап = запрос), 🔗 неактивна.
 function updateMyCoordRow() {
   const txt = $('#myCoordText'), share = $('#myCoordShare');
   if (!txt || !share) return;
-  if (GEO.myCoord) {
-    const { lat, lng } = GEO.myCoord;
-    txt.textContent = `📍 мои координаты: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  const pos = bestKnownPos();
+  if (pos) {
+    if (!GEO.myCoord) GEO.myCoord = { lat: pos.lat, lng: pos.lng }; // засеяли из «Рядом»
+    txt.textContent = `📍 мои координаты: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
     share.disabled = false;
   } else {
     txt.textContent = '📍 включить геолокацию';
@@ -839,11 +845,31 @@ function updateMyCoordRow() {
   }
 }
 
-// тап по координатам копирует их (без буфера — показываем, чтобы переписать)
+// фикс протух/отозван — честно гасим строку (не делимся мёртвой точкой)
+function invalidateMyCoord() {
+  GEO.myCoord = null;
+  if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+  updateMyCoordRow();
+}
+
+// СВЕЖИЙ фикс под действие (потеряшка ушёл от места первого 🎯 — «Я здесь»
+// обязано быть текущим). getPosition с maximumAge:30с отдаёт недавний мгновенно,
+// иначе берёт новый; при провале — инвалидируем, чтобы 🔗 не врала старой точкой.
+async function freshPosForAction() {
+  if (await geoDenied()) { invalidateMyCoord(); throw { code: 1 }; }
+  const pos = await getPosition({ maximumAge: 0 }); // без кэша — «Я здесь» = сейчас
+  GEO.myCoord = { lat: pos.lat, lng: pos.lng };
+  showSelfMarker(pos);
+  updateMyCoordRow();
+  return GEO.myCoord;
+}
+
+// тап по координатам копирует СВЕЖИЕ координаты (без буфера — показываем тостом)
 async function copyMyCoord() {
-  if (!GEO.myCoord) { locateMe(); return; } // ещё нет фикса — «включить геолокацию»
-  const { lat, lng } = GEO.myCoord;
-  const line = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  let pos;
+  try { pos = await freshPosForAction(); }
+  catch (err) { toast(geoErrorText(err), 8000); return; }
+  const line = `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(line);
@@ -853,14 +879,26 @@ async function copyMyCoord() {
   toast(line, 6000);
 }
 
-// 🔗 «Я здесь»: navigator.share (текст + #pin=-диплинк + geo:), с фолбэком
-// в буфер (Huawei без GMS share'а файлов не даёт — а текст даёт не всегда,
-// поэтому явный откат в буфер, затем в поле)
+// показать текст в поле импорта как «скопируйте руками» — со ЧИСТЫМ стейтом,
+// иначе остаётся превью/активная кнопка «добавить всё» от прошлого импорта
+// и лист-заглушка втихую превращается в живой импортёр
+function showTextInImportField(text) {
+  hideAllSheets();
+  $('#pinImportText').value = text;
+  $('#pinImportPreview').textContent = '';
+  $('#pinImportApply').classList.add('hidden');
+  showSheet('#pinImport');
+}
+
+// 🔗 «Я здесь»: СВЕЖИЙ фикс → navigator.share (текст + #pin=-диплинк + geo:),
+// с фолбэком в буфер (Huawei без GMS share'а файлов не даёт — а текст даёт не
+// всегда), затем в поле. Провал фикса — не делимся старой точкой, честный тост.
 async function shareMyCoord() {
-  if (!GEO.myCoord) return;
-  const { lat, lng } = GEO.myCoord;
-  const la = lat.toFixed(5), lo = lng.toFixed(5);
-  const url = pinUrl({ lat, lng, name: 'Я здесь', emoji: '📍' });
+  let pos;
+  try { pos = await freshPosForAction(); }
+  catch (err) { toast(geoErrorText(err), 8000); return; }
+  const la = pos.lat.toFixed(5), lo = pos.lng.toFixed(5);
+  const url = pinUrl({ lat: pos.lat, lng: pos.lng, name: 'Я здесь', emoji: '📍' });
   const text = `Я здесь: ${la}, ${lo}\n${url}\ngeo:${la},${lo}`;
   if (navigator.share) {
     try { await navigator.share({ title: 'Я здесь', text }); return; }
@@ -873,9 +911,7 @@ async function shareMyCoord() {
       toast('> координаты скопированы'); return;
     }
   } catch { /* буфер тоже недоступен */ }
-  hideAllSheets();
-  $('#pinImportText').value = text;
-  showSheet('#pinImport');
+  showTextInImportField(text);
   toast('Буфер недоступен — координаты в поле, скопируйте', 5000);
 }
 

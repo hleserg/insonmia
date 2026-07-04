@@ -63,6 +63,35 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   assert.ok(decodeURIComponent(clipShare).includes('Я здесь'), 'имя «Я здесь» в диплинке');
   console.log('✓ 4. 🔗 → буфер (Huawei-фолбэк): текст + #pin= + geo:');
 
+  // --- 4b. потеряшка ушёл: сместились → 🔗 шлёт СВЕЖИЕ координаты, не первый фикс
+  const MOVED = { latitude: 54.69111, longitude: 35.10222 };
+  await ctx.setGeolocation(MOVED);
+  await page.click('#myCoordShare');
+  await page.waitForTimeout(300);
+  const clipMoved = await page.evaluate(() => navigator.clipboard.readText());
+  assert.ok(/Я здесь:\s*54\.691\d*,\s*35\.102\d*/.test(clipMoved), 'после смещения шлёт новую точку: ' + clipMoved);
+  assert.ok(!clipMoved.includes('54.680'), 'старый фикс не протёк в шаринг: ' + clipMoved);
+  const rowMoved = await page.textContent('#myCoordText');
+  assert.match(rowMoved, /54\.691/, 'строка тоже обновилась на свежую: ' + rowMoved);
+  console.log('✓ 4b. смещение → 🔗 и строка отдают СВЕЖИЕ координаты (не залипший фикс)');
+
+  // --- 4c. фолбэк-поле шаринга чистит превью/кнопку от прошлого импорта
+  const clean = await page.evaluate(() => {
+    document.querySelector('#pinImportPreview').textContent = 'СТАРОЕ ПРЕВЬЮ';
+    document.querySelector('#pinImportApply').classList.remove('hidden');
+    showTextInImportField('Я здесь: тест');
+    return {
+      preview: document.querySelector('#pinImportPreview').textContent,
+      applyHidden: document.querySelector('#pinImportApply').classList.contains('hidden'),
+    };
+  });
+  assert.equal(clean.preview, '', 'превью от прошлого импорта очищено');
+  assert.ok(clean.applyHidden, 'кнопка «добавить всё» скрыта в поле-заглушке');
+  await page.click('#pinImport .sheet-titlebar .icon-btn[data-close]').catch(() => {});
+  await page.waitForTimeout(150);
+  console.log('✓ 4c. фолбэк-поле шаринга без залипшего превью/импорта');
+  await ctx.setGeolocation(PT); // вернём исходную точку для остальных сценариев
+
   // --- 5. открытие этого же #pin= офлайн → входящая точка «Я здесь»
   const hash = clipShare.split('\n').find(l => l.includes('#pin='));
   await page.goto(hash, { waitUntil: 'load' });
