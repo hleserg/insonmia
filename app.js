@@ -16,6 +16,7 @@ const LS = {
   pins: 'insomnia.pins',            // пользовательские метки на карте
   installBarHidden: 'insomnia.installBarHidden', // ✕ на плашке установки
   offlineReadyShown: 'insomnia.offlineReadyShown', // тост «офлайн готов» — один раз
+  installPinged: 'insomnia.install_pinged', // пинг «установили» в телеграм — один раз
 };
 
 const state = {
@@ -1626,7 +1627,28 @@ window.addEventListener('appinstalled', () => {
   if (h) { h.textContent = 'Установлено ✅ Откройте приложение с главного экрана.'; h.classList.remove('hidden'); }
   toast('> установлено. Откройте с главного экрана 🎉', 6000);
   if (DEV) console.log('[install] appinstalled');
+  pingInstall(); // тихий счётчик установок в телеграм (если настроен)
 });
+
+// Одноразовый пинг «установили» в телеграм через мусорный бот. Токен и чат —
+// НЕ в репозитории: их подставляет CI из секретов в config.js (window.APP_CONFIG),
+// которого локально/в тестах нет → пинг молча выключен. Офлайн/ошибка — не беда:
+// флаг ставим только по факту успешной отправки, чтобы не потерять и не спамить.
+function pingInstall() {
+  try {
+    if (localStorage.getItem(LS.installPinged) === '1') return;
+    const tg = (window.APP_CONFIG || {}).tg;
+    if (!tg || !tg.token || !tg.chat) return; // не настроено — тихо выходим
+    const when = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const text = `📲 «Бессонница 2026» установлена — ${when} UTC`;
+    fetch(`https://api.telegram.org/bot${tg.token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: tg.chat, text }),
+    }).then(res => { if (res && res.ok) localStorage.setItem(LS.installPinged, '1'); })
+      .catch(() => { /* офлайн — appinstalled не повторится, но и спама не будет */ });
+  } catch { /* приватный режим/localStorage недоступен — не критично */ }
+}
 
 /* ---------- event wiring ---------- */
 function wireUI() {

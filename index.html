@@ -434,6 +434,8 @@
   <script src="vendor/leaflet.js" defer></script>
   <script src="vendor/leaflet.markercluster.js" defer></script>
   <script src="map.js" defer></script>
+  <!-- inject:config — CI подставит сюда <script src="config.js" defer> из секретов;
+       локально/в тестах строки нет → window.APP_CONFIG нет → пинг молча выключен -->
   <script src="app.js" defer></script>
 </body>
 </html>

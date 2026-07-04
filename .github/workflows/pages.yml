@@ -1,0 +1,57 @@
+# Публикация PWA на GitHub Pages ЧЕРЕЗ Actions (Settings → Pages → Source:
+# «GitHub Actions»). Смысл именно в этом workflow: он на лету собирает config.js
+# из секретов TG_BOT_TOKEN/TG_CHAT_ID и подставляет <script src="config.js"> в
+# index.html — токен мусорного бота в репозиторий не попадает. Нет секретов →
+# config.js не создаётся, строка не вставляется, пинг «установили» молча выключен.
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# один активный деплой; не отменяем уже идущий (иначе половинчатая публикация)
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать config.js из секретов (если заданы)
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+            # значения не эхоим (GitHub их маскирует, но файл всё равно публичный —
+            # это осознанно: мусорный бот, при абьюзе просто пересоздаётся)
+            printf 'window.APP_CONFIG = { tg: { token: "%s", chat: "%s" } };\n' \
+              "$TG_BOT_TOKEN" "$TG_CHAT_ID" > config.js
+            # вставляем загрузку config.js ПЕРЕД app.js (порядок: APP_CONFIG готов
+            # до исполнения app.js). Чистый checkout — вставка ровно одна.
+            sed -i 's#<script src="app.js" defer></script>#<script src="config.js" defer></script>\n  <script src="app.js" defer></script>#' index.html
+            echo "config.js собран и подключён (пинг включён)"
+          else
+            echo "секреты TG_* не заданы — config.js не создаётся, пинг выключен"
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
