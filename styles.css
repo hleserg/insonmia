@@ -145,7 +145,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .day-btn .dow { color: var(--muted); font-size: 0.7rem; }
 .day-btn.active { background: var(--green); color: #04260f; border-color: var(--green); font-weight: 700; }
-.day-btn.active .dow { color: #0b4f22; }
+.day-btn.active .dow { color: #04260f; } /* был #0b4f22 — 3.83:1 на зелёном; теперь как основная подпись */
 .chip-row { display: flex; gap: 8px; overflow-x: auto; padding: 6px 14px 4px; scrollbar-width: none; }
 .chip-row::-webkit-scrollbar { display: none; }
 .chip {
@@ -269,10 +269,12 @@ button { font-family: inherit; cursor: pointer; }
 .detail-meta .tag {
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
   padding: 4px 10px; font-size: 0.8rem; font-family: var(--mono);
+  color: var(--text); /* явно: <button class="tag"> иначе берёт тёмный UA-цвет */
 }
-.detail-meta a.tag {
+/* «на карте» — кнопка-действие: зелёная как ссылка, читаемый тап-таргет */
+.detail-meta a.tag, .detail-meta button.tag {
   color: var(--green); text-decoration: none; border-color: var(--green-dim);
-  padding: 10px 12px; /* ссылка — тап-таргет, обычные теги остаются компактными */
+  padding: 10px 12px; cursor: pointer; /* ссылка/кнопка — тап-таргет */
 }
 .detail-desc { font-size: 0.95rem; line-height: 1.55; white-space: pre-wrap; }
 .detail-section { margin-top: 14px; }

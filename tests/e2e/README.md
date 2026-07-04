@@ -16,6 +16,7 @@ node tests/e2e/subpath.js       # подпуть /insonmia/: 0 запросов 
 node tests/e2e/search.js        # поиск по всей программе: находит событие с другого дня, заглушённая полоса дат, очистка
 node tests/e2e/map-bulk-filters.js  # «☑ все»/«☐ ничего» на карте: одни туалеты одним тапом, «все» включает всё, выбор живёт между вкладками
 node tests/e2e/ics-export.js    # экспорт в календарь: три кнопки (📅/🔗/⬇️), выбранное время VALARM, «весь маршрут», ВСЯ программа (модалка+без VALARM), ОФЛАЙН
+node tests/e2e/contrast.js      # контраст ВСЕХ текстовых элементов во всех видах/шитах ≥4.5:1 (WCAG AA); печатает таблицу и floor
 ```
 
 Локально нужен Playwright: `npm i -D playwright && npx playwright install chromium`.
