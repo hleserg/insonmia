@@ -415,8 +415,11 @@ function renderFavorites(root) {
 
   // Поиск фильтрует СПИСОК избранного (кнопки маршрута выше работают по
   // всему избранному — поиск сужает вид, а не сам маршрут).
+  // ВАЖНО: «не найдено по запросу» — только когда живые избранные ЕСТЬ, но
+  // запрос их скрыл. Если живых нет вовсе (все осиротели после обновления
+  // данных), запрос ни при чём — проваливаемся ниже к плашке-сироте.
   const shown = state.query ? favs.filter(e => eventMatchesQuery(e, nQuery())) : favs;
-  if (state.query && !shown.length) {
+  if (state.query && favs.length && !shown.length) {
     root.appendChild(queryEmptyState('🔍', 'В избранном ничего не найдено'));
     return;
   }

@@ -455,6 +455,10 @@ function pinsChanged() {
   drawPins();
   updatePinsInfo();
   if (state.view === 'nearby') render();
+  // На карте при активном поиске метки добавлены поштучно (searchLayers), а
+  // группа «мои» снята с карты — clearLayers в drawPins не убирает их с самой
+  // карты. Пере-применяем фильтры, чтобы удалённая/правленая метка не залипла.
+  else if (state.view === 'map' && GEO.map) applyMapFilters();
 }
 
 function openPinCard(pin) {

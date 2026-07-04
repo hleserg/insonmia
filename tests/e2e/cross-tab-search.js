@@ -143,11 +143,78 @@ const STANDALONE = () => {
     'воронка сужает результат поиска (И)');
   console.log('✓ 6. поиск ∧ воронка = пересечение');
 
+  // --- 9. Длинный слитный запрос не рвёт ширину на 360px (overflow-wrap)
+  await page.click('#btnSearchClose');
+  await page.click('.tab[data-view="schedule"]');
+  await page.click('#btnSearch');
+  await type('фывапролджэ' + 'ячсмить'.repeat(4)); // ~40 символов без пробелов
+  const oflowSched = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  await page.click('.tab[data-view="map"]');
+  await page.waitForTimeout(900);
+  const oflowMap = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(oflowSched <= 1, 'длинный запрос не даёт гор. overflow в списке: ' + oflowSched);
+  assert.ok(oflowMap <= 1, 'длинный запрос не даёт гор. overflow на карте: ' + oflowMap);
+  console.log('✓ 9. длинный слитный запрос не рвёт ширину (360px)');
+  await page.click('#btnSearchClose');
+
   // --- 8. Офлайн: ни одного внешнего запроса за весь сценарий
   assert.equal(external.length, 0, 'внешних запросов не было (офлайн): ' + JSON.stringify(external.slice(0, 3)));
   console.log('✓ 8. всё офлайн — ноль внешних запросов');
+  await ctx.close();
 
-  await ctx.close(); await browser.close();
+  // === фиксы verify: осиротевшее избранное + фантом метки на карте ===
+  const ctx2 = await browser.newContext({ viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block' });
+  await ctx2.addInitScript(STANDALONE);
+  await ctx2.addInitScript(() => {
+    localStorage.setItem('insomnia.favs', JSON.stringify(['deadfav0']));  // id, которого нет в программе
+    localStorage.setItem('insomnia.pins', JSON.stringify([{ lat: 54.68025, lng: 35.08971, name: 'zzмояметкаzz', emoji: '⛺' }]));
+  });
+  const p2 = await ctx2.newPage();
+  await p2.clock.install({ time: T });
+  p2.on('pageerror', e => { console.error('pageerror2:', e.message); process.exitCode = 1; });
+  await p2.goto(BASE + '/', { waitUntil: 'load' });
+  await p2.waitForTimeout(700);
+
+  // --- 10. Всё избранное осиротело + активен поиск → плашка-сирота, НЕ «не найдено по запросу»
+  await p2.click('.tab[data-view="favorites"]');
+  await p2.waitForTimeout(200);
+  await p2.click('#btnSearch');
+  await p2.fill('#searchInput', 'zzмояметка');
+  await p2.waitForTimeout(400);
+  const favTxt = await p2.$eval('#content', el => el.innerText);
+  assert.ok(/больше нет в программе/i.test(favTxt), 'осиротевшее избранное при поиске → плашка-сирота: ' + favTxt.slice(0, 100));
+  assert.ok(!/ничего не найдено по запросу/i.test(favTxt), 'НЕ должно быть ложного «не найдено по запросу» при 0 живых избранных');
+  console.log('✓ 10. осиротевшее избранное + поиск → плашка-сирота, не «не найдено»');
+  await p2.click('#btnSearchClose');
+
+  // --- 11. Удаление своей метки при активном поиске на карте → без фантома
+  await p2.click('.tab[data-view="map"]');
+  await p2.waitForTimeout(1200);
+  await p2.click('#btnSearch');
+  await p2.fill('#searchInput', 'zzмояметка');
+  await p2.waitForTimeout(500);
+  const beforeDel = await p2.evaluate(() => (GEO.searchLayers || []).length);
+  assert.ok(beforeDel >= 1, 'метка «лагерь» показана поштучно под поиск: ' + beforeDel);
+  // открыть карточку метки и удалить
+  const spot = await p2.evaluate(() => {
+    const m = (GEO.pinMarkers[0] && GEO.pinMarkers[0].marker && GEO.pinMarkers[0].marker._icon);
+    if (!m) return null; const r = m.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  assert.ok(spot, 'нашли маркер метки на экране');
+  await p2.mouse.click(spot.x, spot.y);
+  await p2.waitForTimeout(300);
+  await p2.click('#pinCardDel');
+  await p2.waitForTimeout(400);
+  const afterDel = await p2.evaluate(() => ({
+    search: (GEO.searchLayers || []).length,
+    pins: (GEO.pinMarkers || []).length,
+    ghost: !!(document.querySelector('.pin-my') && !document.querySelector('.pin-my').closest('.map-point')),
+  }));
+  assert.equal(afterDel.pins, 0, 'метка удалена из state');
+  assert.equal(afterDel.search, 0, 'после удаления метки под поиском не осталось фантома на карте');
+  console.log('✓ 11. удаление метки при поиске на карте — без фантома');
+
+  await ctx2.close(); await browser.close();
   try { srv.kill('SIGKILL'); } catch {}
   console.log('\n=== СКВОЗНОЙ ПОИСК: ВСЁ ОК ===');
   process.exit(0);
