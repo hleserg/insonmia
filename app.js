@@ -330,6 +330,20 @@ function renderFavorites(root) {
     .filter(e => state.favs.has(e.id) && e._startMs != null)
     .sort(sortByStart);
 
+  // «весь маршрут в календарь» — один .ics со всеми VEVENT; всегда сверху,
+  // при пустом избранном кнопки неактивны с подсказкой
+  const routeActions = document.createElement('div');
+  routeActions.className = 'route-actions';
+  const dis = favs.length ? '' : 'disabled title="Сначала добавьте события в избранное"';
+  routeActions.innerHTML = `
+    <button class="btn ghost" id="routeCal" ${dis}>📅 Весь маршрут в календарь</button>
+    <button class="btn ghost cal-dl" id="routeIcs" aria-label="Скачать всё .ics" ${dis}>⬇️</button>`;
+  root.appendChild(routeActions);
+  if (favs.length) {
+    routeActions.querySelector('#routeCal').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics'));
+    routeActions.querySelector('#routeIcs').addEventListener('click', () => exportICS(favs, 'insomnia-favorites.ics', { forceDownload: true }));
+  }
+
   // пустое состояние — только если избранного нет ВООБЩЕ:
   // одни сироты (size > 0, живых 0) должны показать плашку ниже
   if (!state.favs.size) {
@@ -492,11 +506,18 @@ function openDetail(id) {
     <div class="detail-actions">
       <button class="btn ${fav ? 'ghost' : ''}" id="detailFav">${fav ? '★ В избранном' : '☆ Напомнить и добавить'}</button>
     </div>
+    <div class="detail-actions cal-row">
+      <button class="btn ghost" id="detailCal">📅 В календарь</button>
+      <button class="btn ghost cal-dl" id="detailIcs" aria-label="Скачать .ics">⬇️ .ics</button>
+    </div>
   `;
   $('#detailFav').addEventListener('click', () => {
     toggleFav(id);
     openDetail(id); // refresh button
   });
+  const icsName = `insomnia-${e.id}.ics`;
+  $('#detailCal').addEventListener('click', () => exportICS([e], icsName));
+  $('#detailIcs').addEventListener('click', () => exportICS([e], icsName, { forceDownload: true }));
   body.querySelectorAll('.geo-jump').forEach(btn => btn.addEventListener('click', () => {
     hideSheet('#sheet');
     switchView('map');
@@ -507,6 +528,50 @@ function openDetail(id) {
 
 function showSheet(sel) { $(sel).classList.remove('hidden'); }
 function hideSheet(sel) { $(sel).classList.add('hidden'); }
+
+/* ---------- экспорт в календарь (.ics, всё офлайн на клиенте) ---------- */
+function downloadBlob(blob, filename) {
+  // принудительное скачивание blob через <a download>
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // отзываем URL позже — Safari успевает начать скачивание
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+async function exportICS(events, filename, { forceDownload = false } = {}) {
+  // filename — латиница: кириллица в именах файлов ломается на части систем
+  const list = (events || []).filter(e => e && (e._startMs != null || e.startISO));
+  if (!list.length) { toast('Нет событий для экспорта'); return; }
+  let ics;
+  try { ics = window.InsomniaCore.buildICS(list); }
+  catch { toast('Не удалось собрать файл календаря'); return; }
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+
+  // 1) share с файлом — приоритет на телефоне (iOS предлагает «Добавить в
+  //    Календарь»); только когда это не «принудительно скачать»
+  if (!forceDownload && typeof File === 'function' && navigator.canShare) {
+    const file = new File([blob], filename, { type: 'text/calendar' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Бессонница 2026' });
+        return;
+      } catch (err) {
+        // осознанная отмена шэра — уважаем, не навязываем скачивание;
+        // любая иная ошибка → фолбэк на download ниже
+        if (err && err.name === 'AbortError') return;
+      }
+    }
+  }
+
+  // 2) фолбэк/принудительно: скачивание в «Загрузки»
+  downloadBlob(blob, filename);
+}
 // перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
 // иначе шиты наслаиваются и фокус уезжает в невидимое поле
 function hideAllSheets() { $$('.sheet').forEach(s => s.classList.add('hidden')); }
