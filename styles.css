@@ -95,6 +95,14 @@ button { font-family: inherit; cursor: pointer; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .icon-btn:active { background: var(--card-2); }
+/* воронка фильтров с индикатором активности */
+#btnFilter { position: relative; }
+.funnel-ico { display: block; }
+.filter-dot {
+  position: absolute; top: 5px; right: 5px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--green); border: 1.5px solid var(--card);
+}
+#btnFilter.has-active { border-color: var(--green-dim); color: var(--green); }
 .search-bar { display: flex; gap: 8px; padding: 0 14px 10px; }
 .search-bar input {
   flex: 1; background: var(--bg); border: 1px solid var(--line); color: var(--text);
@@ -155,6 +163,29 @@ button { font-family: inherit; cursor: pointer; }
   display: inline-flex; align-items: center;
 }
 .chip.active { color: var(--green); border-color: var(--green-dim); background: var(--card-2); }
+
+/* ---- Модалка фильтров (ценз/локация) ---- */
+.filter-block { margin-bottom: 6px; }
+#filterVenueSearch {
+  width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+  border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; font-family: var(--mono);
+  margin: 4px 0 8px;
+}
+#filterVenueSearch::placeholder { color: var(--muted); }
+.chip-multi { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-multi.scroll { max-height: 42vh; overflow-y: auto; padding: 2px; }
+.fchip {
+  background: var(--card); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 0 14px; min-height: var(--tap); font-size: 0.82rem;
+  font-family: var(--mono); display: inline-flex; align-items: center; white-space: nowrap;
+}
+.fchip.on { background: var(--green); color: #04260f; border-color: var(--green); font-weight: 700; }
+.fchip.on::before { content: "✓ "; }
+.filter-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;
+  margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line);
+}
+#programExportFilterNote { color: var(--amber-2); margin: 0 0 8px; }
 /* служебные «☑ все»/«☐ ничего» на карте: действие, а не состояние —
    не подсвечиваются, слегка отделены от чипов категорий */
 .chip-bulk { color: var(--text); border-style: dashed; }

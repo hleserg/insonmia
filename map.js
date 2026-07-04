@@ -760,8 +760,11 @@ function renderNearby(root) {
   }
 
   const now = getNow();
+  // «рядом» уважает фильтр по возрастному цензу (локация тут не применяется —
+  // площадки и так рядом по гео); воронка в шапке открывает только ценз
+  const nearbyEvents = state.program.events.filter(passesAge);
   const items = getNearby(GEO.data.points.filter(p => p.category !== 'service'),
-    state.program.events, GEO.nearby.pos, now, GEO.nearby.radius);
+    nearbyEvents, GEO.nearby.pos, now, GEO.nearby.radius);
 
   // свои метки — первым блоком (лагерь/машина важнее чужих туалетов)
   const dM = window.InsomniaCore.distanceM;
@@ -794,6 +797,10 @@ function renderNearby(root) {
     });
   }
 
+  // items — это ТОЧКИ в радиусе (getNearby оставляет точку, даже если её
+  // события отфильтрованы по цензу — фильтр режет только под-строки событий,
+  // а не сами точки). Значит пустой items = «в радиусе нет точек», и причина
+  // всегда радиус, а не ценз — сообщение про ценз тут было бы враньём.
   if (!items.length) {
     if (!myNear.length) {
       const st = emptyState('🌾', 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
