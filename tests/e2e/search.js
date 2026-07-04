@@ -81,23 +81,24 @@ const T = Date.UTC(2026, 6, 9, 18, 0); // чт 9 июля, 21:00 МСК — пе
   assert.ok(!after.txt.includes('Очень странное место'), 'после очистки не должно остаться выдачи поиска');
   console.log('✓ очистка поиска возвращает выбранный день (9 июля), полоса кликабельна');
 
-  // 3. из «сейчас»: ввод запроса переключает в программу и находит
+  // 3. сквозной поиск: из «сейчас» запрос НЕ перекидывает (остаётся на вкладке)
+  //    и находит будущее событие среди «далее» (регистр/ё не мешают)
   await page.click('.tab[data-view="now"]');
   await page.waitForTimeout(300);
   await page.click('#btnSearch');
-  await page.fill('#searchInput', 'Очень СТРАННОЕ'); // регистр не должен мешать
+  await page.fill('#searchInput', 'Очень СТРАННОЕ');
   await page.waitForTimeout(400);
   const view = await page.evaluate(() => document.querySelector('.tab.active').dataset.view);
   txt = await contentText();
-  assert.equal(view, 'schedule', 'ввод запроса в «сейчас» должен переключить в программу');
-  assert.ok(txt.includes('Очень странное место'), 'поиск из «сейчас» не нашёл: ' + JSON.stringify(txt.slice(0, 120)));
-  console.log('✓ поиск из «сейчас» (в другом регистре) переключает в программу и находит');
+  assert.equal(view, 'now', 'сквозной поиск не перекидывает вкладку — остаётся в «сейчас»');
+  assert.ok(txt.includes('Очень странное место'), 'поиск из «сейчас» находит будущее событие: ' + JSON.stringify(txt.slice(0, 120)));
+  console.log('✓ поиск из «сейчас» остаётся на вкладке и находит будущее событие');
 
-  // 4. фильтр типа при поиске уважается: «анимация» + «очень странное» → пусто
+  // 4. фильтр типа при поиске уважается (по И): «анимация» + «очень странное» → пусто
   await page.click('.chip[data-type="animation"]');
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   txt = await contentText();
-  assert.ok(!txt.includes('Очень странное место') && txt.includes('ничего не найдено'), 'тип-фильтр при поиске должен работать: ' + JSON.stringify(txt.slice(0, 120)));
+  assert.ok(!txt.includes('Очень странное место') && /ничего не найдено/i.test(txt), 'тип-фильтр при поиске должен работать: ' + JSON.stringify(txt.slice(0, 120)));
   console.log('✓ фильтр типа продолжает действовать при поиске');
   await page.click('.chip[data-type="all"]');
 

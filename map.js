@@ -8,6 +8,8 @@ const GEO = {
   map: null,           // Leaflet instance
   layerGroups: {},     // category -> L.LayerGroup (зоны/дороги/мои)
   clusterGroup: null,  // L.MarkerClusterGroup — все точки-метки (кластеризация)
+  searchLayers: [],    // зоны/метки, показанные поштучно под активный поиск
+  pinMarkers: [],      // [{marker, pin}] — свои метки (для поиска по имени)
   zoneById: {},        // geo id -> L.Polygon
   pointById: {},       // geo id -> {marker, point}
   highlight: null,
@@ -194,22 +196,65 @@ function clusterIcon(cluster) {
   });
 }
 
+// совпадение метки/зоны с поисковым запросом: по названию, ярлыку категории
+// и привязанным площадкам программы (нормализация — общая с событиями)
+function pointMatchesQuery(p, q) {
+  const meta = CAT_META[p.category] || CAT_META.other;
+  return window.InsomniaCore.matchesQuery(q, [p.name, meta.label, ...venuesOfPoint(p.id)]);
+}
+function zoneMatchesQuery(z, q) {
+  const meta = CAT_META[z.category] || CAT_META.other;
+  return window.InsomniaCore.matchesQuery(q, [z.name, meta.label]);
+}
+
 function applyMapFilters() {
   if (!GEO.map) return;
-  // зоны/дороги/мои — целыми группами
-  Object.entries(GEO.layerGroups).forEach(([cat, g]) => {
-    if (GEO.filters.has(cat)) GEO.map.addLayer(g);
-    else GEO.map.removeLayer(g);
-  });
-  // точки — по-маркерно внутри кластера (только видимые кластеризуются)
+  const q = state.query ? window.InsomniaCore.normalizeSearch(state.query) : '';
+
+  // Точки (кластер): при поиске — по совпадению названия (приоритет над
+  // категорией, чтобы найденное не пряталось за выключенным чипом); иначе —
+  // по категории. Кластеризуются только видимые.
   if (GEO.clusterGroup) {
     Object.values(GEO.pointById).forEach(({ marker, point }) => {
-      const show = GEO.filters.has(point.category);
+      const show = q ? pointMatchesQuery(point, q) : GEO.filters.has(point.category);
       const has = GEO.clusterGroup.hasLayer(marker);
       if (show && !has) GEO.clusterGroup.addLayer(marker);
       else if (!show && has) GEO.clusterGroup.removeLayer(marker);
     });
   }
+
+  // Зоны/дороги/мои. Снимаем прошлый поисковый набор.
+  (GEO.searchLayers || []).forEach(l => GEO.map.removeLayer(l));
+  GEO.searchLayers = [];
+  Object.entries(GEO.layerGroups).forEach(([cat, g]) => {
+    // при активном поиске группы целиком не годятся — прячем их и добавим
+    // совпавшие зоны/метки по-объектно ниже
+    if (q) { GEO.map.removeLayer(g); return; }
+    if (GEO.filters.has(cat)) GEO.map.addLayer(g);
+    else GEO.map.removeLayer(g);
+  });
+  if (q) {
+    GEO.data.zones.forEach(z => {
+      const poly = GEO.zoneById[z.id];
+      if (poly && zoneMatchesQuery(z, q)) { GEO.map.addLayer(poly); GEO.searchLayers.push(poly); }
+    });
+    (GEO.pinMarkers || []).forEach(({ marker, pin }) => {
+      if (window.InsomniaCore.matchesQuery(q, [pin.name, pin.note])) {
+        GEO.map.addLayer(marker); GEO.searchLayers.push(marker);
+      }
+    });
+  }
+  updateMapSearchStatus(q);
+}
+
+// «ничего не найдено» на карте при активном поиске без совпадений
+function updateMapSearchStatus(q) {
+  const el = $('#mapStatus');
+  if (!el) return;
+  if (!q) { el.textContent = ''; return; }
+  const points = GEO.clusterGroup ? GEO.clusterGroup.getLayers().length : 0;
+  const total = points + (GEO.searchLayers || []).length;
+  el.textContent = total ? '' : `по запросу «${state.query}» ничего не найдено`;
 }
 
 function highlightPoint(id, { open = false } = {}) {
@@ -312,8 +357,13 @@ function renderMapView() {
   $('#mapStatus').textContent = '';
   initFilters();
   buildMapChips();
-  // Leaflet требует видимый контейнер
-  requestAnimationFrame(() => { ensureMap(); if (GEO.map) GEO.map.invalidateSize(); });
+  // Leaflet требует видимый контейнер. applyMapFilters — на КАЖДЫЙ показ:
+  // ensureMap создаёт карту лишь однажды, а сквозной поиск/фильтры должны
+  // применяться и при повторном открытии вкладки (с уже готовой картой).
+  requestAnimationFrame(() => {
+    ensureMap();
+    if (GEO.map) { GEO.map.invalidateSize(); applyMapFilters(); }
+  });
 }
 
 function hideMapView() {
@@ -391,10 +441,12 @@ function drawPins() {
   if (!GEO.map) return;
   const g = GEO.layerGroups.my || (GEO.layerGroups.my = L.layerGroup());
   g.clearLayers();
+  GEO.pinMarkers = [];
   (state.pins || []).forEach(pin => {
     const mk = L.marker([pin.lat, pin.lng], { icon: pinIcon(pin.emoji) });
     mk.on('click', () => openPinCard(pin));
     g.addLayer(mk);
+    GEO.pinMarkers.push({ marker: mk, pin }); // для поиска по имени метки
   });
 }
 
@@ -806,15 +858,23 @@ function renderNearby(root) {
   // «рядом» уважает фильтр по возрастному цензу (локация тут не применяется —
   // площадки и так рядом по гео); воронка в шапке открывает только ценз
   const nearbyEvents = state.program.events.filter(passesAge);
-  const items = getNearby(GEO.data.points.filter(p => p.category !== 'service'),
+  let items = getNearby(GEO.data.points.filter(p => p.category !== 'service'),
     nearbyEvents, GEO.nearby.pos, now, GEO.nearby.radius);
 
   // свои метки — первым блоком (лагерь/машина важнее чужих туалетов)
   const dM = window.InsomniaCore.distanceM;
-  const myNear = (state.pins || [])
+  let myNear = (state.pins || [])
     .map(p => ({ ...p, dist: dM(GEO.nearby.pos, p) }))
     .filter(p => !GEO.nearby.radius || p.dist <= GEO.nearby.radius)
     .sort((a, b) => a.dist - b.dist);
+
+  // сквозной поиск сужает список «рядом»: точки — по названию/событиям,
+  // свои метки — по имени/заметке
+  if (state.query) {
+    const q = nQuery();
+    items = items.filter(p => pointMatchesQuery(p, q) || (p.events || []).some(e => eventMatchesQuery(e, q)));
+    myNear = myNear.filter(p => window.InsomniaCore.matchesQuery(q, [p.name, p.note]));
+  }
   if (myNear.length) {
     const head = document.createElement('div');
     head.className = 'time-group-label';
@@ -846,13 +906,17 @@ function renderNearby(root) {
   // всегда радиус, а не ценз — сообщение про ценз тут было бы враньём.
   if (!items.length) {
     if (!myNear.length) {
-      const st = emptyState('🌾', 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      btn.textContent = 'к программе';
-      btn.addEventListener('click', () => switchView('schedule'));
-      st.appendChild(btn);
-      root.appendChild(st);
+      if (state.query) {
+        root.appendChild(queryEmptyState('🔍', 'Рядом ничего не найдено'));
+      } else {
+        const st = emptyState('🌾', 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = 'к программе';
+        btn.addEventListener('click', () => switchView('schedule'));
+        st.appendChild(btn);
+        root.appendChild(st);
+      }
     }
     root.appendChild(geoHelpEl());
     return;
@@ -894,6 +958,8 @@ function resetMapLayers() {
   GEO.preview = null;
   GEO.layerGroups = {};
   GEO.clusterGroup = null;
+  GEO.searchLayers = [];
+  GEO.pinMarkers = [];
   GEO.zoneById = {};
   GEO.pointById = {};
   GEO.highlight = null;

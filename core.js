@@ -4,6 +4,23 @@
 (function (exports) {
   'use strict';
 
+  /* ---------- поиск ----------
+     Единая нормализация запроса и полей: регистронезависимо, ё→е,
+     без кавычек/лишних пробелов. Один источник для событий и меток карты. */
+  function normalizeSearch(s) {
+    return String(s == null ? '' : s)
+      .toLowerCase()
+      .replace(/ё/g, 'е')
+      .replace(/[«»"'`”“„‘’]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  // совпадение нормализованного запроса q с любым из полей (подстрока)
+  function matchesQuery(q, fields) {
+    if (!q) return true;
+    return fields.some(f => normalizeSearch(f).includes(q));
+  }
+
   /* ---------- время: московская модель ----------
      Всё расписание — МСК (UTC+3, без DST). Сравнения только по эпохам
      (мс UTC): результат не зависит от таймзоны устройства. */
@@ -416,6 +433,8 @@
   exports.bearingLabel = bearingLabel;
   exports.getNearby = getNearby;
   exports.createGeoWatcher = createGeoWatcher;
+  exports.normalizeSearch = normalizeSearch;
+  exports.matchesQuery = matchesQuery;
 })(typeof module !== 'undefined' && module.exports
    ? module.exports
    : (window.InsomniaCore = {}));
