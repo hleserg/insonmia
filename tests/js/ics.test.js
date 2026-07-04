@@ -22,14 +22,23 @@ function unfold(ics) {
 }
 function lines(ics) { return unfold(ics).split('\r\n'); }
 
-test('1. 11.07 17:00 МСК → DTSTART 14:00Z, VALARM -PT15M', () => {
+test('1. 11.07 17:00 МСК → DTSTART 14:00Z, VALARM по умолчанию -PT15M', () => {
   const ics = C.buildICS([ev()], opts);
   const L = lines(ics);
   assert.ok(L.includes('DTSTART:20260711T140000Z'), 'DTSTART должен быть 14:00Z (17:00 МСК − 3ч)');
   assert.ok(L.includes('DTEND:20260711T153000Z'), 'DTEND 15:30Z');
-  assert.ok(L.includes('TRIGGER:-PT15M'), 'напоминание за 15 минут');
+  assert.ok(L.includes('TRIGGER:-PT15M'), 'без opts.leadMin — 15 минут');
   assert.ok(L.includes('ACTION:DISPLAY'), 'VALARM DISPLAY');
   assert.ok(L.includes('BEGIN:VALARM') && L.includes('END:VALARM'));
+});
+
+test('VALARM берёт выбранное пользователем время (opts.leadMin)', () => {
+  assert.ok(lines(C.buildICS([ev()], { ...opts, leadMin: 30 })).includes('TRIGGER:-PT30M'), '30 мин');
+  assert.ok(lines(C.buildICS([ev()], { ...opts, leadMin: 5 })).includes('TRIGGER:-PT5M'), '5 мин');
+  assert.ok(lines(C.buildICS([ev()], { ...opts, leadMin: 60 })).includes('TRIGGER:-PT60M'), '60 мин');
+  // мусор/некорректное → дефолт 15
+  assert.ok(lines(C.buildICS([ev()], { ...opts, leadMin: 0 })).includes('TRIGGER:-PT15M'), '0 → 15');
+  assert.ok(lines(C.buildICS([ev()], { ...opts, leadMin: NaN })).includes('TRIGGER:-PT15M'), 'NaN → 15');
 });
 
 test('2. структурная валидность: VCALENDAR/VERSION/парные BEGIN-END', () => {

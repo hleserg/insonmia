@@ -549,7 +549,8 @@ async function exportICS(events, filename, { forceDownload = false } = {}) {
   const list = (events || []).filter(e => e && (e._startMs != null || e.startISO));
   if (!list.length) { toast('Нет событий для экспорта'); return; }
   let ics;
-  try { ics = window.InsomniaCore.buildICS(list); }
+  // напоминание в календаре — за выбранное в настройках время (как пуши)
+  try { ics = window.InsomniaCore.buildICS(list, { leadMin: state.lead }); }
   catch { toast('Не удалось собрать файл календаря'); return; }
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
 
@@ -569,8 +570,11 @@ async function exportICS(events, filename, { forceDownload = false } = {}) {
     }
   }
 
-  // 2) фолбэк/принудительно: скачивание в «Загрузки»
+  // 2) фолбэк/принудительно: скачивание в «Загрузки».
+  //    На части устройств (Huawei и др.) шэр файлов не поддержан — тогда
+  //    сюда попадает и кнопка «в календарь»; подсказываем, что делать дальше
   downloadBlob(blob, filename);
+  toast('Файл скачан — откройте его, чтобы добавить в календарь', 4000);
 }
 // перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
 // иначе шиты наслаиваются и фокус уезжает в невидимое поле

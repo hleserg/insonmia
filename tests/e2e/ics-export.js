@@ -98,7 +98,30 @@ const SHARE_MOCK = () => {
   assert.match(dl.suggestedFilename(), /^insomnia-.+\.ics$/, 'имя скачанного файла');
   assert.ok(one.includes('BEGIN:VCALENDAR') && one.includes('BEGIN:VEVENT'), 'скачанный ICS валиден');
   assert.ok(one.includes('\r\n'), 'CRLF в файле');
-  console.log('✓ ⬇️ download: файл', dl.suggestedFilename());
+  // после скачивания — подсказка «откройте файл»
+  const dlToast = (await page.evaluate(() => document.querySelector('#toast')?.textContent || '')).trim();
+  assert.ok(/скачан[\s\S]*календарь/i.test(dlToast), 'тост-подсказка после скачивания: ' + JSON.stringify(dlToast));
+  console.log('✓ ⬇️ download: файл', dl.suggestedFilename(), '+ подсказка-тост');
+  // по умолчанию (lead=15) — VALARM за 15 мин
+  assert.ok(one.includes('TRIGGER:-PT15M'), 'по умолчанию напоминание за 15 мин');
+  await page.click('#sheet .icon-btn[data-close]');
+  await page.waitForTimeout(200);
+
+  // --- 2b. VALARM отражает ВЫБРАННОЕ в настройках время (сквозная проводка) ---
+  await page.click('#btnSettings');
+  await page.waitForTimeout(200);
+  await page.selectOption('#leadSelect', '30');
+  await page.waitForTimeout(150);
+  await page.click('#settings .icon-btn[data-close]');
+  await page.waitForTimeout(150);
+  await page.click('.event-main >> nth=0');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { window.__share = null; });
+  await page.click('#detailCal');
+  await page.waitForTimeout(150);
+  const lead30 = await page.evaluate(() => window.__share);
+  assert.ok(lead30 && lead30.text.includes('TRIGGER:-PT30M'), 'VALARM берёт выбранные 30 мин: ' + (lead30 && (lead30.text.match(/TRIGGER:[^\r\n]*/) || '')));
+  console.log('✓ VALARM = выбранное время (30 мин)');
   await page.click('#sheet .icon-btn[data-close]');
   await page.waitForTimeout(200);
 
