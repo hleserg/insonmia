@@ -325,11 +325,14 @@
     return `${e.id}@${ICS_DOMAIN}`;
   }
 
-  function icsVevent(e, dtstampMs) {
+  function icsVevent(e, dtstampMs, leadMin) {
     const start = e._startMs != null ? e._startMs : epochFromISO(e.startISO);
     if (start == null) return null; // без старта событие не запланировать
     let end = e._endMs != null ? e._endMs : epochFromISO(e.endISO);
     if (end == null || end <= start) end = start + 3600000; // нет конца → +1 час
+    // напоминание за выбранное пользователем время (как в пушах приложения);
+    // некорректное значение → 15 мин
+    const lead = Number.isFinite(leadMin) && leadMin > 0 ? Math.round(leadMin) : 15;
     const descParts = [];
     if (e.description) descParts.push(e.description);
     else if (e.films && e.films.length) descParts.push('Фильмы: ' + e.films.join(', '));
@@ -344,7 +347,7 @@
       'LOCATION:' + icsEscape(e.venue || ''),
       'DESCRIPTION:' + icsEscape(descParts.join('\n')),
       'BEGIN:VALARM',
-      'TRIGGER:-PT15M',
+      'TRIGGER:-PT' + lead + 'M',
       'ACTION:DISPLAY',
       'DESCRIPTION:' + icsEscape(e.title),
       'END:VALARM',
@@ -359,6 +362,7 @@
     // dtstampMs — момент генерации (UTC); в тестах инжектируется для детерминизма
     const dtstampMs = o.dtstampMs != null ? o.dtstampMs
       : (typeof Date.now === 'function' ? Date.now() : 0);
+    const leadMin = o.leadMin; // за сколько минут напомнить (VALARM); дефолт 15
     const head = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
@@ -368,7 +372,7 @@
     ];
     const body = [];
     (events || []).forEach(e => {
-      const v = icsVevent(e, dtstampMs);
+      const v = icsVevent(e, dtstampMs, leadMin);
       if (v) body.push(...v);
     });
     const all = head.concat(body, ['END:VCALENDAR']);
