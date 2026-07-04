@@ -15,6 +15,7 @@ node tests/e2e/install-flow.js  # плашка установки, отказ в
 node tests/e2e/subpath.js       # подпуть /insonmia/: 0 запросов мимо, 0×404, #pin= офлайн, scope SW
 node tests/e2e/search.js        # поиск по всей программе: находит событие с другого дня, заглушённая полоса дат, очистка
 node tests/e2e/map-bulk-filters.js  # «☑ все»/«☐ ничего» на карте: одни туалеты одним тапом, «все» включает всё, выбор живёт между вкладками
+node tests/e2e/ics-export.js    # экспорт в календарь: share с .ics-файлом (мок), скачивание, ОФЛАЙН-генерация, «весь маршрут», пустое избранное
 ```
 
 Локально нужен Playwright: `npm i -D playwright && npx playwright install chromium`.

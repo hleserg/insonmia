@@ -268,6 +268,119 @@
            pin.lng < FEST_BBOX.lngMin - dLng || pin.lng > FEST_BBOX.lngMax + dLng;
   }
 
+  /* ---------- экспорт в календарь (iCalendar / RFC 5545) ----------
+     Всё на клиенте, без сети. Время события — наивная МСК; момент берём
+     через epochFromISO (НЕ клеим строку), печатаем в UTC с суффиксом Z —
+     календарь сам покажет его в таймзоне устройства. */
+  const ICS_DOMAIN = 'insonmia';
+  const ICS_PRODID = '-//insonmia//Bessonnica 2026//RU';
+
+  function icsEscape(s) {
+    // RFC 5545 §3.3.11 (TEXT): экранируем \ ; , и переносы строк
+    return String(s == null ? '' : s)
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r\n|\r|\n/g, '\\n');
+  }
+
+  function utf8Len(ch) {
+    // длина одного код-пойнта в октетах UTF-8 (без зависимости от TextEncoder)
+    const c = ch.codePointAt(0);
+    if (c <= 0x7f) return 1;
+    if (c <= 0x7ff) return 2;
+    if (c <= 0xffff) return 3;
+    return 4;
+  }
+
+  function icsFold(line) {
+    // RFC 5545 §3.1: физическая строка ≤75 октетов; перенос — CRLF + пробел.
+    // Складываем по код-пойнтам (кириллица = 2 байта), не рвём символ.
+    let out = '';
+    let cur = '';
+    let bytes = 0;
+    for (const ch of line) {
+      const b = utf8Len(ch);
+      if (bytes + b > 75) {
+        out += (out ? '\r\n' : '') + cur;
+        cur = ' ' + ch; // ведущий пробел продолжения входит в лимит
+        bytes = 1 + b;
+      } else {
+        cur += ch;
+        bytes += b;
+      }
+    }
+    return out + (out ? '\r\n' : '') + cur;
+  }
+
+  function icsStamp(ms) {
+    // эпоха мс -> UTC-штамп YYYYMMDDTHHMMSSZ
+    const d = new Date(ms);
+    return d.getUTCFullYear().toString() + pad2(d.getUTCMonth() + 1) + pad2(d.getUTCDate())
+      + 'T' + pad2(d.getUTCHours()) + pad2(d.getUTCMinutes()) + pad2(d.getUTCSeconds()) + 'Z';
+  }
+
+  function icsUid(e) {
+    // стабильный UID: повторный импорт обновляет событие, а не дублирует
+    return `${e.id}@${ICS_DOMAIN}`;
+  }
+
+  function icsVevent(e, dtstampMs) {
+    const start = e._startMs != null ? e._startMs : epochFromISO(e.startISO);
+    if (start == null) return null; // без старта событие не запланировать
+    let end = e._endMs != null ? e._endMs : epochFromISO(e.endISO);
+    if (end == null || end <= start) end = start + 3600000; // нет конца → +1 час
+    const descParts = [];
+    if (e.description) descParts.push(e.description);
+    else if (e.films && e.films.length) descParts.push('Фильмы: ' + e.films.join(', '));
+    descParts.push('Бессонница 2026');
+    const lines = [
+      'BEGIN:VEVENT',
+      'UID:' + icsUid(e),
+      'DTSTAMP:' + icsStamp(dtstampMs),
+      'DTSTART:' + icsStamp(start),
+      'DTEND:' + icsStamp(end),
+      'SUMMARY:' + icsEscape(e.title),
+      'LOCATION:' + icsEscape(e.venue || ''),
+      'DESCRIPTION:' + icsEscape(descParts.join('\n')),
+      'BEGIN:VALARM',
+      'TRIGGER:-PT15M',
+      'ACTION:DISPLAY',
+      'DESCRIPTION:' + icsEscape(e.title),
+      'END:VALARM',
+      'END:VEVENT',
+    ];
+    return lines;
+  }
+
+  function buildICS(events, opts) {
+    // events[] -> строка VCALENDAR с одним/несколькими VEVENT (CRLF, фолдинг)
+    const o = opts || {};
+    // dtstampMs — момент генерации (UTC); в тестах инжектируется для детерминизма
+    const dtstampMs = o.dtstampMs != null ? o.dtstampMs
+      : (typeof Date.now === 'function' ? Date.now() : 0);
+    const head = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:' + ICS_PRODID,
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+    ];
+    const body = [];
+    (events || []).forEach(e => {
+      const v = icsVevent(e, dtstampMs);
+      if (v) body.push(...v);
+    });
+    const all = head.concat(body, ['END:VCALENDAR']);
+    return all.map(icsFold).join('\r\n') + '\r\n';
+  }
+
+  exports.icsEscape = icsEscape;
+  exports.icsFold = icsFold;
+  exports.icsStamp = icsStamp;
+  exports.icsUid = icsUid;
+  exports.buildICS = buildICS;
+
   exports.parseCoordPairs = parseCoordPairs;
   exports.parsePinsFromText = parsePinsFromText;
   exports.pinFromHash = pinFromHash;
