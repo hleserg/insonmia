@@ -189,21 +189,22 @@ function escapeHtml(s) {
   ));
 }
 
+// нормализованный текущий запрос (регистр/ё→е/кавычки) — общий с картой
+function nQuery() { return window.InsomniaCore.normalizeSearch(state.query); }
+function eventMatchesQuery(e, q) {
+  return window.InsomniaCore.matchesQuery(q,
+    [e.title, e.venue, e.description, ...(e.films || [])]);
+}
 function filteredEvents() {
   let evs = state.program.events;
   if (state.type !== 'all') evs = evs.filter(e => e.type === state.type);
-  // Фильтры-воронка (ценз/локация) — только при обычном просмотре. Активный
-  // поиск ищет по ВСЕЙ программе и воронку НЕ применяет (как и день-фильтр):
-  // grep не должен «терять» событие из-за настроенного лица (см. баг #33).
-  if (!state.query) evs = evs.filter(passesFilters);
+  // Воронка (ценз/локация) и поиск работают ПО И (пересечение), как и
+  // тип-чип. День-фильтр — исключение: поиск идёт по всем дням (баг #33),
+  // полоса дат при поиске заглушается в renderSchedule.
+  evs = evs.filter(passesFilters);
   if (state.query) {
-    const q = state.query.toLowerCase();
-    evs = evs.filter(e =>
-      e.title.toLowerCase().includes(q) ||
-      (e.venue || '').toLowerCase().includes(q) ||
-      (e.description || '').toLowerCase().includes(q) ||
-      (e.films || []).some(f => f.toLowerCase().includes(q))
-    );
+    const q = nQuery();
+    evs = evs.filter(e => eventMatchesQuery(e, q));
   }
   return evs;
 }
@@ -317,9 +318,9 @@ function renderNow(root) {
   }
 
   if (!live.length && !soon.length) {
-    root.appendChild(anyFilterActive()
-      ? filterEmptyState('🌙', true)
-      : emptyState('🌙', '$ ps aux | grep событие → пусто. Спокойной ночи.'));
+    if (state.query) root.appendChild(queryEmptyState('🔍', 'Ничего не найдено'));
+    else if (anyFilterActive()) root.appendChild(filterEmptyState('🌙', true));
+    else root.appendChild(emptyState('🌙', '$ ps aux | grep событие → пусто. Спокойной ночи.'));
   }
 }
 
@@ -334,7 +335,7 @@ function renderSchedule(root) {
     buildDayStrip(true, null);
     const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
     if (!evs.length) {
-      root.appendChild(emptyState('🔍', '$ grep: ничего не найдено по фильтру.'));
+      root.appendChild(queryEmptyState('🔍', 'Ничего не найдено'));
       return;
     }
     let lastDay = null;
@@ -405,17 +406,29 @@ function renderFavorites(root) {
   }
 
   // пустое состояние — только если избранного нет ВООБЩЕ:
-  // одни сироты (size > 0, живых 0) должны показать плашку ниже
+  // одни сироты (size > 0, живых 0) должны показать плашку ниже.
+  // ВАЖНО: «избранное пусто» и «не найдено по запросу» — разные сообщения.
   if (!state.favs.size) {
     root.appendChild(emptyState('☆', 'Пока ничего не выбрано. Нажмите ☆ у события, чтобы добавить и получить напоминание.'));
     return;
   }
 
+  // Поиск фильтрует СПИСОК избранного (кнопки маршрута выше работают по
+  // всему избранному — поиск сужает вид, а не сам маршрут).
+  // ВАЖНО: «не найдено по запросу» — только когда живые избранные ЕСТЬ, но
+  // запрос их скрыл. Если живых нет вовсе (все осиротели после обновления
+  // данных), запрос ни при чём — проваливаемся ниже к плашке-сироте.
+  const shown = state.query ? favs.filter(e => eventMatchesQuery(e, nQuery())) : favs;
+  if (state.query && favs.length && !shown.length) {
+    root.appendChild(queryEmptyState('🔍', 'В избранном ничего не найдено'));
+    return;
+  }
+
   const n = getNow();
-  const showDivider = favs.some(e => e._startMs <= n) && favs.some(e => e._startMs > n);
+  const showDivider = shown.some(e => e._startMs <= n) && shown.some(e => e._startMs > n);
   let lastDay = null;
   let injectedNow = false;
-  favs.forEach(e => {
+  shown.forEach(e => {
     if (e._festDay !== lastDay) { lastDay = e._festDay; root.appendChild(dayHeading(e._festDay)); }
     if (showDivider && !injectedNow && e._startMs > n) { root.appendChild(nowDivider()); injectedNow = true; }
     root.appendChild(eventCard(e));
@@ -838,6 +851,26 @@ function filterEmptyState(icon, active) {
     b.addEventListener('click', resetFilters);
     st.appendChild(b);
   }
+  return st;
+}
+// Сквозной поиск: сброс запроса разом на ВСЕХ вкладках (крестик в поле и
+// кнопки «Очистить поиск» в пустых состояниях зовут одно и то же).
+function clearSearch() {
+  $('#searchBar').classList.add('hidden');
+  $('#searchInput').value = '';
+  state.query = '';
+  render();
+  window.scrollTo(0, 0);
+}
+// Пустое состояние из-за поиска: объясняем причину + даём выход, чтобы
+// человек не решил, что вкладка сломана (текст запроса — экранируем).
+function queryEmptyState(icon, prefix) {
+  const st = emptyState(icon, `${prefix} по запросу «${state.query}».`);
+  const b = document.createElement('button');
+  b.className = 'btn';
+  b.textContent = 'Очистить поиск';
+  b.addEventListener('click', clearSearch);
+  st.appendChild(b);
   return st;
 }
 // перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
@@ -1601,21 +1634,20 @@ function wireUI() {
     $('#searchBar').classList.remove('hidden');
     $('#searchInput').focus();
   });
-  $('#btnSearchClose').addEventListener('click', () => {
-    $('#searchBar').classList.add('hidden');
-    $('#searchInput').value = '';
-    state.query = '';
-    render();
-    window.scrollTo(0, 0);
-  });
+  $('#btnSearchClose').addEventListener('click', clearSearch);
+  // Сквозной поиск: запрос общий для всех вкладок, применяется к данным
+  // текущей (события / метки / радиус) — см. render каждого вида. Debounce
+  // ~200мс, чтобы не дёргать перерисовку на каждой букве.
+  let searchDebounce = null;
   $('#searchInput').addEventListener('input', (e) => {
     state.query = e.target.value.trim();
-    // поиск из «сейчас» переводит на «программу» (switchView сам вызывает render)
-    if (state.query && state.view === 'now') switchView('schedule');
-    else render();
-    // размер выдачи скачет между нажатиями: без сброса скролла результат
-    // (или пустое состояние) остаётся спрятанным за липкой шапкой
-    window.scrollTo(0, 0);
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      render();
+      // размер выдачи скачет между нажатиями: без сброса скролла результат
+      // (или пустое состояние) остаётся спрятанным за липкой шапкой
+      window.scrollTo(0, 0);
+    }, 200);
   });
 
   // settings sheet

@@ -241,24 +241,39 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   assert.ok((await eventCount()) > 0, 'после сброса события вернулись');
   console.log('✓ 6. пустой результат → «Ничего не найдено» + сброс фильтров');
 
-  // --- 7. Поиск НЕ применяет воронку (grep по всей программе)
+  // --- 7. Поиск И воронка работают ПО И (пересечение, по требованию #53)
   await clickFilter();
   await page.waitForTimeout(150);
-  for (const a of ageChips) if (a !== '18+') await chip('#filterAgeChips', a).click();
+  for (const a of ageChips) if (a !== '18+') await chip('#filterAgeChips', a).click(); // только 18+
   await page.click('#filterApply');
   await page.waitForTimeout(200);
   await page.click('#btnSearch');
-  await page.fill('#searchInput', 'очень странное'); // это НЕ 18+ спектакль
-  await page.waitForTimeout(350);
-  const found = await page.$eval('#content', el => el.innerText);
-  assert.ok(found.includes('Очень странное место'), 'поиск должен игнорировать фильтр воронки (grep по всему)');
-  console.log('✓ 7. поиск игнорирует воронку — grep находит вне фильтра');
+  await page.fill('#searchInput', 'очень странное'); // спектакль НЕ 18+
+  await page.waitForTimeout(400);
+  let found = await page.$eval('#content', el => el.innerText);
+  assert.ok(!found.includes('Очень странное место'), 'при цензе 18+ не-18+ событие не показывается и в поиске (И)');
+  assert.ok(/Ничего не найдено по запросу/i.test(found), 'пустой результат поиска объясняет причину: ' + found.slice(0, 80));
+  // сброс ценза → тот же поиск находит
+  await clickFilter();
+  await page.waitForTimeout(150);
+  await page.click('#ageSelectAll');
+  await page.click('#filterApply');
+  await page.waitForTimeout(400);
+  found = await page.$eval('#content', el => el.innerText);
+  assert.ok(found.includes('Очень странное место'), 'после сброса ценза поиск находит событие');
+  console.log('✓ 7. поиск ∧ воронка = пересечение (И)');
   await page.click('#btnSearchClose');
   await page.waitForTimeout(200);
 
   // --- 8. Развилка экспорта: фильтр активен → две кнопки с верным N
   await page.click('.tab[data-view="schedule"]');
   await page.waitForTimeout(150);
+  // ставим ценз 18+ (тест 7 сбрасывал воронку — делаем состояние своим)
+  await clickFilter();
+  await page.waitForTimeout(150);
+  for (const a of ageChips) if (a !== '18+') await chip('#filterAgeChips', a).click();
+  await page.click('#filterApply');
+  await page.waitForTimeout(200);
   await page.click('#btnProgramExport');
   await page.waitForTimeout(200);
   assert.ok(await page.isVisible('#programExportFiltered'), 'при активном фильтре есть кнопка «только отфильтрованные»');

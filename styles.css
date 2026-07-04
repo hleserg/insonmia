@@ -223,7 +223,10 @@ button { font-family: inherit; cursor: pointer; }
 .loading, .empty {
   text-align: center; color: var(--muted); padding: 40px 20px;
   font-family: var(--mono); font-size: 0.9rem;
+  /* длинный слитный запрос в «…по запросу «X»» не должен рвать ширину на 360px */
+  overflow-wrap: anywhere;
 }
+#mapStatus { overflow-wrap: anywhere; }
 .empty .big { font-size: 2rem; display: block; margin-bottom: 8px; }
 .loading::after {
   content: "▌"; color: var(--green); animation: blink 1.1s steps(1) infinite;
