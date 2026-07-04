@@ -390,6 +390,27 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 .btn.danger { color: var(--danger); }
 .setting-block { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 12px; }
 .setting-block:first-of-type { border-top: none; }
+/* FAQ: свёрнутый блок «❓ Частые вопросы» — аккордеон вопрос-ответ */
+.faq > summary {
+  cursor: pointer; list-style: none; color: var(--green); font-family: var(--mono);
+  font-size: 0.95rem; padding: 10px 0; min-height: var(--tap);
+  display: flex; align-items: center;
+}
+.faq > summary::-webkit-details-marker { display: none; }
+.faq > summary::after { content: "▸"; margin-left: auto; color: var(--muted); }
+.faq[open] > summary::after { content: "▾"; }
+.faq-list { padding-left: 2px; }
+.faq-list details { border-top: 1px solid var(--line); }
+.faq-list summary {
+  cursor: pointer; list-style: none; color: var(--text); font-size: 0.9rem;
+  padding: 11px 0; min-height: var(--tap); display: flex; align-items: center; gap: 6px;
+}
+.faq-list summary::-webkit-details-marker { display: none; }
+.faq-list summary::before { content: "▸"; color: var(--green); font-size: 0.8rem; }
+.faq-list details[open] > summary::before { content: "▾"; }
+.faq-list p { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px 16px; line-height: 1.5; }
+.faq-list p b { color: var(--text); }
+.faq-list a { color: var(--green); }
 .row-toggle { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 10px; }
 .row-toggle select, .url-import input, #urlInput {
   background: var(--bg); border: 1px solid var(--line); color: var(--text);
