@@ -760,8 +760,11 @@ function renderNearby(root) {
   }
 
   const now = getNow();
+  // «рядом» уважает фильтр по возрастному цензу (локация тут не применяется —
+  // площадки и так рядом по гео); воронка в шапке открывает только ценз
+  const nearbyEvents = state.program.events.filter(passesAge);
   const items = getNearby(GEO.data.points.filter(p => p.category !== 'service'),
-    state.program.events, GEO.nearby.pos, now, GEO.nearby.radius);
+    nearbyEvents, GEO.nearby.pos, now, GEO.nearby.radius);
 
   // свои метки — первым блоком (лагерь/машина важнее чужих туалетов)
   const dM = window.InsomniaCore.distanceM;
@@ -796,9 +799,19 @@ function renderNearby(root) {
 
   if (!items.length) {
     if (!myNear.length) {
-      const st = emptyState('🌾', 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
+      const filtered = ageFilterActive();
+      const st = emptyState('🌾', filtered
+        ? 'В этом радиусе нет событий выбранного ценза. Расширьте круг или снимите фильтр.'
+        : 'В этом радиусе пусто. Расширьте круг или загляните в программу.');
+      if (filtered) {
+        const reset = document.createElement('button');
+        reset.className = 'btn';
+        reset.textContent = 'Сбросить фильтры';
+        reset.addEventListener('click', resetFilters);
+        st.appendChild(reset);
+      }
       const btn = document.createElement('button');
-      btn.className = 'btn';
+      btn.className = 'btn ghost';
       btn.textContent = 'к программе';
       btn.addEventListener('click', () => switchView('schedule'));
       st.appendChild(btn);

@@ -192,6 +192,10 @@ function escapeHtml(s) {
 function filteredEvents() {
   let evs = state.program.events;
   if (state.type !== 'all') evs = evs.filter(e => e.type === state.type);
+  // Фильтры-воронка (ценз/локация) — только при обычном просмотре. Активный
+  // поиск ищет по ВСЕЙ программе и воронку НЕ применяет (как и день-фильтр):
+  // grep не должен «терять» событие из-за настроенного лица (см. баг #33).
+  if (!state.query) evs = evs.filter(passesFilters);
   if (state.query) {
     const q = state.query.toLowerCase();
     evs = evs.filter(e =>
@@ -203,6 +207,49 @@ function filteredEvents() {
   }
   return evs;
 }
+
+/* ---------- фильтры: возрастной ценз + локация ----------
+   Мультивыбор через модалку-воронку. По умолчанию выбрано ВСЁ (фильтр
+   неактивен). Состояние живёт только в памяти сессии — при новом запуске
+   снова «всё» (в localStorage не храним). Ценз общий для «сейчас/программы/
+   рядом», локация — только для «сейчас/программы». Семантика чипов —
+   «показать выбранные», а не порог. */
+const AGE_NA = '';   // пустой ценз/локация → чип «не указано»
+function ageKey(e) { return (e.age || '').trim(); }
+function venueKey(e) { return (e.venue || '').trim(); }
+function cmpAge(a, b) {
+  const na = parseInt(a, 10), nb = parseInt(b, 10);
+  if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+  return a.localeCompare(b, 'ru');
+}
+// вселенная значений: отсортированные значения + «не указано» в конец (если есть)
+function ageUniverse() {
+  const s = new Set((state.program.events || []).map(ageKey));
+  const vals = [...s].filter(Boolean).sort(cmpAge);
+  if (s.has(AGE_NA)) vals.push(AGE_NA);
+  return vals;
+}
+function venueUniverse() {
+  const s = new Set((state.program.events || []).map(venueKey));
+  const vals = [...s].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru'));
+  if (s.has(AGE_NA)) vals.push(AGE_NA);
+  return vals;
+}
+// сброс к «всё выбрано» — при загрузке/обновлении/сбросе программы.
+// ВАЖНО: не называть initFilters — так зовётся функция карты (GEO.filters)
+// в map.js; app.js грузится позже и перекрыл бы её в общей области видимости.
+function initEventFilters() {
+  const ages = ageUniverse();
+  const venues = venueUniverse();
+  state.filters = { age: new Set(ages), venue: new Set(venues), _ages: ages, _venues: venues };
+}
+function ageFilterActive() { const f = state.filters; return !!f && f.age.size < f._ages.length; }
+function venueFilterActive() { const f = state.filters; return !!f && f.venue.size < f._venues.length; }
+// «активен хоть один» — для бейджа и развилки экспорта (в «рядом» — только ценз)
+function anyFilterActive() { return ageFilterActive() || venueFilterActive(); }
+function passesAge(e) { return !state.filters || state.filters.age.has(ageKey(e)); }
+function passesVenue(e) { return !state.filters || state.filters.venue.has(venueKey(e)); }
+function passesFilters(e) { return passesAge(e) && passesVenue(e); }
 
 function liveFavCount() {
   // считаем только избранное, которое существует в текущей программе —
@@ -222,6 +269,7 @@ function render() {
   else { hideMapView(); }
   // watchPosition живёт только пока открыт раздел «рядом»
   if (state.view !== 'nearby') stopNearbyWatch();
+  updateFilterButton();
 
   if (state.view === 'now') return renderNow(content);
   if (state.view === 'schedule') return renderSchedule(content);
@@ -269,7 +317,9 @@ function renderNow(root) {
   }
 
   if (!live.length && !soon.length) {
-    root.appendChild(emptyState('🌙', '$ ps aux | grep событие → пусто. Спокойной ночи.'));
+    root.appendChild(anyFilterActive()
+      ? filterEmptyState('🌙', true)
+      : emptyState('🌙', '$ ps aux | grep событие → пусто. Спокойной ночи.'));
   }
 }
 
@@ -309,7 +359,7 @@ function renderSchedule(root) {
     .sort(sortByStart);
 
   if (!evs.length) {
-    root.appendChild(emptyState('🔍', '$ grep: ничего не найдено по фильтру.'));
+    root.appendChild(filterEmptyState('🔍', anyFilterActive()));
     return;
   }
 
@@ -666,13 +716,115 @@ async function fallbackDownload(blob, filename, shareText, why) {
 }
 
 // «Программа» → вся программа в календарь: сперва предупреждаем (нет
-// напоминаний, разовый снимок), по подтверждению — ICS без VALARM
-function openProgramExport() { showSheet('#programExport'); }
-async function doProgramExport() {
-  hideSheet('#programExport');
+// напоминаний, разовый снимок), по подтверждению — ICS без VALARM.
+// При активном фильтре — развилка: «всё» (игнор фильтра) или «только
+// отфильтрованные N» (ценз/локация, все дни; день/поиск на выгрузку не влияют).
+function funnelFilteredAll() {
+  return (state.program.events || []).filter(e => e._startMs != null && passesFilters(e));
+}
+function openProgramExport() {
+  const active = anyFilterActive();
   const all = (state.program.events || []).filter(e => e._startMs != null);
-  if (!all.length) { toast('Программа не загружена'); return; }
-  await exportICS(all, 'insomnia-full-program.ics', { withAlarm: false });
+  const filtered = active ? all.filter(passesFilters) : all;
+  $('#programExportHead').classList.toggle('hidden', active);
+  $('#programExportFilterNote').classList.toggle('hidden', !active);
+  $('#programExportFiltered').classList.toggle('hidden', !active);
+  if (active) {
+    $('#programExportFilterNote').textContent =
+      `Сейчас включён фильтр, показано ${filtered.length} из ${all.length}. Что выгрузить?`;
+    $('#programExportFiltered').textContent = `Только отфильтрованные (${filtered.length})`;
+    $('#programExportGo').textContent = `Выгрузить всё (${all.length})`;
+  } else {
+    $('#programExportGo').textContent = 'Выгрузить всё';
+  }
+  showSheet('#programExport');
+}
+async function doProgramExport(filteredOnly) {
+  hideSheet('#programExport');
+  let list = (state.program.events || []).filter(e => e._startMs != null);
+  if (filteredOnly) list = list.filter(passesFilters);
+  if (!list.length) { toast('Нет событий для выгрузки'); return; }
+  await exportICS(list, filteredOnly ? 'insomnia-filtered.ics' : 'insomnia-full-program.ics', { withAlarm: false });
+}
+
+/* ---------- модалка фильтров ----------
+   Работает на ЧЕРНОВИКЕ: правки применяются к state.filters только по «ОК».
+   Любое иное закрытие (Отмена/крестик/светофор/бэкдроп) = откат. */
+let filterDraft = null;
+function openFilterSheet() {
+  if (!state.filters) return;
+  const nearby = state.view === 'nearby';
+  filterDraft = { age: new Set(state.filters.age), venue: new Set(state.filters.venue) };
+  // локация — только «сейчас/программа»; в «рядом» блок скрыт (фильтр по цензу)
+  $('#filterVenueBlock').classList.toggle('hidden', nearby);
+  $('#filterVenueSearch').value = '';
+  renderFilterChips();
+  showSheet('#filterSheet');
+}
+function filterChipLabel(val) { return val === '' ? 'не указано' : val; }
+function buildFilterChips(host, universe, draftSet, q) {
+  host.innerHTML = '';
+  universe.forEach(val => {
+    // поиск сужает список; «не указано» (пустое) при активном поиске прячем
+    if (q && (val === '' || !val.toLowerCase().includes(q))) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'fchip' + (draftSet.has(val) ? ' on' : '');
+    b.textContent = filterChipLabel(val);
+    b.setAttribute('aria-pressed', draftSet.has(val) ? 'true' : 'false');
+    b.addEventListener('click', () => {
+      if (draftSet.has(val)) draftSet.delete(val); else draftSet.add(val);
+      const on = draftSet.has(val);
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    host.appendChild(b);
+  });
+}
+function renderFilterChips() {
+  const q = ($('#filterVenueSearch').value || '').trim().toLowerCase();
+  buildFilterChips($('#filterAgeChips'), state.filters._ages, filterDraft.age, '');
+  buildFilterChips($('#filterVenueChips'), state.filters._venues, filterDraft.venue, q);
+}
+// «Снять все»/«Выбрать все» — на видимые секции (в «рядом» только ценз)
+function filterBulk(selectAll) {
+  const nearby = state.view === 'nearby';
+  filterDraft.age = selectAll ? new Set(state.filters._ages) : new Set();
+  if (!nearby) filterDraft.venue = selectAll ? new Set(state.filters._venues) : new Set();
+  renderFilterChips();
+}
+function applyFilters() {
+  state.filters.age = new Set(filterDraft.age);
+  state.filters.venue = new Set(filterDraft.venue);
+  hideSheet('#filterSheet');
+  render();
+}
+function resetFilters() {
+  state.filters.age = new Set(state.filters._ages);
+  state.filters.venue = new Set(state.filters._venues);
+  render();
+}
+// видимость воронки (только «сейчас/программа/рядом») + индикатор активности
+function updateFilterButton() {
+  const btn = $('#btnFilter');
+  if (!btn) return;
+  const shown = ['now', 'schedule', 'nearby'].includes(state.view);
+  btn.classList.toggle('hidden', !shown);
+  const active = state.view === 'nearby' ? ageFilterActive() : anyFilterActive();
+  $('#filterDot').classList.toggle('hidden', !active);
+  btn.classList.toggle('has-active', active);
+}
+// пустое состояние с кнопкой сброса, когда виноват именно фильтр
+function filterEmptyState(icon, active) {
+  const st = emptyState(icon, active ? 'Ничего не найдено по фильтрам.' : '$ grep: ничего не найдено по фильтру.');
+  if (active) {
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = 'Сбросить фильтры';
+    b.addEventListener('click', resetFilters);
+    st.appendChild(b);
+  }
+  return st;
 }
 // перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
 // иначе шиты наслаиваются и фокус уезжает в невидимое поле
@@ -1118,6 +1270,7 @@ function applyImportedProgram(program, msg, persist = true) {
   if (persist) localStorage.setItem(LS.program, JSON.stringify(program));
   else localStorage.removeItem(LS.program);
   state.program = decorateProgram(program);
+  initEventFilters(); // вселенная ценз/локации сменилась → сбрасываем воронку к «всё»
   // избранное НЕ чистим: осиротевшие отметки живут в плашке «избранного»
   // и переживают откат/повтор обновления данных
   state.day = null;
@@ -1143,6 +1296,7 @@ function resetData() {
   localStorage.removeItem(LS.notified);
   loadProgram().then(p => {
     state.program = decorateProgram(p);
+    initEventFilters();
     const ids = new Set(p.events.map(e => e.id));
     state.favs = new Set([...state.favs].filter(id => ids.has(id)));
     saveFavs();
@@ -1459,7 +1613,15 @@ function wireUI() {
 
   // подтверждение выгрузки всей программы (кнопка #btnProgramExport —
   // динамическая, навешана в renderSchedule)
-  $('#programExportGo').addEventListener('click', doProgramExport);
+  $('#programExportGo').addEventListener('click', () => doProgramExport(false));
+  $('#programExportFiltered').addEventListener('click', () => doProgramExport(true));
+
+  // фильтры-воронка
+  $('#btnFilter').addEventListener('click', openFilterSheet);
+  $('#filterApply').addEventListener('click', applyFilters);
+  $('#filterClear').addEventListener('click', () => filterBulk(false));
+  $('#filterSelectAll').addEventListener('click', () => filterBulk(true));
+  $('#filterVenueSearch').addEventListener('input', renderFilterChips);
 
   // notifications
   $('#btnEnableNotif').addEventListener('click', requestNotifications);
@@ -1629,6 +1791,7 @@ async function boot() {
     $('#content').innerHTML = '<div class="empty"><span class="big">⚠️</span>Не удалось загрузить программу.</div>';
     return;
   }
+  initEventFilters();
   noteDataVersion(state.program);
   state.day = pickDefaultDay();
   initMockGeo();
