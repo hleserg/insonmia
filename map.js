@@ -854,8 +854,8 @@ async function copyMyCoord() {
 }
 
 // 🔗 «Я здесь»: navigator.share (текст + #pin=-диплинк + geo:), с фолбэком
-// в буфер (Huawei без сервисов Google share'а файлов не даёт — а текст даёт
-// не всегда, поэтому явный откат в буфер, затем в поле)
+// в буфер (Huawei без GMS share'а файлов не даёт — а текст даёт не всегда,
+// поэтому явный откат в буфер, затем в поле)
 async function shareMyCoord() {
   if (!GEO.myCoord) return;
   const { lat, lng } = GEO.myCoord;
