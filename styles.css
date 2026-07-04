@@ -95,14 +95,6 @@ button { font-family: inherit; cursor: pointer; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .icon-btn:active { background: var(--card-2); }
-/* воронка фильтров с индикатором активности */
-#btnFilter { position: relative; }
-.funnel-ico { display: block; }
-.filter-dot {
-  position: absolute; top: 5px; right: 5px; width: 9px; height: 9px;
-  border-radius: 50%; background: var(--green); border: 1.5px solid var(--card);
-}
-#btnFilter.has-active { border-color: var(--green-dim); color: var(--green); }
 .search-bar { display: flex; gap: 8px; padding: 0 14px 10px; }
 .search-bar input {
   flex: 1; background: var(--bg); border: 1px solid var(--line); color: var(--text);
@@ -163,6 +155,21 @@ button { font-family: inherit; cursor: pointer; }
   display: inline-flex; align-items: center;
 }
 .chip.active { color: var(--green); border-color: var(--green-dim); background: var(--card-2); }
+
+/* Кнопка-воронка в ряду переключателей: закреплена слева, чипы скроллятся
+   под ней. Круглая, в тон чипам; индикатор активного фильтра — точка. */
+.filter-chip-btn {
+  position: sticky; left: 0; z-index: 2; flex: 0 0 auto;
+  padding: 0 12px; gap: 0; color: var(--text);
+  /* тень справа отделяет закреплённую кнопку от уезжающих под неё чипов */
+  box-shadow: 8px 0 8px -4px var(--bg);
+}
+.filter-chip-btn .funnel-ico { display: block; }
+.filter-chip-btn.has-active { color: var(--green); border-color: var(--green-dim); background: var(--card-2); }
+.filter-dot {
+  position: absolute; top: 3px; right: 3px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--green); border: 1.5px solid var(--card);
+}
 
 /* ---- Модалка фильтров (ценз/локация) ---- */
 .filter-block { margin-bottom: 6px; }

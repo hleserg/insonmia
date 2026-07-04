@@ -721,6 +721,7 @@ function getNearby(points, events, position, now, radiusM) {
 function renderNearby(root) {
   const radRow = document.createElement('div');
   radRow.className = 'chip-row';
+  radRow.appendChild(createFilterChipButton()); // воронка — первой, слева
   NEARBY_RADII.forEach(r => {
     const b = document.createElement('button');
     b.className = 'chip' + (GEO.nearby.radius === r ? ' active' : '');
@@ -729,6 +730,7 @@ function renderNearby(root) {
     radRow.appendChild(b);
   });
   root.appendChild(radRow);
+  updateFilterButton(); // индикатор на только что созданной кнопке-воронке
 
   if (!GEO.data) {
     root.appendChild(emptyState('🗺', 'Карта не загружена — откройте приложение онлайн один раз.'));
