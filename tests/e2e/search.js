@@ -35,6 +35,22 @@ const T = Date.UTC(2026, 6, 9, 18, 0); // чт 9 июля, 21:00 МСК — пе
   assert.ok(!txt.includes('Очень странное место'), 'преикондиция: на 9 июля спектакля быть не должно');
 
   await page.click('#btnSearch');
+  // плейсхолдер поля поиска не обрезается на 360px и не жмёт каретку к краю
+  const ph = await page.evaluate(() => {
+    const el = document.querySelector('#searchInput');
+    const cs = getComputedStyle(el);
+    return {
+      placeholder: el.placeholder,
+      overflow: el.scrollWidth - el.clientWidth, // >0 = текст не влезает
+      padLeft: parseFloat(cs.paddingLeft),
+      mono: /mono/i.test(cs.fontFamily),
+    };
+  });
+  assert.ok(!/название, площадка/.test(ph.placeholder), 'плейсхолдер не длинный перечень: ' + ph.placeholder);
+  assert.ok(ph.overflow <= 1, 'плейсхолдер/поле не переполняется по ширине на 360px: overflow=' + ph.overflow);
+  assert.ok(ph.padLeft >= 12, 'у поля есть left-padding (каретка не у края): ' + ph.padLeft);
+  assert.ok(ph.mono, 'терминальный моноширинный стиль сохранён');
+  console.log(`✓ плейсхолдер «${ph.placeholder}» влезает (overflow ${ph.overflow}), padding-left ${ph.padLeft}px, mono`);
   await page.fill('#searchInput', 'очень странное');
   await page.waitForTimeout(400);
   txt = await contentText();

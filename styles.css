@@ -97,10 +97,15 @@ button { font-family: inherit; cursor: pointer; }
 .icon-btn:active { background: var(--card-2); }
 .search-bar { display: flex; gap: 8px; padding: 0 14px 10px; }
 .search-bar input {
-  flex: 1; background: var(--bg); border: 1px solid var(--line); color: var(--text);
-  border-radius: 10px; padding: 10px 12px; font-size: 1rem; font-family: var(--mono);
+  flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+  border-radius: 10px; padding: 10px 14px; font-size: 1rem; font-family: var(--mono);
+  /* убрать нативный хром type=search (крестик/лупа жмут каретку к краю) */
+  -webkit-appearance: none; appearance: none;
 }
-.search-bar input::placeholder { color: var(--muted); }
+/* плейсхолдер короткий и не обрезается; если сузят — многоточие, не в букву */
+.search-bar input::placeholder { color: var(--muted); text-overflow: ellipsis; }
+.search-bar input::-webkit-search-decoration,
+.search-bar input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
 /* ---- Tabs ---- */
 .tabs {
