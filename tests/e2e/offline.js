@@ -153,7 +153,7 @@ async function assertAlive(page, tag) {
   // карта: маркеры реально отрисованы (Leaflet)
   await tap(page, 'map');
   await page.waitForTimeout(800);
-  const markers = await page.evaluate(() => document.querySelectorAll('#leafletMap .geo-pin, #leafletMap .leaflet-marker-icon').length);
+  const markers = await page.evaluate(() => (typeof GEO!=='undefined' && GEO.clusterGroup) ? GEO.clusterGroup.getLayers().length : document.querySelectorAll('#leafletMap .geo-pin, #leafletMap .leaflet-marker-icon').length);
   console.log('маркеров на карте офлайн:', markers);
   assert.ok(markers > 50, 'A: карта офлайн почти пуста: ' + markers + ' маркеров');
   // «рядом» с реальным GPS-провайдером
@@ -214,7 +214,7 @@ async function assertAlive(page, tag) {
     await r.page.reload({ waitUntil: 'load' }).catch(() => {});
     await tap(r.page, 'map');
     await r.page.waitForTimeout(1200);
-    const mk = await r.page.evaluate(() => document.querySelectorAll('#leafletMap .geo-pin, #leafletMap .leaflet-marker-icon').length);
+    const mk = await r.page.evaluate(() => (typeof GEO!=='undefined' && GEO.clusterGroup) ? GEO.clusterGroup.getLayers().length : document.querySelectorAll('#leafletMap .geo-pin, #leafletMap .leaflet-marker-icon').length);
     await assertAlive(r.page, 'D: карта без подложки');
     assert.ok(mk > 50, 'D: метки пропали вместе с подложкой: ' + mk);
     console.log('D: OK — карта живёт без подложки,', mk, 'маркеров\n');
