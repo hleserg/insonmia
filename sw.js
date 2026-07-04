@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v51';
+const CACHE = 'insomnia-2026-v52';
 const ASSETS = [
   './',
   'index.html',
@@ -64,6 +64,12 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // don't touch cross-origin (e.g. URL imports)
+
+  // config.js генерируется при деплое из секретов и НЕ прекэшируется: SW его не
+  // трогает — онлайн всегда свежий (важно при ротации токена мусорного бота),
+  // офлайн его просто нет (пинг офлайн и не нужен). Кэшировать нельзя — иначе
+  // старый токен «залип» бы в кэше до следующего несвязанного бампа CACHE.
+  if (url.pathname.endsWith('config.js')) return;
 
   // Network-first for the program data so "check for update" works online,
   // with cache fallback when offline.
