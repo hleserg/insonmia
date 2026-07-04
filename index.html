@@ -39,10 +39,6 @@
       </div>
       <div class="header-actions">
         <button id="btnSearch" class="icon-btn" title="Поиск" aria-label="Поиск">🔎</button>
-        <button id="btnFilter" class="icon-btn hidden" title="Фильтры" aria-label="Фильтры">
-          <svg class="funnel-ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 5h18l-7 9v5l-4 2v-7z" fill="currentColor"/></svg>
-          <span id="filterDot" class="filter-dot hidden"></span>
-        </button>
         <button id="btnSettings" class="icon-btn" title="Настройки" aria-label="Настройки">⚙️</button>
       </div>
     </div>
@@ -63,6 +59,10 @@
   <div id="filters" class="filters">
     <div class="day-strip" id="dayStrip"></div>
     <div class="chip-row" id="typeChips">
+      <button class="chip filter-chip-btn" id="btnFilter" title="Фильтры" aria-label="Фильтры">
+        <svg class="funnel-ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 5h18l-7 9v5l-4 2v-7z" fill="currentColor"/></svg>
+        <span id="filterDot" class="filter-dot hidden"></span>
+      </button>
       <button class="chip active" data-type="all">всё</button>
       <button class="chip" data-type="program">дневная</button>
       <button class="chip" data-type="animation">анимация·ночь</button>

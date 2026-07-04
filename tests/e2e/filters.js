@@ -57,22 +57,35 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   const chip = (host, label) => page.locator(host + ' .fchip', { hasText: reExact(label) });
   const visibleAges = () => page.$$eval('.event .age-pill', els => [...new Set(els.map(e => e.textContent.trim()))]);
   const eventCount = () => page.$$eval('.event', els => els.length);
-  const dotHidden = () => page.$eval('#filterDot', el => el.classList.contains('hidden'));
+  // индикатор активного фильтра на ВИДИМОЙ кнопке-воронке (их несколько в DOM,
+  // видна только та, чей контейнер показан)
+  const dotHidden = () => page.$$eval('.filter-chip-btn', bs => {
+    const vis = bs.find(b => b.offsetParent !== null) || bs[0];
+    const d = vis && vis.querySelector('.filter-dot');
+    return d ? d.classList.contains('hidden') : true;
+  });
+  const clickFilter = () => page.locator('.filter-chip-btn:visible').first().click();
 
-  // --- 1. Воронка видна в «сейчас/программа/рядом», скрыта в «избранное/карта»
+  // --- 1. Воронка в ряду переключателей; видна в «сейчас/программа/рядом»,
+  //   скрыта в «избранное/карта»; в ШАПКЕ её нет, поиск/настройки на месте
+  assert.equal(await page.$$eval('.header-actions #btnFilter', e => e.length), 0, 'в шапке кнопки-фильтра быть не должно');
+  assert.ok(await page.isVisible('.header-actions #btnSearch') && await page.isVisible('.header-actions #btnSettings'), 'поиск и настройки в шапке на месте');
   await page.click('.tab[data-view="schedule"]');
   await page.waitForTimeout(200);
-  assert.ok(await page.isVisible('#btnFilter'), 'воронка видна в «программе»');
+  assert.ok(await page.isVisible('#typeChips .filter-chip-btn'), 'воронка в ряду пресетов в «программе»');
   await page.click('.tab[data-view="favorites"]');
   await page.waitForTimeout(150);
-  assert.ok(!(await page.isVisible('#btnFilter')), 'воронка скрыта в «избранном»');
+  assert.ok(!(await page.isVisible('.filter-chip-btn')), 'воронка скрыта в «избранном»');
   await page.click('.tab[data-view="map"]');
   await page.waitForTimeout(150);
-  assert.ok(!(await page.isVisible('#btnFilter')), 'воронка скрыта на «карте»');
+  assert.ok(!(await page.isVisible('.filter-chip-btn')), 'воронка скрыта на «карте»');
+  await page.click('.tab[data-view="nearby"]');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isVisible('#content .filter-chip-btn'), 'воронка первой в ряду радиусов «рядом»');
   await page.click('.tab[data-view="now"]');
   await page.waitForTimeout(150);
-  assert.ok(await page.isVisible('#btnFilter'), 'воронка видна в «сейчас»');
-  console.log('✓ 1. видимость воронки по разделам');
+  assert.ok(await page.isVisible('#typeChips .filter-chip-btn'), 'воронка в ряду пресетов в «сейчас»');
+  console.log('✓ 1. воронка в ряду переключателей; шапка чиста; видимость по разделам');
 
   // --- 2. Модалка: чипы из данных, всё выбрано по умолчанию, индикатор погашен
   await page.click('.tab[data-view="schedule"]');
@@ -80,7 +93,7 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   const baselineDay = await eventCount();
   assert.ok(baselineDay > 0, 'на выбранном дне есть события');
   assert.ok(await dotHidden(), 'по умолчанию индикатор активности погашен');
-  await page.click('#btnFilter');
+  await clickFilter();
   await page.waitForTimeout(200);
   const ageChips = await page.$$eval('#filterAgeChips .fchip', els => els.map(e => e.textContent.trim()));
   const ageOn = await page.$$eval('#filterAgeChips .fchip.on', els => els.length);
@@ -129,7 +142,7 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   console.log('✓ 3. черновик откатывается по «Отмена»');
 
   // --- 4. Фильтр ценза 18+: деселект остальных, применяем
-  await page.click('#btnFilter');
+  await clickFilter();
   await page.waitForTimeout(150);
   for (const a of ageChips) if (a !== '18+') await chip('#filterAgeChips', a).click();
   await page.click('#filterApply');
@@ -157,7 +170,7 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   console.log('✓ 5. фильтр держится при смене дня (И-пересечение)');
 
   // --- 6. Пустой результат → «Ничего не найдено» + сброс
-  await page.click('#btnFilter');
+  await clickFilter();
   await page.waitForTimeout(150);
   await page.click('#filterClear');
   await page.waitForTimeout(100);
@@ -176,7 +189,7 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   console.log('✓ 6. пустой результат → «Ничего не найдено» + сброс фильтров');
 
   // --- 7. Поиск НЕ применяет воронку (grep по всей программе)
-  await page.click('#btnFilter');
+  await clickFilter();
   await page.waitForTimeout(150);
   for (const a of ageChips) if (a !== '18+') await chip('#filterAgeChips', a).click();
   await page.click('#filterApply');
@@ -214,7 +227,7 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   console.log(`✓ 9. отфильтрованный экспорт: ровно ${vevents} VEVENT, без VALARM`);
 
   // --- 10. Без фильтра — модалка как раньше (одна кнопка, всё)
-  await page.click('#btnFilter');
+  await clickFilter();
   await page.waitForTimeout(150);
   await page.click('#filterSelectAll');
   await page.click('#filterApply');
@@ -235,7 +248,7 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   // --- 11. «Рядом»: модалка показывает только ценз (локация скрыта)
   await page.click('.tab[data-view="nearby"]');
   await page.waitForTimeout(200);
-  await page.click('#btnFilter');
+  await clickFilter();
   await page.waitForTimeout(200);
   assert.ok(await page.isVisible('#filterAgeBlock'), 'в «рядом» ценз есть');
   assert.ok(!(await page.isVisible('#filterVenueBlock')), 'в «рядом» локация скрыта');
@@ -245,7 +258,7 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   // --- 12. Память сессии: перезагрузка сбрасывает фильтры к «всё»
   await page.click('.tab[data-view="schedule"]');
   await page.waitForTimeout(150);
-  await page.click('#btnFilter');
+  await clickFilter();
   await page.waitForTimeout(150);
   for (const a of ageChips) if (a !== '18+') await chip('#filterAgeChips', a).click();
   await page.click('#filterApply');
@@ -287,8 +300,10 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   const hasPin = await page2.$eval('#content', el => /Наш лагерь/.test(el.innerText)).catch(() => false);
   assert.ok(hasPin, 'своя метка «Наш лагерь» должна быть в радиусе (предусловие)');
   assert.ok(beforePts >= 1, 'в радиусе есть точки (предусловие)');
+  // воронка «рядом» — первой в ряду радиусов
+  assert.ok(await page2.isVisible('#content .filter-chip-btn'), 'воронка в ряду радиусов «рядом»');
   // ценз: снять все → под-строки событий пропадают, точки и метка остаются
-  await page2.click('#btnFilter');
+  await page2.locator('.filter-chip-btn:visible').first().click();
   await page2.waitForTimeout(150);
   await page2.click('#filterClear');
   await page2.click('#filterApply');
@@ -297,7 +312,8 @@ const reExact = s => new RegExp('^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
   assert.ok(/Наш лагерь/.test(nb), 'своя метка по-прежнему видна при активном цензе');
   assert.ok((await page2.$$eval('.map-point', els => els.length)) >= 1, 'точки в радиусе остаются (фильтр режет только события)');
   assert.ok(!/выбранного ценза/.test(nb), 'НЕ должно быть ложного «нет событий выбранного ценза» (причина — не радиус)');
-  assert.ok(!(await page2.$eval('#filterDot', el => el.classList.contains('hidden'))), 'индикатор воронки активен — честный признак фильтра');
+  const dot2Hidden = await page2.$$eval('#content .filter-chip-btn .filter-dot', ds => ds.length ? ds[0].classList.contains('hidden') : true);
+  assert.ok(!dot2Hidden, 'индикатор воронки активен — честный признак фильтра');
   await ctx2.close();
   console.log('✓ 13. «рядом»: ценз режет только события, точки/метки остаются, ложного пустого нет');
 

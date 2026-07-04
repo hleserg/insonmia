@@ -804,15 +804,29 @@ function resetFilters() {
   state.filters.venue = new Set(state.filters._venues);
   render();
 }
-// видимость воронки (только «сейчас/программа/рядом») + индикатор активности
+// Кнопка-воронка живёт в ряду переключателей: в «сейчас/программа» — первой
+// в #typeChips (виден только там: блок .filters скрыт в прочих видах); в
+// «рядом» — первой в ряду радиусов (создаётся в renderNearby). Здесь только
+// подсвечиваем индикатор активности на ВСЕХ таких кнопках; видимость даёт
+// контейнер, поэтому «избранное/карта» кнопки не показывают автоматически.
 function updateFilterButton() {
-  const btn = $('#btnFilter');
-  if (!btn) return;
-  const shown = ['now', 'schedule', 'nearby'].includes(state.view);
-  btn.classList.toggle('hidden', !shown);
   const active = state.view === 'nearby' ? ageFilterActive() : anyFilterActive();
-  $('#filterDot').classList.toggle('hidden', !active);
-  btn.classList.toggle('has-active', active);
+  $$('.filter-chip-btn').forEach(btn => {
+    btn.classList.toggle('has-active', active);
+    const dot = btn.querySelector('.filter-dot');
+    if (dot) dot.classList.toggle('hidden', !active);
+  });
+}
+// разметка кнопки-воронки для динамического ряда («рядом»)
+function createFilterChipButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chip filter-chip-btn';
+  btn.title = 'Фильтры';
+  btn.setAttribute('aria-label', 'Фильтры');
+  btn.innerHTML = '<svg class="funnel-ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 5h18l-7 9v5l-4 2v-7z" fill="currentColor"/></svg><span class="filter-dot hidden"></span>';
+  btn.addEventListener('click', openFilterSheet);
+  return btn;
 }
 // пустое состояние с кнопкой сброса, когда виноват именно фильтр
 function filterEmptyState(icon, active) {
@@ -1574,8 +1588,9 @@ window.addEventListener('appinstalled', () => {
 /* ---------- event wiring ---------- */
 function wireUI() {
   $$('.tab').forEach(t => t.addEventListener('click', () => switchView(t.dataset.view)));
-  $$('#typeChips .chip').forEach(c => c.addEventListener('click', () => {
-    $$('#typeChips .chip').forEach(x => x.classList.remove('active'));
+  // только чипы-типы (у кнопки-фильтра нет data-type — её не трогаем)
+  $$('#typeChips .chip[data-type]').forEach(c => c.addEventListener('click', () => {
+    $$('#typeChips .chip[data-type]').forEach(x => x.classList.remove('active'));
     c.classList.add('active');
     state.type = c.dataset.type;
     render();
