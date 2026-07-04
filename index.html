@@ -230,6 +230,29 @@
     </div>
   </div>
 
+  <!-- Предупреждение перед выгрузкой всей программы в календарь -->
+  <div id="programExport" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-titlebar">
+        <div class="traffic" data-close><span class="tl-r"></span><span class="tl-y"></span><span class="tl-g"></span></div>
+        <div class="sheet-titlebar-label">~/вся программа</div>
+        <button class="icon-btn" data-close aria-label="Закрыть">✕</button>
+      </div>
+      <div class="sheet-body">
+        <p><b>Выгрузятся ВСЕ события программы (700+).</b> Учтите:</p>
+        <ul class="warn-list">
+          <li>напоминания <b>не будут включены</b> — событий слишком много, поставьте их сами на то, что выберете;</li>
+          <li>при изменениях в программе события в календаре <b>не обновятся</b> автоматически — это разовый снимок.</li>
+        </ul>
+        <div class="detail-actions">
+          <button id="programExportGo" class="btn">Выгрузить всё</button>
+          <button class="btn ghost" data-close>Отмена</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Редактор метки -->
   <div id="pinEditor" class="sheet hidden" role="dialog" aria-modal="true">
     <div class="sheet-backdrop" data-close></div>

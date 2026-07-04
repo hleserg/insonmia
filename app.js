@@ -296,6 +296,14 @@ function renderSchedule(root) {
   }
 
   buildDayStrip();
+  // «вся программа в календарь» — разовый снимок без напоминаний (модалка
+  // предупредит); показываем всегда в «Программе», даже если день пуст
+  const progExport = document.createElement('div');
+  progExport.className = 'program-export';
+  progExport.innerHTML = `<button class="btn ghost" id="btnProgramExport" aria-label="Выгрузить всю программу в календарь">📅 вся программа в календарь</button>`;
+  progExport.querySelector('#btnProgramExport').addEventListener('click', openProgramExport);
+  root.appendChild(progExport);
+
   const evs = filteredEvents()
     .filter(e => e._festDay === state.day)
     .sort(sortByStart);
@@ -507,8 +515,9 @@ function openDetail(id) {
       <button class="btn ${fav ? 'ghost' : ''}" id="detailFav">${fav ? '★ В избранном' : '☆ Напомнить и добавить'}</button>
     </div>
     <div class="detail-actions cal-row">
-      <button class="btn ghost" id="detailCal">📅 В календарь</button>
-      <button class="btn ghost cal-dl" id="detailIcs" aria-label="Скачать .ics">⬇️ .ics</button>
+      <button class="btn ghost" id="detailCal" aria-label="Добавить в календарь">📅 в календарь</button>
+      <button class="btn ghost" id="detailShare" aria-label="Поделиться">🔗 поделиться</button>
+      <button class="btn ghost cal-dl" id="detailIcs" aria-label="Скачать .ics">⬇️</button>
     </div>
   `;
   $('#detailFav').addEventListener('click', () => {
@@ -517,6 +526,7 @@ function openDetail(id) {
   });
   const icsName = `insomnia-${e.id}.ics`;
   $('#detailCal').addEventListener('click', () => exportICS([e], icsName));
+  $('#detailShare').addEventListener('click', () => exportICS([e], icsName, { shareText: eventShareText(e) }));
   $('#detailIcs').addEventListener('click', () => exportICS([e], icsName, { forceDownload: true }));
   body.querySelectorAll('.geo-jump').forEach(btn => btn.addEventListener('click', () => {
     hideSheet('#sheet');
@@ -544,26 +554,46 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-async function exportICS(events, filename, { forceDownload = false } = {}) {
+// самодостаточный текст для «🔗 поделиться»: понятен и без вложения
+function eventShareText(e) {
+  const p = dayParts(e._festDay);
+  const dateStr = `${WD[p.dow]}, ${p.day} ${MON[p.mo]}`;
+  const timeStr = e.end ? `${e.start}–${e.end}` : e.start;
+  const parts = [e.title, `${dateStr}, ${timeStr} МСК`];
+  if (e.venue) parts.push(`📍 ${e.venue}`);
+  parts.push('— Бессонница 2026');
+  return parts.join('\n');
+}
+
+async function exportICS(events, filename, opts = {}) {
+  // forceDownload — принудительно качать; shareText — «поделиться» с текстом;
+  // withAlarm — ставить ли VALARM (false для полной выгрузки программы)
+  const { forceDownload = false, shareText = null, withAlarm = true } = opts;
   // filename — латиница: кириллица в именах файлов ломается на части систем
   const list = (events || []).filter(e => e && (e._startMs != null || e.startISO));
   if (!list.length) { toast('Нет событий для экспорта'); return; }
   let ics;
   // напоминание в календаре — за выбранное в настройках время (как пуши)
-  try { ics = window.InsomniaCore.buildICS(list, { leadMin: state.lead }); }
+  try { ics = window.InsomniaCore.buildICS(list, { leadMin: state.lead, withAlarm }); }
   catch { toast('Не удалось собрать файл календаря'); return; }
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
 
-  // 1) share с файлом — приоритет на телефоне (iOS предлагает «Добавить в
-  //    Календарь»); только когда это не «принудительно скачать»
-  if (!forceDownload && typeof File === 'function' && navigator.canShare) {
-    const file = new File([blob], filename, { type: 'text/calendar' });
-    if (navigator.canShare({ files: [file] })) {
+  // 1) share — приоритет на телефоне (iOS предлагает «Добавить в Календарь»);
+  //    только когда это не «принудительно скачать»
+  if (!forceDownload && navigator.share) {
+    const file = (typeof File === 'function') ? new File([blob], filename, { type: 'text/calendar' }) : null;
+    const canFiles = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+    const data = { title: 'Бессонница 2026' };
+    if (shareText) data.text = shareText;
+    if (canFiles) data.files = [file];
+    // 🔗 «поделиться»: текст самодостаточен — шэрим даже без вложения;
+    // 📅 «в календарь»: без файла шэрить нечего → уходим на скачивание
+    if (canFiles || shareText) {
       try {
-        await navigator.share({ files: [file], title: 'Бессонница 2026' });
+        await navigator.share(data);
         return;
       } catch (err) {
-        // осознанная отмена шэра — уважаем, не навязываем скачивание;
+        // осознанная отмена — уважаем, не навязываем скачивание;
         // любая иная ошибка → фолбэк на download ниже
         if (err && err.name === 'AbortError') return;
       }
@@ -575,6 +605,16 @@ async function exportICS(events, filename, { forceDownload = false } = {}) {
   //    сюда попадает и кнопка «в календарь»; подсказываем, что делать дальше
   downloadBlob(blob, filename);
   toast('Файл скачан — откройте его, чтобы добавить в календарь', 4000);
+}
+
+// «Программа» → вся программа в календарь: сперва предупреждаем (нет
+// напоминаний, разовый снимок), по подтверждению — ICS без VALARM
+function openProgramExport() { showSheet('#programExport'); }
+async function doProgramExport() {
+  hideSheet('#programExport');
+  const all = (state.program.events || []).filter(e => e._startMs != null);
+  if (!all.length) { toast('Программа не загружена'); return; }
+  await exportICS(all, 'insomnia-full-program.ics', { withAlarm: false });
 }
 // перед открытием диплинк-шитов (#pin=, #import-pins) закрываем все прочие:
 // иначе шиты наслаиваются и фокус уезжает в невидимое поле
@@ -1312,6 +1352,10 @@ function wireUI() {
     const sheet = el.closest('.sheet');
     if (sheet) sheet.classList.add('hidden');
   }));
+
+  // подтверждение выгрузки всей программы (кнопка #btnProgramExport —
+  // динамическая, навешана в renderSchedule)
+  $('#programExportGo').addEventListener('click', doProgramExport);
 
   // notifications
   $('#btnEnableNotif').addEventListener('click', requestNotifications);

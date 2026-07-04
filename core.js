@@ -325,7 +325,7 @@
     return `${e.id}@${ICS_DOMAIN}`;
   }
 
-  function icsVevent(e, dtstampMs, leadMin) {
+  function icsVevent(e, dtstampMs, leadMin, withAlarm) {
     const start = e._startMs != null ? e._startMs : epochFromISO(e.startISO);
     if (start == null) return null; // без старта событие не запланировать
     let end = e._endMs != null ? e._endMs : epochFromISO(e.endISO);
@@ -346,13 +346,19 @@
       'SUMMARY:' + icsEscape(e.title),
       'LOCATION:' + icsEscape(e.venue || ''),
       'DESCRIPTION:' + icsEscape(descParts.join('\n')),
-      'BEGIN:VALARM',
-      'TRIGGER:-PT' + lead + 'M',
-      'ACTION:DISPLAY',
-      'DESCRIPTION:' + icsEscape(e.title),
-      'END:VALARM',
-      'END:VEVENT',
     ];
+    // VALARM только если явно попросили (осознанно выбранные события).
+    // Полная выгрузка программы (700+) идёт БЕЗ будильников — иначе телефон
+    // засыпет сотнями напоминаний.
+    if (withAlarm) {
+      lines.push(
+        'BEGIN:VALARM',
+        'TRIGGER:-PT' + lead + 'M',
+        'ACTION:DISPLAY',
+        'DESCRIPTION:' + icsEscape(e.title),
+        'END:VALARM');
+    }
+    lines.push('END:VEVENT');
     return lines;
   }
 
@@ -363,6 +369,8 @@
     const dtstampMs = o.dtstampMs != null ? o.dtstampMs
       : (typeof Date.now === 'function' ? Date.now() : 0);
     const leadMin = o.leadMin; // за сколько минут напомнить (VALARM); дефолт 15
+    // withAlarm по умолчанию true (одиночное/избранное); полная выгрузка → false
+    const withAlarm = o.withAlarm !== false;
     const head = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
@@ -372,7 +380,7 @@
     ];
     const body = [];
     (events || []).forEach(e => {
-      const v = icsVevent(e, dtstampMs, leadMin);
+      const v = icsVevent(e, dtstampMs, leadMin, withAlarm);
       if (v) body.push(...v);
     });
     const all = head.concat(body, ['END:VCALENDAR']);
