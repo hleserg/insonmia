@@ -616,6 +616,18 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
 }
 .map-pin-hint span { flex: 1; color: var(--text); font-size: 0.8rem; line-height: 1.35; }
 .map-pin-hint .icon-btn { flex: 0 0 auto; min-width: 36px; height: 36px; pointer-events: auto; }
+/* «мои координаты» + 🔗 — одна строка, влезает в 360px (координаты режутся
+   многоточием, а не раскатывают вёрстку) */
+.my-coord-row { display: flex; align-items: center; gap: 8px; padding: 2px 14px 6px; }
+.my-coord-text {
+  flex: 1; min-width: 0; text-align: left;
+  background: var(--bg); border: 1px solid var(--line); color: var(--text);
+  border-radius: 10px; padding: 8px 12px; min-height: var(--tap);
+  font-family: var(--mono); font-size: 0.82rem; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.my-coord-share { flex: 0 0 auto; }
+.my-coord-share:disabled { opacity: 0.45; }
 .pin-form label {
   display: block; margin: 10px 0 4px;
   font-family: var(--mono); font-size: 0.78rem; color: var(--muted);

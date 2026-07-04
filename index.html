@@ -89,6 +89,11 @@
   <div id="mapWrap" class="map-wrap hidden">
     <div class="chip-row" id="mapChips"></div>
     <div id="mapStatus" class="muted small" style="padding:0 14px;"></div>
+    <!-- «мои координаты» + поделиться: для потеряшек на поляне -->
+    <div id="myCoordRow" class="my-coord-row hidden">
+      <button id="myCoordText" class="my-coord-text" type="button" title="скопировать координаты">📍 включить геолокацию</button>
+      <button id="myCoordShare" class="icon-btn my-coord-share" type="button" title="поделиться координатами" aria-label="поделиться координатами" disabled>🔗</button>
+    </div>
     <div class="map-stage">
       <div id="leafletMap"></div>
       <div id="mapPlaceHint" class="map-place-hint hidden">
