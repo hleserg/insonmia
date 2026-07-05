@@ -1132,6 +1132,7 @@ function renderNearby(root) {
 
 /* ---------- интеграция с app.js ---------- */
 function switchView(view) {
+  dropNavSteps(); // явная смена вида → снять висячие nav-шаги («на карте от события»)
   state.view = view;
   $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === view));
   saveFilterState(); // вкладка переживает рефреш вместе с фильтрами

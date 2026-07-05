@@ -678,9 +678,7 @@ function openDetail(id) {
   $('#detailShare').addEventListener('click', () => exportICS([e], icsName, { shareText: eventShareText(e) }));
   $('#detailIcs').addEventListener('click', () => exportICS([e], icsName, { forceDownload: true }));
   body.querySelectorAll('.geo-jump').forEach(btn => btn.addEventListener('click', () => {
-    hideSheet('#sheet');
-    switchView('map');
-    setTimeout(() => highlightPoint(btn.dataset.gid, { open: false }), 300);
+    navEventToMap(e.id, btn.dataset.gid);
   }));
   showSheet('#sheet');
 }
@@ -742,21 +740,61 @@ function hideSheet(sel) {
 }
 
 function hideAllSheets() {
-  const n = _sheetStack.length;
-  while (_sheetStack.length) _hideSheetEl(_sheetStack[_sheetStack.length - 1]);
-  $$('.sheet').forEach(s => s.classList.add('hidden')); // добить всё, что мимо стека
+  // закрываем только МОДАЛКИ (строковые записи) сверху вниз; nav-шаги (объект
+  // {onBack}, напр. «на карте от события») — не модалки, их не трогаем
+  let n = 0;
+  while (_sheetStack.length && typeof _sheetStack[_sheetStack.length - 1] === 'string') {
+    const sel = _sheetStack.pop();
+    const el = $(sel); if (el) el.classList.add('hidden');
+    n++;
+  }
+  $$('.sheet').forEach(s => s.classList.add('hidden')); // визуально добить всё
   if (n > 0) _scheduleHistTrim(n);
 }
 
-// системный «назад»/свайп: закрыть ВЕРХНЮЮ модалку, не покидая приложение;
-// стек пуст → ничего не перехватываем (браузер уже ушёл назад / свернул PWA)
+// «событие → на карте»: описание НЕ теряется — заменяем его запись в стеке на
+// «шаг назад = снова открыть ЭТО событие», переиспользуя ТУ ЖЕ запись истории
+// (глубина не меняется). «Назад» с карты → вернёт описание; ещё «назад» → закроет
+// его штатно. Пришли на карту не из события (вкладкой) → стек пуст → «назад»
+// работает как обычная навигация. Синхронно с popstate-перехватом модалок.
+function navEventToMap(eid, gid) {
+  const fromView = ['now', 'schedule', 'favorites'].includes(state.view) ? state.view : 'schedule';
+  const el = $('#sheet'); if (el) el.classList.add('hidden'); // спрятать описание визуально
+  switchView('map'); // сначала на карту (dropNavSteps: на вершине строка '#sheet' — no-op)
+  // заменить верхнюю запись '#sheet' на «шаг назад = вернуть это описание»
+  // (та же запись истории; глубина не меняется). ПОСЛЕ switchView, иначе его
+  // dropNavSteps снял бы только что положенный шаг.
+  const step = { onBack: () => { switchView(fromView); openDetail(eid); } };
+  if (_sheetStack[_sheetStack.length - 1] === '#sheet') {
+    _sheetStack[_sheetStack.length - 1] = step;            // та же запись истории
+  } else {                                                 // страховка: '#sheet' не на вершине
+    if (_histTrimPending > 0) _histTrimPending--; else history.pushState({ nav: 1 }, '');
+    _sheetStack.push(step);
+  }
+  setTimeout(() => highlightPoint(gid, { open: false }), 300);
+}
+
+// снять «висячие» nav-шаги (напр. «на карте от события») сверху стека и снять их
+// записи истории. Вызывается из switchView: любая ЯВНАЯ смена вида (вкладка, «все
+// события площадки» и т.п.) делает шаг «вернуть описание» неактуальным, иначе
+// последующий «назад» воскресил бы старое описание поверх чужого экрана.
+function dropNavSteps() {
+  let n = 0;
+  while (_sheetStack.length && typeof _sheetStack[_sheetStack.length - 1] !== 'string') {
+    _sheetStack.pop(); n++;
+  }
+  if (n > 0) _scheduleHistTrim(n);
+}
+
+// системный «назад»/свайп: снять ВЕРХНИЙ слой пути назад, не покидая приложение.
+// Строковый слой = модалка (прячем); объект {onBack} = шаг навигации (напр. «на
+// карте от события» → вернуть описание). Стек пуст → не перехватываем (браузер
+// уже ушёл назад / свернул PWA).
 window.addEventListener('popstate', () => {
   if (_histSelfPop > 0) { _histSelfPop--; return; } // наш программный откат — уже скрыли
-  // popstate = одна израсходованная запись истории → снимаем ровно один слой со
-  // стека БЕЗУСЛОВНО (даже если элемент уже скрыт иным путём), чтобы стек модалок
-  // не рассинхронился с историей и «назад» не залипал холостыми нажатиями
-  const sel = _sheetStack.pop();
-  if (sel) { const el = $(sel); if (el) el.classList.add('hidden'); }
+  const top = _sheetStack.pop(); // одна израсходованная запись = один слой
+  if (typeof top === 'string') { const el = $(top); if (el) el.classList.add('hidden'); }
+  else if (top && top.onBack) { try { top.onBack(); } catch { /* «назад» не должно падать */ } }
 });
 
 /* ---------- экспорт в календарь (.ics, всё офлайн на клиенте) ---------- */
