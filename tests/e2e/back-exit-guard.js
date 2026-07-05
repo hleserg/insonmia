@@ -122,17 +122,83 @@ const BASE = `http://127.0.0.1:${PORT}`;
     console.log('✓ 5. взаимодействие в окне + возврат на дно → страж восстановлен, нет молчаливого выхода');
   }
 
-  // --- 6. офлайн: защита работает без сети
+  // --- 7. РЕГРЕСС verify #66 (guard-desync): навигация ВНУТРИ окна выхода не
+  //        оставляет зависшего _exitArmed → возврат на дно снова просит тост,
+  //        а не выходит одним «назад» молча
+  {
+    const { ctx, page } = await fresh();
+    await back(page); // 1-е «назад» на дне: тост, окно открыто, страж съеден
+    assert.ok((await toastText(page) || '').match(/ещё раз/), '7: 1-е «назад» → тост');
+    await clickTab(page, 'schedule'); // навигация в окне → окно должно закрыться
+    await back(page); // назад по вкладке → на дно
+    assert.ok(await activeTab(page) === 'now' && await alive(page), '7: «назад» вернул на «сейчас», не вышли');
+    await hideToast(page);
+    await back(page);
+    assert.ok(await alive(page), '7: «назад» на дне после навигации в окне НЕ вышел молча');
+    assert.ok((await toastText(page) || '').match(/ещё раз/), '7: снова тост (окно сброшено навигацией, страж восстановлен)');
+    await back(page);
+    assert.ok(!(await alive(page)), '7: следующее «назад» в окне → выход');
+    await ctx.close();
+    console.log('✓ 7. навигация в окне выхода не роняет защиту (нет молчаливого выхода одним «назад»)');
+  }
+
+  // --- 8. РЕГРЕСС verify #66 (window-race): модалка пережила истечение окна и
+  //        закрыта КРЕСТИКОМ (программный history.go) → страж восстановлен
+  {
+    const { ctx, page } = await fresh();
+    await back(page); // тост, окно, страж съеден
+    assert.ok((await toastText(page) || '').match(/ещё раз/), '8: 1-е «назад» → тост');
+    await page.evaluate(() => showSheet('#settings')); await page.waitForTimeout(200); // модалка в окне
+    await page.waitForTimeout(2300); // окно истекло, пока модалка открыта
+    await page.evaluate(() => hideSheet('#settings')); await page.waitForTimeout(300); // закрыли КРЕСТИКОМ (self-pop)
+    assert.ok(!(await vis(page, '#settings')) && await alive(page), '8: модалка закрыта крестиком, на дне');
+    await hideToast(page);
+    await back(page);
+    assert.ok(await alive(page), '8: «назад» после закрытия крестиком НЕ вышел молча');
+    assert.ok((await toastText(page) || '').match(/ещё раз/), '8: тост показан (страж восстановлен на self-pop к дну)');
+    await back(page);
+    assert.ok(!(await alive(page)), '8: следующее «назад» → выход');
+    await ctx.close();
+    console.log('✓ 8. модалка пережила окно и закрыта крестиком → страж восстановлен (не молчаливый выход)');
+  }
+
+  // --- 9. РЕГРЕСС verify #66 (deeplink): старт по ссылке-метке открывает модалку
+  //        ДО постановки стража; закрытие её крестиком не должно оставлять дно
+  //        без стража (иначе первое же «назад» молча выходит)
+  {
+    const ctx = await browser.newContext({
+      viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block',
+      geolocation: { latitude: 54.68025, longitude: 35.08971 }, permissions: ['geolocation'],
+    });
+    await ctx.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
+    const page = await ctx.newPage();
+    page.on('pageerror', e => { console.error('pageerror:', e.message); process.exitCode = 1; });
+    await page.goto(BASE + '/#import-pins', { waitUntil: 'load' }); await page.waitForTimeout(700); // старт с открытой модалкой
+    await page.evaluate(() => { window.__alive = 'festa'; });
+    assert.ok(await vis(page, '#pinImport'), '9: диплинк-старт открыл модалку импорта (страж НЕ поставлен — не на дне)');
+    await page.evaluate(() => hideSheet('#pinImport')); await page.waitForTimeout(300); // закрыли крестиком → на дно
+    assert.ok(!(await vis(page, '#pinImport')) && await alive(page), '9: модалка импорта закрыта, на дне');
+    await hideToast(page);
+    await back(page);
+    assert.ok(await alive(page), '9: «назад» на дне после диплинк-старта НЕ вышел молча');
+    assert.ok((await toastText(page) || '').match(/ещё раз/), '9: тост показан (страж восстановлен после диплинк-модалки)');
+    await back(page);
+    assert.ok(!(await alive(page)), '9: следующее «назад» → выход');
+    await ctx.close();
+    console.log('✓ 9. диплинк-старт с модалкой: закрытие крестиком не роняет защиту выхода');
+  }
+
+  // --- 10. офлайн: защита работает без сети (ПОСЛЕДНИМ — глушим сервер)
   {
     const { ctx, page } = await fresh();
     killSrv(); await page.waitForTimeout(300); // РЕАЛЬНЫЙ офлайн
     await back(page);
-    assert.ok(await alive(page), '6: офлайн — 1-е «назад» НЕ вышло');
-    assert.ok((await toastText(page) || '').match(/ещё раз/), '6: офлайн — тост выхода показан');
+    assert.ok(await alive(page), '10: офлайн — 1-е «назад» НЕ вышло');
+    assert.ok((await toastText(page) || '').match(/ещё раз/), '10: офлайн — тост выхода показан');
     await back(page);
-    assert.ok(!(await alive(page)), '6: офлайн — 2-е «назад» → выход');
+    assert.ok(!(await alive(page)), '10: офлайн — 2-е «назад» → выход');
     await ctx.close();
-    console.log('✓ 6. офлайн: защита от случайного выхода работает без сети');
+    console.log('✓ 10. офлайн: защита от случайного выхода работает без сети');
   }
 
   await browser.close();

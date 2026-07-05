@@ -730,6 +730,7 @@ function showSheet(sel) {
   // При ре-открытии УЖЕ открытой модалки (напр. toggle ⭐ в описании) не трогаем.
   const card = el.querySelector('.sheet-card');
   if (card) card.scrollTop = 0;
+  cancelExitWindow();                            // открыли модалку → это навигация, не выход
   if (_histTrimPending > 0) _histTrimPending--;  // переход A→B: переиспользуем запись
   else history.pushState({ sheet: sel }, '');
   _sheetStack.push(sel);
@@ -828,6 +829,7 @@ function dropNavSteps() {
 // запись перехода между вкладками в ЕДИНЫЙ стек (зеркальна showSheet для модалок):
 // «назад» вернёт на prevView. Переход A→B в один тик переиспользует запись.
 function pushViewStep(prevView) {
+  cancelExitWindow();                     // сменили вкладку → навигация, не выход
   if (_histTrimPending > 0) _histTrimPending--;
   else history.pushState({ tab: 1 }, '');
   _sheetStack.push({ tab: prevView });
@@ -860,12 +862,29 @@ function armExitGuardSoon() {
   }, 0);
 }
 
+// закрыть окно «нажмите ещё раз»: пользователь после первого «назад» на дне не
+// вышел, а СТАЛ НАВИГИРОВАТЬ (открыл модалку/сменил вкладку). Зовём при КАЖДОМ
+// добавлении слоя (showSheet/pushViewStep/navEventToMap) — иначе _exitArmed завис
+// бы true, и возврат на дно ушёл бы в выход одним «назад» без тоста (verify #66).
+function cancelExitWindow() {
+  if (!_exitArmed) return;
+  _exitArmed = false;
+  clearTimeout(_exitTimer);
+}
+
 // системный «назад»/свайп: снять ВЕРХНИЙ слой пути назад, не покидая приложение.
 // Строковый слой = модалка (прячем); объект {onBack} = шаг навигации (напр. «на
 // карте от события» → вернуть описание); {tab} = вкладка. Стек пуст → сработал
 // страж выхода: первое «назад» = тост, второе в окне = выход.
 window.addEventListener('popstate', () => {
-  if (_histSelfPop > 0) { _histSelfPop--; return; } // наш программный откат — уже скрыли
+  if (_histSelfPop > 0) {
+    _histSelfPop--; // наш программный откат (закрытие крестиком/схлопывание) — уже скрыли
+    // но если он приземлил нас на ДНО без стража (крестик/тап-вне съели запись
+    // модалки, а страж был потрачен раньше) — восстановить стража, иначе следующее
+    // «назад» молча выйдет (verify #66): end-check ниже сюда не доходит из-за return
+    if (!_sheetStack.length) armExitGuardSoon();
+    return;
+  }
   const top = _sheetStack.pop(); // одна израсходованная запись = один слой
   if (typeof top === 'string') { const el = $(top); if (el) el.classList.add('hidden'); }
   else if (top && top.onBack) { try { top.onBack(); } catch { /* «назад» не должно падать */ } }
