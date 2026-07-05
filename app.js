@@ -833,10 +833,37 @@ function pushViewStep(prevView) {
   _sheetStack.push({ tab: prevView });
 }
 
+// «страж выхода»: пока приложение на ДНЕ навигации (0 модалок и вкладочных слоёв),
+// держим одну лишнюю запись истории над базой. Первое «назад» съедает стража —
+// показываем тост «нажмите ещё раз» и НЕ возвращаем стража сразу (иначе выход
+// требовал бы трёх нажатий). Второе «назад» в окне уходит на базу → платформа
+// выходит/сворачивает PWA. Окно истекло — возвращаем стража (следующее «назад»
+// снова покажет тост, а не молча выйдет). Восстановление — ТОЛЬКО в setTimeout,
+// не внутри popstate: pushState в popstate ненадёжен на Android (см. фикс #64),
+// а здесь синхронно он и не нужен. При флаки-пуше фича деградирует безопасно —
+// в худшем случае второе «назад» просто выходит (это и так цель).
+let _exitArmed = false;        // открыто окно «нажмите назад ещё раз, чтобы выйти»
+let _exitGuard = false;        // страж лежит в истории (одна запись над базой на дне)
+let _exitTimer = 0;
+let _exitGuardScheduled = false;
+const EXIT_WINDOW_MS = 2000;
+
+function armExitGuardSoon() {
+  if (_exitGuardScheduled) return;
+  _exitGuardScheduled = true;
+  setTimeout(() => {
+    _exitGuardScheduled = false;
+    if (_exitArmed) return;          // окно выхода открыто — стража быть НЕ должно
+    if (_sheetStack.length) return;  // не на дне — слои сами буфер, страж не нужен
+    if (_exitGuard) return;          // уже стоит
+    try { history.pushState({ exitGuard: 1 }, ''); _exitGuard = true; } catch { /* ignore */ }
+  }, 0);
+}
+
 // системный «назад»/свайп: снять ВЕРХНИЙ слой пути назад, не покидая приложение.
 // Строковый слой = модалка (прячем); объект {onBack} = шаг навигации (напр. «на
-// карте от события» → вернуть описание). Стек пуст → не перехватываем (браузер
-// уже ушёл назад / свернул PWA).
+// карте от события» → вернуть описание); {tab} = вкладка. Стек пуст → сработал
+// страж выхода: первое «назад» = тост, второе в окне = выход.
 window.addEventListener('popstate', () => {
   if (_histSelfPop > 0) { _histSelfPop--; return; } // наш программный откат — уже скрыли
   const top = _sheetStack.pop(); // одна израсходованная запись = один слой
@@ -844,6 +871,26 @@ window.addEventListener('popstate', () => {
   else if (top && top.onBack) { try { top.onBack(); } catch { /* «назад» не должно падать */ } }
   else if (top && top.suspended) { const el = $(top.suspended); if (el) el.classList.add('hidden'); }
   else if (top && top.tab) { applyView(top.tab); } // вернуться на предыдущую вкладку (без записи)
+  else {
+    // стек пуст — «назад» на ДНЕ (страж съеден либо его не было)
+    _exitGuard = false;
+    if (_exitArmed) {
+      // второе «назад» в окне — выпускаем: уже ушли на базу, платформа выйдет
+      // (десктоп/Playwright: база→about:blank = выход; Android: первый entry →
+      // ОС свернёт PWA). Стража НЕ возвращаем.
+      clearTimeout(_exitTimer); _exitArmed = false;
+      return;
+    }
+    // первое «назад» на дне — не выходим, просим подтвердить
+    toast('Нажмите «назад» ещё раз, чтобы выйти', EXIT_WINDOW_MS);
+    _exitArmed = true;
+    clearTimeout(_exitTimer);
+    _exitTimer = setTimeout(() => { _exitArmed = false; armExitGuardSoon(); }, EXIT_WINDOW_MS);
+    return;
+  }
+  // вернулись на дно, но страж был съеден раньше (выход→взаимодействие→возврат)
+  // и окно закрыто — восстановить стража, чтобы следующее «назад» не молча вышло
+  if (!_sheetStack.length && !_exitGuard && !_exitArmed) armExitGuardSoon();
 });
 
 /* ---------- экспорт в календарь (.ics, всё офлайн на клиенте) ---------- */
@@ -2135,6 +2182,7 @@ async function boot() {
   updateNotifStatus();
   handleIncomingPin(); // открыли по чужой #pin=-ссылке — предложить добавить
   handleImportHash();  // гайд «связь на поляне» ведёт на форму импорта меток
+  armExitGuardSoon();  // защита от случайного выхода: «нажмите назад ещё раз»
   // ссылки могут прилетать и в уже открытое приложение (same-document навигация)
   window.addEventListener('hashchange', () => { handleIncomingPin() || handleImportHash(); });
 }
