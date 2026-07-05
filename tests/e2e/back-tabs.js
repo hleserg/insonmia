@@ -1,0 +1,198 @@
+'use strict';
+/* Вкладки живут в ЕДИНОМ history-стеке с модалками: «назад» = обратный переход
+   по вкладкам. Матрица #65: прямой ход разматывается в обратном порядке; дедуп
+   подряд (тот же таб не плодит записей); возврат на посещённую вкладку схлопывает
+   до неё; стартовая вкладка = дно стека (там «назад» = штатный выход); модалки/
+   событие→карта/фильтры поверх вкладок не ломаются. Каждый сценарий — СВЕЖИЙ
+   контекст: пустой sessionStorage → старт всегда «сейчас», чистая история браузера
+   → точный подсчёт «назад» до выхода. Офлайн-паритет проверяют соседние сьюты. */
+const { chromium, launchOpts, REPO } = require('./_env');
+const assert = require('assert');
+
+const PORT = 8178;
+const BASE = `http://127.0.0.1:${PORT}`;
+
+(async () => {
+  const { spawn } = require('child_process');
+  let srv = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: REPO, stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 800));
+  const killSrv = () => { try { srv.kill('SIGKILL'); } catch {} };
+  process.on('exit', killSrv);
+
+  const browser = await chromium.launch(launchOpts);
+
+  // свежий контекст на КАЖДЫЙ сценарий: пустой sessionStorage (старт = «сейчас»)
+  // + чистая история браузера (первый «назад» с дна = выход из приложения)
+  const fresh = async () => {
+    const ctx = await browser.newContext({
+      viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block',
+      geolocation: { latitude: 54.68025, longitude: 35.08971 }, permissions: ['geolocation'],
+    });
+    await ctx.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
+    const page = await ctx.newPage();
+    page.on('pageerror', e => { console.error('pageerror:', e.message); process.exitCode = 1; });
+    await page.goto(BASE + '/', { waitUntil: 'load' }); await page.waitForTimeout(600);
+    await page.evaluate(() => { window.__alive = 'festa'; });
+    return { ctx, page };
+  };
+  const back = async (page) => { await page.evaluate(() => history.back()); await page.waitForTimeout(400); };
+  const clickTab = async (page, v) => { await page.click(`.tab[data-view="${v}"]`); await page.waitForTimeout(v === 'map' || v === 'nearby' ? 700 : 300); };
+  const alive = (page) => page.evaluate(() => window.__alive === 'festa' && !!document.querySelector('#tabs'));
+  const activeTab = (page) => page.evaluate(() => { const a = document.querySelector('.tab.active'); return a ? a.dataset.view : null; });
+  const vis = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden'); }, sel);
+
+  // --- 1. прямой ход по вкладкам → «назад» разматывает в обратном порядке
+  {
+    const { ctx, page } = await fresh();
+    assert.equal(await activeTab(page), 'now', 'старт = «сейчас»');
+    await clickTab(page, 'schedule');
+    await clickTab(page, 'favorites');
+    await clickTab(page, 'map');
+    assert.equal(await activeTab(page), 'map', 'дошли до «карты»');
+    await back(page); assert.equal(await activeTab(page), 'favorites', 'назад#1 → избранное');
+    await back(page); assert.equal(await activeTab(page), 'schedule', 'назад#2 → программа');
+    await back(page); assert.equal(await activeTab(page), 'now', 'назад#3 → сейчас (дно)');
+    assert.ok(await alive(page), 'на дне ещё живы');
+    await back(page); assert.ok(!(await alive(page)), 'назад#4 с дна → выход из приложения');
+    await ctx.close();
+    console.log('✓ 1. прямой ход now→schedule→favorites→map, «назад» разматывает в обратном порядке до выхода');
+  }
+
+  // --- 2. дедуп подряд: повторный клик по той же вкладке не плодит записей
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'schedule');
+    await clickTab(page, 'schedule'); // тот же таб дважды — без новой записи
+    await clickTab(page, 'schedule');
+    assert.equal(await activeTab(page), 'schedule', 'на программе');
+    await back(page);
+    assert.equal(await activeTab(page), 'now', 'один «назад» = сразу «сейчас» (дедуп: не 3 записи schedule)');
+    await ctx.close();
+    console.log('✓ 2. дедуп подряд: повтор той же вкладки не плодит записей истории');
+  }
+
+  // --- 3. возврат на посещённую вкладку СХЛОПЫВАЕТ стек до неё (без петли)
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'schedule');
+    await clickTab(page, 'favorites');
+    await clickTab(page, 'schedule'); // возврат на schedule → схлопнуть, favorites-шаг убрать
+    await page.waitForTimeout(300);   // дать микротаск-триму истории отработать
+    assert.equal(await activeTab(page), 'schedule', 'вернулись на программу');
+    await back(page);
+    assert.equal(await activeTab(page), 'now', 'назад → «сейчас» (схлопнули, favorites НЕ всплыл)');
+    assert.ok(await alive(page), 'живы');
+    await back(page); assert.ok(!(await alive(page)), 'ещё назад с дна → выход');
+    await ctx.close();
+    console.log('✓ 3. возврат на посещённую вкладку схлопывает стек до неё (нет петли favorites)');
+  }
+
+  // --- 4. стартовая вкладка = дно: без переходов «назад» = штатный выход
+  {
+    const { ctx, page } = await fresh();
+    assert.equal(await activeTab(page), 'now', 'на старте «сейчас»');
+    assert.ok(await alive(page), 'живы');
+    await back(page);
+    assert.ok(!(await alive(page)), '«назад» на дне без модалок → штатный выход из приложения');
+    await ctx.close();
+    console.log('✓ 4. стартовая вкладка = дно стека: «назад» штатно выходит');
+  }
+
+  // --- 5. модалка описания ПОВЕРХ вкладок в едином стеке: «назад» снимает слои
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'schedule');
+    await page.click('.event'); await page.waitForTimeout(250);
+    assert.ok(await vis(page, '#sheet'), 'описание открыто поверх «программы»');
+    await back(page);
+    assert.ok(!(await vis(page, '#sheet')) && await activeTab(page) === 'schedule', 'назад#1 закрыл описание, остались на программе');
+    await back(page);
+    assert.equal(await activeTab(page), 'now', 'назад#2 → «сейчас» (вкладочный слой под описанием)');
+    await back(page);
+    assert.ok(!(await alive(page)), 'назад#3 с дна → выход');
+    await ctx.close();
+    console.log('✓ 5. описание поверх вкладок: «назад» снимает описание → вкладку → выход (единый стек)');
+  }
+
+  // --- 6. событие → «на карте» в единый стек: карта-слой не плодит tab-запись
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'schedule');
+    // найти событие с кнопкой «на карте»
+    const n = await page.evaluate(() => document.querySelectorAll('.event .event-main').length);
+    let opened = false;
+    for (let i = 0; i < n; i++) {
+      await page.evaluate(idx => document.querySelectorAll('.event .event-main')[idx].click(), i);
+      await page.waitForTimeout(140);
+      if (await page.evaluate(() => !!document.querySelector('#sheet .geo-jump'))) { opened = true; break; }
+      await page.click('#sheet .sheet-titlebar .icon-btn[data-close]'); await page.waitForTimeout(100);
+    }
+    assert.ok(opened, 'нашли событие с кнопкой «на карте»');
+    await page.click('#sheet .geo-jump'); await page.waitForTimeout(600);
+    assert.ok(await activeTab(page) === 'map' && !(await vis(page, '#sheet')), 'на карте, описание усыплено');
+    await back(page);
+    assert.ok(await vis(page, '#sheet'), 'назад#1 вернул описание (карта — nav-слой, не tab-запись)');
+    await back(page);
+    assert.ok(!(await vis(page, '#sheet')) && await activeTab(page) === 'schedule', 'назад#2 закрыл описание, на программе');
+    await back(page);
+    assert.equal(await activeTab(page), 'now', 'назад#3 → «сейчас» (вкладочный слой)');
+    await back(page);
+    assert.ok(!(await alive(page)), 'назад#4 с дна → выход (событие→карта НЕ добавила лишнюю tab-запись)');
+    await ctx.close();
+    console.log('✓ 6. событие→карта: карта — nav-слой, не плодит tab-запись; выход ровно на дне');
+  }
+
+  // --- 7. фильтры (модалка) поверх вкладок: «назад» закрывает фильтры, потом вкладки
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'schedule');
+    await page.click('#btnFilter'); await page.waitForTimeout(250);
+    assert.ok(await vis(page, '#filterSheet'), 'фильтры открылись');
+    await back(page);
+    assert.ok(!(await vis(page, '#filterSheet')) && await activeTab(page) === 'schedule', 'назад#1 закрыл фильтры, на программе');
+    await back(page);
+    assert.equal(await activeTab(page), 'now', 'назад#2 → «сейчас»');
+    await back(page);
+    assert.ok(!(await alive(page)), 'назад#3 с дна → выход');
+    await ctx.close();
+    console.log('✓ 7. фильтры поверх вкладок: «назад» снимает модалку, затем разматывает вкладки');
+  }
+
+  // --- 8. возврат на СТАРТОВУЮ вкладку схлопывает весь стек → «назад» сразу выход
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'schedule');
+    await clickTab(page, 'favorites');
+    await clickTab(page, 'map');
+    await clickTab(page, 'now'); // возврат на дно → схлопнуть ВСЁ
+    await page.waitForTimeout(300);
+    assert.equal(await activeTab(page), 'now', 'вернулись на стартовую «сейчас»');
+    assert.ok(await alive(page), 'живы (на дне)');
+    await back(page);
+    assert.ok(!(await alive(page)), '«назад» с дна → выход (весь промежуточный стек схлопнут, без 3 холостых нажатий)');
+    await ctx.close();
+    console.log('✓ 8. возврат на стартовую вкладку схлопывает весь стек — «назад» сразу выходит');
+  }
+
+  // --- 9. длинная смешанная цепочка: дедуп + схлопывание вместе, ровный выход
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'schedule');
+    await clickTab(page, 'schedule');  // дедуп (нет записи)
+    await clickTab(page, 'map');
+    await clickTab(page, 'nearby');
+    await clickTab(page, 'map');        // возврат на map → схлопнуть nearby
+    await page.waitForTimeout(300);
+    assert.equal(await activeTab(page), 'map', 'на «карте» после схлопывания nearby');
+    await back(page); assert.equal(await activeTab(page), 'schedule', 'назад#1 → программа (nearby схлопнут)');
+    await back(page); assert.equal(await activeTab(page), 'now', 'назад#2 → сейчас (schedule без дублей)');
+    await back(page); assert.ok(!(await alive(page)), 'назад#3 с дна → выход');
+    await ctx.close();
+    console.log('✓ 9. смешанная цепочка (дедуп + схлопывание) разматывается ровно, без лишних «назад»');
+  }
+
+  await browser.close();
+  killSrv();
+  console.log('\n=== ВКЛАДКИ В ЕДИНОМ HISTORY-СТЕКЕ: ВСЁ ОК ===');
+  process.exit(0);
+})().catch(e => { console.error('FAIL:', e.message); process.exit(1); });

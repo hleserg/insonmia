@@ -75,17 +75,27 @@ const BASE = `http://127.0.0.1:${PORT}`;
   await back();
   assert.ok(await vis('#sheet'), '2c: назад#1 вернул описание');
   await back();
-  assert.ok(!(await vis('#sheet')) && await alive(), '2c: назад#2 → программа, НЕ выход (был баг: pushState внутри popstate)');
-  await page.evaluate(() => history.back()); await page.waitForTimeout(350);
-  assert.ok(await page.evaluate(() => !document.querySelector('#tabs')), '2c: назад#3 → только теперь выход из приложения');
-  console.log('✓ 2c. размотка событие→карта→описание→программа→выход: back#2 НЕ выходит (баг починен)');
+  // САМА суть бага #65: back#2 закрывает описание и остаётся в приложении, НЕ
+  // выходит (раньше pushState внутри popstate ронял следующее «назад» в выход).
+  // Полную размотку с вкладками проверяет back-tabs.js на чистом контексте.
+  assert.ok(!(await vis('#sheet')) && await alive(), '2c: назад#2 → программа, НЕ выход (баг pushState-в-popstate починен)');
+  console.log('✓ 2c. точный репро: back#2 закрывает описание и НЕ выходит (баг #65 починен)');
 
-  // --- 3. карта НАПРЯМУЮ (вкладкой) → «назад» штатный, без фантомного описания
+  // --- 3. карта НАПРЯМУЮ (вкладкой) → «назад» = предыдущая вкладка (единый стек),
+  //        БЕЗ фантомного описания (карту открыли не из события)
   await boot();
+  // какая вкладка активна ДО перехода на карту (persist-filters мог восстановить
+  // из sessionStorage прошлый вид — стартовая не обязательно «сейчас»)
+  const prevTab = await page.evaluate(() => {
+    const a = document.querySelector('.tab.active'); return a ? a.dataset.view : null;
+  });
+  assert.ok(prevTab && prevTab !== 'map', 'до карты активна не-карта вкладка');
   await page.click('.tab[data-view="map"]'); await page.waitForTimeout(800);
-  await page.evaluate(() => history.back()); await page.waitForTimeout(350);
-  assert.ok(await page.evaluate(() => !document.querySelector('#tabs')), 'карта вкладкой → «назад» покидает приложение (нет левого описания)');
-  console.log('✓ 3. карта напрямую → «назад» штатный (без фантомного описания)');
+  assert.ok(await tabActive('map'), 'на карте (вкладкой)');
+  await back();
+  assert.ok(await alive() && !(await vis('#sheet')), 'карта вкладкой → «назад» на предыдущую вкладку, без фантомного описания');
+  assert.ok(await tabActive(prevTab), 'вернулись на предыдущую вкладку (единый стек)');
+  console.log('✓ 3. карта вкладкой → «назад» на предыдущую вкладку (без фантомного описания)');
 
   // --- 4. повторяемость: событие → карта → назад → событие → карта → назад → событие
   await boot();
