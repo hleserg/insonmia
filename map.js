@@ -15,10 +15,12 @@ const GEO = {
   pointById: {},       // geo id -> {marker, point}
   highlight: null,
   selfMarker: null,
-  myCoord: null,       // последняя точка GPS для строки «мои координаты» + шаринга
-  myCoordAt: 0,        // время фикса myCoord (TTL как у «Рядом», POS_FRESH_MS)
+  geoWatching: false,  // активен ли живой GPS-watch (карта/рядом) → статус «поиск спутников»
   filters: null,       // Set включённых категорий
-  nearby: { pos: null, posAt: 0, error: null, radius: 300 }, // watch — в core.createGeoWatcher
+  // GEO.nearby.pos — ЕДИНСТВЕННЫЙ источник ТЕКУЩЕЙ позиции (карта и «рядом»):
+  // живой watch пишет сюда; уход из гео-разделов чистит (никакого «последнего
+  // известного» — всегда только текущий фикс). watch — в core.createGeoWatcher.
+  nearby: { pos: null, posAt: 0, error: null, radius: 300 },
   mock: null,          // ?mockgeo=lat,lng
 };
 
@@ -391,11 +393,18 @@ function renderMapView() {
   // применяться и при повторном открытии вкладки (с уже готовой картой).
   requestAnimationFrame(() => {
     ensureMap();
-    if (GEO.map) { GEO.map.invalidateSize(); applyMapFilters(); }
+    if (GEO.map) {
+      GEO.map.invalidateSize(); applyMapFilters();
+      // если ТЕКУЩИЙ фикс уже есть (пришли с «рядом» / кэш-фикс до создания карты)
+      // — рисуем маркер «я тут» сразу: onFix мог отработать при GEO.map=null или
+      // быть задушен троттлом, и без этого маркер не появился бы до ~10 с
+      if (GEO.nearby.pos) showSelfMarker(GEO.nearby.pos);
+    }
   });
   updatePinHint(); // подсказка «поставь метку», если своих меток ещё нет
   $('#myCoordRow').classList.remove('hidden');
-  updateMyCoordRow(); // строка «мои координаты» (или «включить геолокацию»)
+  startNearbyWatch();   // карта тоже ловит спутники живьём → статус связи в строке
+  updateMyCoordRow();   // «поиск спутников…» / координаты / «включить геолокацию»
 }
 
 function hideMapView() {
@@ -818,55 +827,63 @@ function showSelfMarker(pos) {
 }
 
 async function locateMe() {
+  // уже есть ТЕКУЩИЙ фикс от живого watch — просто центрируемся, без нового запроса
+  if (GEO.nearby.pos && GEO.map) {
+    showSelfMarker(GEO.nearby.pos);
+    GEO.map.setView([GEO.nearby.pos.lat, GEO.nearby.pos.lng], Math.max(GEO.map.getZoom(), 16));
+    return;
+  }
   if (await geoDenied()) { toast(geoErrorText({ code: 1 })); return; }
   try {
     const pos = await getPosition();
     if (!GEO.map) return;
     showSelfMarker(pos);
     GEO.map.setView([pos.lat, pos.lng], Math.max(GEO.map.getZoom(), 16));
-    GEO.myCoord = { lat: pos.lat, lng: pos.lng }; // питает строку «мои координаты»
-    GEO.myCoordAt = Date.now();
+    GEO.nearby.pos = { lat: pos.lat, lng: pos.lng }; // питает строку «мои координаты»
+    GEO.nearby.posAt = Date.now();
+    GEO.nearby.error = null;
     updateMyCoordRow();
   } catch (err) {
     toast(geoErrorText(err), 8000); // текст длинный — даём время прочитать
   }
 }
 
-// «свежая известная» позиция для строки: свой фикс (🎯), а если его нет —
-// недавний фикс из «Рядом» (тот же прибор уже знает координаты; без этого
-// строка врала бы «включить геолокацию» после перехода с «Рядом»).
-// TTL POS_FRESH_MS — единая политика свежести с «Рядом»: протухший фикс не
-// показываем как актуальный (иначе строка врёт часовой давности точкой).
-function bestKnownPos() {
-  const fresh = t => Date.now() - t < POS_FRESH_MS;
-  if (GEO.myCoord && fresh(GEO.myCoordAt || 0)) return GEO.myCoord;
-  if (GEO.nearby.pos && fresh(GEO.nearby.posAt)) return GEO.nearby.pos;
-  return null;
-}
-
-// строка «📍 lat, lng» + 🔗 (для потеряшек). Без фикса — «включить геолокацию»
-// (тап = запрос), 🔗 неактивна. Показываем ГОЛЫЕ координаты без подписи «мои
-// координаты:» — иначе на 360px подпись съедала ширину и долгота обрезалась
-// многоточием (а именно цифры нужно прочитать/продиктовать). Пин 📍 + место
-// под фильтрами карты и так говорят, что это твоя точка.
+// строка на карте = ЖИВОЙ статус связи со спутниками (для потеряшек координаты
+// всегда под рукой, но ТОЛЬКО текущие — «последнее известное» не показываем):
+//  • есть фикс → «📍 lat, lng», 🔗 активна;
+//  • отказ/ошибка → «включить геолокацию» (тап = запрос), 🔗 неактивна;
+//  • watch активен, фикса ещё нет → крутилка + «поиск спутников…» (не пустота);
+//  • не в гео-разделе → «включить геолокацию».
+// Координаты — ГОЛЫЕ, без подписи: на 360px подпись съедала ширину и долгота
+// обрезалась многоточием (а именно цифры нужно прочитать/продиктовать).
 function updateMyCoordRow() {
   const txt = $('#myCoordText'), share = $('#myCoordShare');
   if (!txt || !share) return;
-  const pos = bestKnownPos();
+  const pos = GEO.nearby.pos; // ТОЛЬКО текущий фикс живого watch, без stale-фолбэка
   if (pos) {
-    // показываем свежую известную точку; сам фикс под действие всё равно
-    // перезапрашивается (freshPosForAction), поэтому здесь только отображение
     txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    txt.classList.remove('gps-searching');
     share.disabled = false;
+  } else if (GEO.nearby.error) {
+    txt.textContent = '📍 включить геолокацию';
+    txt.classList.remove('gps-searching');
+    share.disabled = true;
+  } else if (GEO.geoWatching) {
+    // крутилка + текст: видно, что программа не зависла, а ловит спутники
+    txt.innerHTML = '<span class="gps-spinner" aria-hidden="true"></span>🛰 поиск спутников…';
+    txt.classList.add('gps-searching');
+    share.disabled = true;
   } else {
     txt.textContent = '📍 включить геолокацию';
+    txt.classList.remove('gps-searching');
     share.disabled = true;
   }
 }
 
 // фикс протух/отозван — честно гасим строку (не делимся мёртвой точкой)
 function invalidateMyCoord() {
-  GEO.myCoord = null;
+  GEO.nearby.pos = null;
+  GEO.nearby.posAt = 0;
   if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
   updateMyCoordRow();
 }
@@ -879,14 +896,18 @@ async function freshPosForAction() {
   let pos;
   // ЛЮБОЙ провал (таймаут/нет фикса/нет API), не только отказ доступа — гасим
   // строку, чтобы 🔗 не осталась активной поверх старой точки (первый захват
-  // GPS на поляне идёт минуту-две — это штатный таймаут, не только code 1)
-  try { pos = await getPosition({ maximumAge: 0 }); }
+  // GPS на поляне идёт минуту-две — это штатный таймаут, не только code 1).
+  // maximumAge как у watch (не 0): при АКТИВНОМ живом watch getCurrentPosition с
+  // maximumAge:0 у Chromium конфликтует и вечно таймаутит; кэш GPS под
+  // highAccuracy-watch и так свежий (обновляется живьём), это текущая точка.
+  try { pos = await getPosition(); }
   catch (err) { invalidateMyCoord(); throw err; }
-  GEO.myCoord = { lat: pos.lat, lng: pos.lng };
-  GEO.myCoordAt = Date.now();
+  GEO.nearby.pos = { lat: pos.lat, lng: pos.lng };
+  GEO.nearby.posAt = Date.now();
+  GEO.nearby.error = null;
   showSelfMarker(pos);
   updateMyCoordRow();
-  return GEO.myCoord;
+  return GEO.nearby.pos;
 }
 
 // тап по координатам копирует СВЕЖИЕ координаты (без буфера — показываем тостом)
@@ -970,6 +991,9 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
     GEO.nearby.posAt = Date.now();
     GEO.nearby.error = null;
     if (state.view === 'nearby') render();
+    // на карте — обновляем строку координат и маркер «я тут» ЖИВЫМ фиксом
+    // (без перецентровки — карту не дёргаем; центрирует только 🎯)
+    else if (state.view === 'map') { showSelfMarker(pos); updateMyCoordRow(); }
   }, 10000, Date.now,
   err => {
     // свежая позиция есть — молча работаем по ней
@@ -979,9 +1003,14 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
     if (GEO.nearby.error && GEO.nearby.error.code === err.code) return;
     GEO.nearby.error = err;
     if (state.view === 'nearby') render();
+    else if (state.view === 'map') { if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; } updateMyCoordRow(); }
   });
 
+// живой GPS-watch для карты И «рядом»: идемпотентен (start() внутри watcher
+// защищён watchId). geoWatching=true → пока нет фикса/ошибки, показываем «поиск
+// спутников» (крутилка), а не пустоту. Мок (?mockgeo=) — сразу «фикс».
 function startNearbyWatch() {
+  GEO.geoWatching = true;
   if (GEO.mock) { GEO.nearby.pos = GEO.mock; GEO.nearby.posAt = Date.now(); return; }
   if (!(typeof navigator !== 'undefined' && navigator.geolocation)) {
     GEO.nearby.error = { code: 0 }; // API нет вовсе — не молчать вечным «gps --wait»
@@ -993,11 +1022,22 @@ function startNearbyWatch() {
     if (denied && !GEO.nearby.pos && !GEO.nearby.error) {
       GEO.nearby.error = { code: 1 };
       if (state.view === 'nearby') render();
+      else if (state.view === 'map') updateMyCoordRow();
     }
   });
 }
 
-function stopNearbyWatch() { nearbyWatcher.stop(); }
+// уход из гео-разделов (карта И «рядом»): гасим watch и ЧИСТИМ текущий фикс —
+// при следующем заходе показываем «поиск спутников» заново, а не «последнее
+// известное» (требование: всегда только текущее местоположение).
+function stopNearbyWatch() {
+  nearbyWatcher.stop();
+  GEO.geoWatching = false;
+  GEO.nearby.pos = null;
+  GEO.nearby.posAt = 0;
+  GEO.nearby.error = null;
+  if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+}
 
 function getNearby(points, events, position, now, radiusM) {
   const vp = GEO.data ? GEO.data.venuePoints || {} : {};
@@ -1040,7 +1080,14 @@ function renderNearby(root) {
       });
       st.appendChild(retry);
     } else {
-      st.innerHTML = '<span class="big">📡</span>$ gps --wait… Разрешите геолокацию — GPS работает без интернета.';
+      // ловим спутники: крутилка + дисклеймер, чтобы было видно — не зависло
+      st.classList.add('geo-searching');
+      st.innerHTML =
+        '<span class="gps-spinner gps-spinner-lg" aria-hidden="true"></span>' +
+        '<div class="geo-searching-title">🛰 поиск спутников…</div>' +
+        '<div class="muted small">GPS работает без интернета. В поле первый захват спутников ' +
+        'под открытым небом может занять пару минут — это нормально, приложение не зависло. ' +
+        'События рядом появятся, как только определится текущее местоположение.</div>';
     }
     root.appendChild(st);
     root.appendChild(geoHelpEl());

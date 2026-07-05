@@ -349,8 +349,9 @@ function render() {
   content.classList.toggle('hidden', state.view === 'map');
   if (state.view === 'map') { renderMapView(); }
   else { hideMapView(); }
-  // watchPosition живёт только пока открыт раздел «рядом»
-  if (state.view !== 'nearby') stopNearbyWatch();
+  // живой GPS-watch держим, пока открыт гео-раздел (карта ИЛИ «рядом») — обоим
+  // нужен текущий фикс и статус «поиск спутников»; уход из обоих гасит и чистит
+  if (state.view !== 'nearby' && state.view !== 'map') stopNearbyWatch();
   updateFilterButton();
 
   if (state.view === 'now') return renderNow(content);
