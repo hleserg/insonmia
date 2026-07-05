@@ -18,6 +18,11 @@ async function launch(opts = {}, init = null, { deny = false } = {}) {
   const ctx = await chromium.launch(launchOpts)
     .then(b => b.newContext({ viewport: { width: 360, height: 740 }, timezoneId: 'UTC', ...opts }));
   await ctx.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
+  // геосьют НЕ блокирует SW (секция 5 проверяет реальный офлайн), поэтому
+  // одноразовый тост «✓ офлайн готов» может прилететь от SW и перебить тост «я
+  // где?» в секции 4 (общий #toast, последний побеждает). Он ортогонален гео —
+  // глушим его флагом «уже показан», чтобы проверка тоста была детерминированной.
+  await ctx.addInitScript(() => { try { localStorage.setItem('insomnia.offlineReadyShown', '1'); } catch {} });
   if (init) await ctx.addInitScript(init);
   if (deny) {
     // отказ на уровне API, который видит приложение — как ЯБ, режущий запрос

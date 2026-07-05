@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v60';
+const CACHE = 'insomnia-2026-v61';
 const ASSETS = [
   './',
   'index.html',
