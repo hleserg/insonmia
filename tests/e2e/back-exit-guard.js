@@ -188,6 +188,24 @@ const BASE = `http://127.0.0.1:${PORT}`;
     console.log('✓ 9. диплинк-старт с модалкой: закрытие крестиком не роняет защиту выхода');
   }
 
+  // --- 11. РЕГРЕСС verify #66 р2: рефреш/тихий reload НЕ плодит второго стража —
+  //         выход остаётся ровно в ДВА «назад» (запись-страж переживает reload,
+  //         boot должен усыновить её, а не толкнуть дубль → иначе было бы 3 нажатия)
+  {
+    const { ctx, page } = await fresh();
+    await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(700); // reload СТОЯ на страже
+    await page.evaluate(() => { window.__alive = 'festa'; });
+    await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(700); // второй reload — стражи не должны копиться
+    await page.evaluate(() => { window.__alive = 'festa'; });
+    assert.equal(await activeTab(page), 'now', '11: после reload на дне «сейчас»');
+    await back(page);
+    assert.ok(await alive(page) && (await toastText(page) || '').match(/ещё раз/), '11: 1-е «назад» после reload → тост (не молчаливое нажатие в дубль-страж)');
+    await back(page);
+    assert.ok(!(await alive(page)), '11: 2-е «назад» → выход (дубли стража не накопились, не нужно 3-е нажатие)');
+    await ctx.close();
+    console.log('✓ 11. рефреш/reload не плодит дубль-стража — выход ровно в два «назад»');
+  }
+
   // --- 10. офлайн: защита работает без сети (ПОСЛЕДНИМ — глушим сервер)
   {
     const { ctx, page } = await fresh();

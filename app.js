@@ -858,6 +858,11 @@ function armExitGuardSoon() {
     if (_exitArmed) return;          // окно выхода открыто — стража быть НЕ должно
     if (_sheetStack.length) return;  // не на дне — слои сами буфер, страж не нужен
     if (_exitGuard) return;          // уже стоит
+    // после полного рефреша / тихого reload приложение оказывается СТОЯЩИМ на
+    // записи-страже (pushState-запись переживает reload, а флаг _exitGuard сброшен
+    // свежим модулем) — усыновляем её, не плодя второго стража; иначе выход
+    // требовал бы 3 нажатий, и стражи копились бы с каждым reload (verify #66 р2).
+    if (history.state && history.state.exitGuard) { _exitGuard = true; return; }
     try { history.pushState({ exitGuard: 1 }, ''); _exitGuard = true; } catch { /* ignore */ }
   }, 0);
 }
