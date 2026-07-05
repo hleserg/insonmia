@@ -31,29 +31,23 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   await page.click('.tab[data-view="map"]');
   await page.waitForTimeout(1300);
 
-  // --- 1. без фикса: строка видна, «включить геолокацию», 🔗 неактивна
+  // --- 1. разрешение выдано → живой watch САМ ловит фикс: строка с координатами,
+  //        🔗 активна, без ручного тапа (satellite-status: located)
   assert.ok(await page.isVisible('#myCoordRow'), 'строка «мои координаты» видна на карте');
-  assert.match(await page.textContent('#myCoordText'), /включить геолокацию/, 'без фикса — «включить геолокацию»');
-  assert.ok(await page.evaluate(() => document.querySelector('#myCoordShare').disabled), '🔗 неактивна без фикса');
-  console.log('✓ 1. без фикса: строка + «включить геолокацию» + 🔗 неактивна');
-
-  // --- 2. тап по «включить геолокацию» → фикс, строка с координатами, 🔗 активна
-  await page.click('#myCoordText');
-  await page.waitForTimeout(500);
   const txt = await page.textContent('#myCoordText');
-  assert.match(txt, /📍\s*54\.680\d+,\s*35\.089\d+/, 'координаты в строке: ' + txt);
-  assert.ok(!(await page.evaluate(() => document.querySelector('#myCoordShare').disabled)), '🔗 активна после фикса');
+  assert.match(txt, /📍\s*54\.680\d+,\s*35\.089\d+/, 'granted → координаты появились автоматически: ' + txt);
+  assert.ok(!(await page.evaluate(() => document.querySelector('#myCoordShare').disabled)), '🔗 активна при фиксе');
   // координаты НЕ обрезаются многоточием (весь текст влезает в свой бокс)
   const clipped = await page.evaluate(() => {
     const el = document.querySelector('#myCoordText');
     return el.scrollWidth > el.clientWidth + 1;
   });
   assert.ok(!clipped, 'координаты обрезаются многоточием (scrollWidth > clientWidth)');
-  console.log('✓ 2. фикс → координаты видны целиком (не обрезаны), 🔗 активна');
+  console.log('✓ 1. granted → живой watch показывает координаты автоматически (не обрезаны), 🔗 активна');
 
-  // --- 3. тап по координатам копирует «lat, lng»
+  // --- 3. тап по координатам копирует СВЕЖИЕ «lat, lng» (перезапрос getCurrentPosition)
   await page.click('#myCoordText');
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(500);
   const clipCoord = await page.evaluate(() => navigator.clipboard.readText());
   assert.match(clipCoord, /^54\.680\d+,\s*35\.089\d+$/, 'в буфере ровно координаты: ' + clipCoord);
   console.log('✓ 3. тап по координатам копирует их: ' + clipCoord);
@@ -98,13 +92,15 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   console.log('✓ 4c. фолбэк-поле шаринга без залипшего превью/импорта');
   await ctx.setGeolocation(PT); // вернём исходную точку для остальных сценариев
 
-  // --- 4d. провал фикса (таймаут GPS) инвалидирует строку: 🔗 гаснет, не врёт старой точкой
+  // --- 4d. провал СВЕЖЕГО фикса (таймаут GPS) инвалидирует строку: 🔗 гаснет,
+  //         не врёт старой точкой — возвращаемся к «поиск спутников…» (watch ещё ищет)
   await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, err) => err({ code: 3, message: 'timeout' }); });
   await page.click('#myCoordShare');
   await page.waitForTimeout(300);
-  assert.match(await page.textContent('#myCoordText'), /включить геолокацию/, 'после таймаута строка сброшена');
+  const t4d = await page.textContent('#myCoordText');
+  assert.ok(!/📍\s*54\.6/.test(t4d), 'после таймаута строка НЕ показывает старую точку: ' + t4d);
   assert.ok(await page.evaluate(() => document.querySelector('#myCoordShare').disabled), '🔗 неактивна после провала фикса');
-  console.log('✓ 4d. провал фикса (таймаут) гасит строку — 🔗 не врёт старой точкой');
+  console.log('✓ 4d. провал свежего фикса гасит строку — 🔗 не врёт старой точкой');
 
   // --- 5. открытие этого же #pin= офлайн → входящая точка «Я здесь»
   const hash = clipShare.split('\n').find(l => l.includes('#pin='));
