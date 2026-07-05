@@ -68,6 +68,18 @@ const BASE = `http://127.0.0.1:${PORT}`;
   assert.ok(await alive(), 'приложение живо (не вышли раньше времени)');
   console.log('✓ 2. ещё «назад» → описание закрылось, в списке (не вылет)');
 
+  // --- 2c. ТОЧНЫЙ РЕПРО бага: событие→карта→назад(описание)→назад(программа, НЕ выход)→назад(выход)
+  await boot();
+  await openEventWithGeo();
+  await page.click('#sheet .geo-jump'); await page.waitForTimeout(500); // на карте
+  await back();
+  assert.ok(await vis('#sheet'), '2c: назад#1 вернул описание');
+  await back();
+  assert.ok(!(await vis('#sheet')) && await alive(), '2c: назад#2 → программа, НЕ выход (был баг: pushState внутри popstate)');
+  await page.evaluate(() => history.back()); await page.waitForTimeout(350);
+  assert.ok(await page.evaluate(() => !document.querySelector('#tabs')), '2c: назад#3 → только теперь выход из приложения');
+  console.log('✓ 2c. размотка событие→карта→описание→программа→выход: back#2 НЕ выходит (баг починен)');
+
   // --- 3. карта НАПРЯМУЮ (вкладкой) → «назад» штатный, без фантомного описания
   await boot();
   await page.click('.tab[data-view="map"]'); await page.waitForTimeout(800);
@@ -106,6 +118,22 @@ const BASE = `http://127.0.0.1:${PORT}`;
   await page.evaluate(() => history.back()); await page.waitForTimeout(350);
   assert.ok(!(await vis('#sheet')), '5b: «назад» НЕ воскресил описание (осиротевший шаг снят при смене вкладки)');
   console.log('✓ 5b. смена вкладки снимает шаг возврата — «назад» не воскрешает описание');
+
+  // --- 5c. описание, открытое ПОВЕРХ карты → «назад» с geo-jump возвращает описание НА КАРТЕ
+  await boot();
+  const evGeoId = await page.evaluate(() => {
+    const ev = (state.program.events || []).find(e => typeof eventGeoPoints === 'function' && eventGeoPoints(e).length);
+    return ev ? ev.id : null;
+  });
+  assert.ok(evGeoId, 'нашли событие с гео-точкой');
+  await page.evaluate(() => switchView('map')); await page.waitForTimeout(700);
+  await page.evaluate(id => openDetail(id), evGeoId); await page.waitForTimeout(300);
+  assert.ok(await vis('#sheet') && await tabActive('map'), '5c: описание открыто ПОВЕРХ карты');
+  await page.click('#sheet .geo-jump'); await page.waitForTimeout(500);
+  assert.ok(await tabActive('map') && !(await vis('#sheet')), '5c: geo-jump → карта, описание усыплено');
+  await back();
+  assert.ok(await vis('#sheet') && await tabActive('map'), '5c: «назад» вернул описание ПОВЕРХ КАРТЫ, не выбросило на «Программу»');
+  console.log('✓ 5c. описание над картой: «назад» с geo-jump возвращает к описанию на карте (fromView=реальный вид)');
 
   // --- 6. офлайн: событие → карта → «назад» возвращает описание без сети
   await boot();

@@ -619,7 +619,7 @@ function pickDefaultDay() {
 }
 
 /* ---------- detail sheet ---------- */
-function openDetail(id) {
+function openDetail(id, restore) {
   const e = eventById(id);
   if (!e) return;
   const fav = state.favs.has(id);
@@ -680,7 +680,16 @@ function openDetail(id) {
   body.querySelectorAll('.geo-jump').forEach(btn => btn.addEventListener('click', () => {
     navEventToMap(e.id, btn.dataset.gid);
   }));
-  showSheet('#sheet');
+  if (restore) {
+    // возврат с карты к описанию: слой описания уже лежит в стеке/истории —
+    // просто показываем его БЕЗ нового pushState (иначе pushState внутри
+    // popstate ненадёжен на Android и следующий «назад» проваливался мимо)
+    const el = $('#sheet');
+    const card = el.querySelector('.sheet-card'); if (card) card.scrollTop = 0;
+    el.classList.remove('hidden');
+  } else {
+    showSheet('#sheet');
+  }
 }
 
 /* ---------- модалки + перехват системного «назад» (History API) ----------
@@ -758,20 +767,36 @@ function hideAllSheets() {
 // его штатно. Пришли на карту не из события (вкладкой) → стек пуст → «назад»
 // работает как обычная навигация. Синхронно с popstate-перехватом модалок.
 function navEventToMap(eid, gid) {
-  const fromView = ['now', 'schedule', 'favorites'].includes(state.view) ? state.view : 'schedule';
-  const el = $('#sheet'); if (el) el.classList.add('hidden'); // спрятать описание визуально
-  switchView('map'); // сначала на карту (dropNavSteps: на вершине строка '#sheet' — no-op)
-  // заменить верхнюю запись '#sheet' на «шаг назад = вернуть это описание»
-  // (та же запись истории; глубина не меняется). ПОСЛЕ switchView, иначе его
-  // dropNavSteps снял бы только что положенный шаг.
-  const step = { onBack: () => { switchView(fromView); openDetail(eid); } };
+  // вернуться в ТОТ вид, где было открыто описание — включая карту/«рядом»
+  // (описание событий открывают и с карты через точку, и из «рядом»), иначе
+  // «назад» выбросил бы на «Программу» вместо возврата к описанию на карте
+  const fromView = state.view;
+  // Модель [программа][описание][карта]: карту кладём ПОВЕРХ описания, запись
+  // описания в истории СОХРАНЯЕМ. Тогда «назад» с карты вернёт описание (уже
+  // существующий слой, без нового pushState внутри popstate), а следующее «назад»
+  // закроет описание. switchView('map') зовём ПОКА '#sheet' — видимая строка на
+  // вершине (dropNavSteps на ней стоп, no-op), только потом усыпляем описание.
+  switchView('map');
+  const el = $('#sheet'); if (el) el.classList.add('hidden'); // приспать описание (слой остаётся)
+  // помечаем усыплённый слой объектом — чтобы уход с карты ВКЛАДКОЙ (dropNavSteps)
+  // снял и его тоже (иначе «назад» позже воскресил бы описание поверх чужого экрана)
   if (_sheetStack[_sheetStack.length - 1] === '#sheet') {
-    _sheetStack[_sheetStack.length - 1] = step;            // та же запись истории
-  } else {                                                 // страховка: '#sheet' не на вершине
-    if (_histTrimPending > 0) _histTrimPending--; else history.pushState({ nav: 1 }, '');
-    _sheetStack.push(step);
+    _sheetStack[_sheetStack.length - 1] = { suspended: '#sheet', eid };
   }
+  // слой карты ПОВЕРХ описания — своя запись истории
+  const step = { onBack: () => restoreDetailFromMap(eid, fromView) };
+  if (_histTrimPending > 0) _histTrimPending--; else history.pushState({ nav: 1 }, '');
+  _sheetStack.push(step);
   setTimeout(() => highlightPoint(gid, { open: false }), 300);
+}
+
+// «назад» с карты, куда пришли из события: вернуть ТО ЖЕ описание. Запись описания
+// в истории сохранена (усыплённый слой под картой) → показываем его БЕЗ pushState.
+function restoreDetailFromMap(eid, fromView) {
+  const i = _sheetStack.length - 1;
+  if (_sheetStack[i] && _sheetStack[i].suspended === '#sheet') _sheetStack[i] = '#sheet'; // усыплённый → снова видимый слой
+  switchView(fromView);   // dropNavSteps: на вершине '#sheet' (строка) → no-op
+  openDetail(eid, true);  // restore: показать описание БЕЗ новой записи истории
 }
 
 // снять «висячие» nav-шаги (напр. «на карте от события») сверху стека и снять их
@@ -795,6 +820,7 @@ window.addEventListener('popstate', () => {
   const top = _sheetStack.pop(); // одна израсходованная запись = один слой
   if (typeof top === 'string') { const el = $(top); if (el) el.classList.add('hidden'); }
   else if (top && top.onBack) { try { top.onBack(); } catch { /* «назад» не должно падать */ } }
+  else if (top && top.suspended) { const el = $(top.suspended); if (el) el.classList.add('hidden'); }
 });
 
 /* ---------- экспорт в календарь (.ics, всё офлайн на клиенте) ---------- */
