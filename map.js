@@ -371,7 +371,14 @@ function initFilters() {
 
 function renderMapView() {
   const wrap = $('#mapWrap');
+  // карта всегда открывается СВЕРХУ: фильтры-чипсы и «мои координаты» (для
+  // потеряшек — всегда под рукой) не должны прятаться под кромкой из-за window-
+  // скролла от прошлого длинного списка. Скроллим к верху только при СВЕЖЕМ
+  // открытии (wrap был скрыт) — ре-рендеры карты, пока она уже открыта, скролл
+  // не трогают (свой scrollTo при вводе в поиск делает общий #searchInput-хендлер).
+  const freshOpen = wrap.classList.contains('hidden');
   wrap.classList.remove('hidden');
+  if (freshOpen) window.scrollTo(0, 0);
   if (!GEO.data) {
     $('#mapStatus').textContent = 'карта не загружена — откройте приложение онлайн один раз';
     return;
