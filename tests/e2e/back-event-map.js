@@ -68,6 +68,18 @@ const BASE = `http://127.0.0.1:${PORT}`;
   assert.ok(await alive(), 'приложение живо (не вышли раньше времени)');
   console.log('✓ 2. ещё «назад» → описание закрылось, в списке (не вылет)');
 
+  // --- 2c. ТОЧНЫЙ РЕПРО бага: событие→карта→назад(описание)→назад(программа, НЕ выход)→назад(выход)
+  await boot();
+  await openEventWithGeo();
+  await page.click('#sheet .geo-jump'); await page.waitForTimeout(500); // на карте
+  await back();
+  assert.ok(await vis('#sheet'), '2c: назад#1 вернул описание');
+  await back();
+  assert.ok(!(await vis('#sheet')) && await alive(), '2c: назад#2 → программа, НЕ выход (был баг: pushState внутри popstate)');
+  await page.evaluate(() => history.back()); await page.waitForTimeout(350);
+  assert.ok(await page.evaluate(() => !document.querySelector('#tabs')), '2c: назад#3 → только теперь выход из приложения');
+  console.log('✓ 2c. размотка событие→карта→описание→программа→выход: back#2 НЕ выходит (баг починен)');
+
   // --- 3. карта НАПРЯМУЮ (вкладкой) → «назад» штатный, без фантомного описания
   await boot();
   await page.click('.tab[data-view="map"]'); await page.waitForTimeout(800);
