@@ -96,6 +96,17 @@ const BASE = `http://127.0.0.1:${PORT}`;
   assert.ok(!(await vis('#filterSheet')) && await alive(), '«назад» закрыл фильтры (прошлый фикс цел)');
   console.log('✓ 5. перехват модалок цел (фильтры закрываются по «назад»)');
 
+  // --- 5b. ушёл с карты ВКЛАДКОЙ → «назад» НЕ воскрешает старое описание (шаг снят)
+  await boot();
+  await openEventWithGeo();
+  await page.click('#sheet .geo-jump'); await page.waitForTimeout(500); // на карте, шаг возврата в стеке
+  assert.ok(await tabActive('map'), '5b: на карте');
+  await page.click('.tab[data-view="schedule"]'); await page.waitForTimeout(300); // ушёл вкладкой сам
+  assert.ok(await tabActive('schedule') && !(await vis('#sheet')), '5b: ушли на программу вкладкой, описания нет');
+  await page.evaluate(() => history.back()); await page.waitForTimeout(350);
+  assert.ok(!(await vis('#sheet')), '5b: «назад» НЕ воскресил описание (осиротевший шаг снят при смене вкладки)');
+  console.log('✓ 5b. смена вкладки снимает шаг возврата — «назад» не воскрешает описание');
+
   // --- 6. офлайн: событие → карта → «назад» возвращает описание без сети
   await boot();
   await openEventWithGeo();

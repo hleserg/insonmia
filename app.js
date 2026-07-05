@@ -760,6 +760,10 @@ function hideAllSheets() {
 function navEventToMap(eid, gid) {
   const fromView = ['now', 'schedule', 'favorites'].includes(state.view) ? state.view : 'schedule';
   const el = $('#sheet'); if (el) el.classList.add('hidden'); // спрятать описание визуально
+  switchView('map'); // сначала на карту (dropNavSteps: на вершине строка '#sheet' — no-op)
+  // заменить верхнюю запись '#sheet' на «шаг назад = вернуть это описание»
+  // (та же запись истории; глубина не меняется). ПОСЛЕ switchView, иначе его
+  // dropNavSteps снял бы только что положенный шаг.
   const step = { onBack: () => { switchView(fromView); openDetail(eid); } };
   if (_sheetStack[_sheetStack.length - 1] === '#sheet') {
     _sheetStack[_sheetStack.length - 1] = step;            // та же запись истории
@@ -767,8 +771,19 @@ function navEventToMap(eid, gid) {
     if (_histTrimPending > 0) _histTrimPending--; else history.pushState({ nav: 1 }, '');
     _sheetStack.push(step);
   }
-  switchView('map');
   setTimeout(() => highlightPoint(gid, { open: false }), 300);
+}
+
+// снять «висячие» nav-шаги (напр. «на карте от события») сверху стека и снять их
+// записи истории. Вызывается из switchView: любая ЯВНАЯ смена вида (вкладка, «все
+// события площадки» и т.п.) делает шаг «вернуть описание» неактуальным, иначе
+// последующий «назад» воскресил бы старое описание поверх чужого экрана.
+function dropNavSteps() {
+  let n = 0;
+  while (_sheetStack.length && typeof _sheetStack[_sheetStack.length - 1] !== 'string') {
+    _sheetStack.pop(); n++;
+  }
+  if (n > 0) _scheduleHistTrim(n);
 }
 
 // системный «назад»/свайп: снять ВЕРХНИЙ слой пути назад, не покидая приложение.
