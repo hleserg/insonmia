@@ -1131,12 +1131,36 @@ function renderNearby(root) {
 }
 
 /* ---------- интеграция с app.js ---------- */
-function switchView(view) {
-  dropNavSteps(); // явная смена вида → снять висячие nav-шаги («на карте от события»)
+// применить вид БЕЗ записи истории (примитив: отрисовать вкладку). Внутренние
+// переходы — возврат по «назад», карта-из-события, восстановление — зовут ЕГО,
+// чтобы не плодить лишние tab-записи в едином history-стеке.
+function applyView(view) {
   state.view = view;
   $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === view));
   saveFilterState(); // вкладка переживает рефреш вместе с фильтрами
   render();
+}
+
+// ЯВНАЯ смена вкладки пользователем: кладёт запись в ЕДИНЫЙ history-стек (как
+// модалки), чтобы «назад» возвращал на предыдущую вкладку. Дедуп: та же вкладка —
+// без записи. Возврат на уже посещённую вкладку — СХЛОПЫВАЕМ стек до неё, чтобы
+// скачки прог↔карта↔прог не раздували историю (иначе выход = десятки «назад»).
+function switchView(view) {
+  dropNavSteps(); // уход с карты-из-события бросает шаг возврата
+  if (view === state.view) { applyView(view); return; }
+  let ci = -1; // индекс записи «назад→view» (уже были на этой вкладке)
+  for (let i = _sheetStack.length - 1; i >= 0; i--) {
+    if (_sheetStack[i] && _sheetStack[i].tab === view) { ci = i; break; }
+  }
+  if (ci !== -1) {                      // схлопнуть до посещённой вкладки
+    const drop = _sheetStack.length - ci;
+    _sheetStack.length = ci;
+    _scheduleHistTrim(drop);
+    applyView(view);
+    return;
+  }
+  pushViewStep(state.view);             // новая вкладка → «назад → текущий вид»
+  applyView(view);
 }
 
 // гео-данные обновились (тихий рефреш): сбросить карту и чипсы,

@@ -774,17 +774,20 @@ function navEventToMap(eid, gid) {
   // Модель [программа][описание][карта]: карту кладём ПОВЕРХ описания, запись
   // описания в истории СОХРАНЯЕМ. Тогда «назад» с карты вернёт описание (уже
   // существующий слой, без нового pushState внутри popstate), а следующее «назад»
-  // закроет описание. switchView('map') зовём ПОКА '#sheet' — видимая строка на
-  // вершине (dropNavSteps на ней стоп, no-op), только потом усыпляем описание.
-  switchView('map');
+  // закроет описание. applyView (не switchView) — карта здесь nav-слой ({onBack}),
+  // а не вкладочный переход: отдельную tab-запись плодить не нужно.
+  applyView('map');
   const el = $('#sheet'); if (el) el.classList.add('hidden'); // приспать описание (слой остаётся)
   // помечаем усыплённый слой объектом — чтобы уход с карты ВКЛАДКОЙ (dropNavSteps)
-  // снял и его тоже (иначе «назад» позже воскресил бы описание поверх чужого экрана)
+  // снял и его тоже (иначе «назад» позже воскресил бы описание поверх чужого экрана).
+  // fromView несём в ОБОИХ слоях: уходя с карты-оверлея вкладкой, dropNavSteps
+  // вернёт state.view к виду ПОД оверлеем — иначе map осталась бы «текущей
+  // вкладкой» и switchView создал бы дубль {tab:map} → мёртвое «назад».
   if (_sheetStack[_sheetStack.length - 1] === '#sheet') {
-    _sheetStack[_sheetStack.length - 1] = { suspended: '#sheet', eid };
+    _sheetStack[_sheetStack.length - 1] = { suspended: '#sheet', eid, fromView };
   }
   // слой карты ПОВЕРХ описания — своя запись истории
-  const step = { onBack: () => restoreDetailFromMap(eid, fromView) };
+  const step = { onBack: () => restoreDetailFromMap(eid, fromView), fromView };
   if (_histTrimPending > 0) _histTrimPending--; else history.pushState({ nav: 1 }, '');
   _sheetStack.push(step);
   setTimeout(() => highlightPoint(gid, { open: false }), 300);
@@ -795,20 +798,39 @@ function navEventToMap(eid, gid) {
 function restoreDetailFromMap(eid, fromView) {
   const i = _sheetStack.length - 1;
   if (_sheetStack[i] && _sheetStack[i].suspended === '#sheet') _sheetStack[i] = '#sheet'; // усыплённый → снова видимый слой
-  switchView(fromView);   // dropNavSteps: на вершине '#sheet' (строка) → no-op
+  applyView(fromView);    // вернуть вид ПОД описанием (не switchView — без tab-записи)
   openDetail(eid, true);  // restore: показать описание БЕЗ новой записи истории
 }
 
-// снять «висячие» nav-шаги (напр. «на карте от события») сверху стека и снять их
-// записи истории. Вызывается из switchView: любая ЯВНАЯ смена вида (вкладка, «все
-// события площадки» и т.п.) делает шаг «вернуть описание» неактуальным, иначе
-// последующий «назад» воскресил бы старое описание поверх чужого экрана.
+// снять «висячие» nav-шаги (карта-из-события: {onBack}/{suspended}) сверху стека
+// и их записи истории. Вызывается из switchView: явная смена вкладки делает шаг
+// «вернуть описание» неактуальным. НЕ трогает tab-записи ({tab}) и модалки
+// (строки) — они законные слои пути, «назад» их разматывает.
 function dropNavSteps() {
-  let n = 0;
-  while (_sheetStack.length && typeof _sheetStack[_sheetStack.length - 1] !== 'string') {
-    _sheetStack.pop(); n++;
+  let n = 0, under = null;
+  while (_sheetStack.length) {
+    const top = _sheetStack[_sheetStack.length - 1];
+    if (top && (top.onBack || top.suspended)) {
+      if (top.fromView) under = top.fromView; // вид, что был ПОД картой-оверлеем
+      _sheetStack.pop(); n++;
+    } else break;
   }
-  if (n > 0) _scheduleHistTrim(n);
+  if (n > 0) {
+    // уходя с карты-из-события ВКЛАДКОЙ, вернуть state.view к виду под оверлеем:
+    // иначе switchView сочтёт map «текущей вкладкой» и создаст дубль {tab:map},
+    // который переживёт схлопывание и даст мёртвое «назад» (баг verify #65).
+    // Только bookkeeping — перерисует applyView внутри switchView следом.
+    if (under) state.view = under;
+    _scheduleHistTrim(n);
+  }
+}
+
+// запись перехода между вкладками в ЕДИНЫЙ стек (зеркальна showSheet для модалок):
+// «назад» вернёт на prevView. Переход A→B в один тик переиспользует запись.
+function pushViewStep(prevView) {
+  if (_histTrimPending > 0) _histTrimPending--;
+  else history.pushState({ tab: 1 }, '');
+  _sheetStack.push({ tab: prevView });
 }
 
 // системный «назад»/свайп: снять ВЕРХНИЙ слой пути назад, не покидая приложение.
@@ -821,6 +843,7 @@ window.addEventListener('popstate', () => {
   if (typeof top === 'string') { const el = $(top); if (el) el.classList.add('hidden'); }
   else if (top && top.onBack) { try { top.onBack(); } catch { /* «назад» не должно падать */ } }
   else if (top && top.suspended) { const el = $(top.suspended); if (el) el.classList.add('hidden'); }
+  else if (top && top.tab) { applyView(top.tab); } // вернуться на предыдущую вкладку (без записи)
 });
 
 /* ---------- экспорт в календарь (.ics, всё офлайн на клиенте) ---------- */
