@@ -779,12 +779,15 @@ function navEventToMap(eid, gid) {
   applyView('map');
   const el = $('#sheet'); if (el) el.classList.add('hidden'); // приспать описание (слой остаётся)
   // помечаем усыплённый слой объектом — чтобы уход с карты ВКЛАДКОЙ (dropNavSteps)
-  // снял и его тоже (иначе «назад» позже воскресил бы описание поверх чужого экрана)
+  // снял и его тоже (иначе «назад» позже воскресил бы описание поверх чужого экрана).
+  // fromView несём в ОБОИХ слоях: уходя с карты-оверлея вкладкой, dropNavSteps
+  // вернёт state.view к виду ПОД оверлеем — иначе map осталась бы «текущей
+  // вкладкой» и switchView создал бы дубль {tab:map} → мёртвое «назад».
   if (_sheetStack[_sheetStack.length - 1] === '#sheet') {
-    _sheetStack[_sheetStack.length - 1] = { suspended: '#sheet', eid };
+    _sheetStack[_sheetStack.length - 1] = { suspended: '#sheet', eid, fromView };
   }
   // слой карты ПОВЕРХ описания — своя запись истории
-  const step = { onBack: () => restoreDetailFromMap(eid, fromView) };
+  const step = { onBack: () => restoreDetailFromMap(eid, fromView), fromView };
   if (_histTrimPending > 0) _histTrimPending--; else history.pushState({ nav: 1 }, '');
   _sheetStack.push(step);
   setTimeout(() => highlightPoint(gid, { open: false }), 300);
@@ -804,13 +807,22 @@ function restoreDetailFromMap(eid, fromView) {
 // «вернуть описание» неактуальным. НЕ трогает tab-записи ({tab}) и модалки
 // (строки) — они законные слои пути, «назад» их разматывает.
 function dropNavSteps() {
-  let n = 0;
+  let n = 0, under = null;
   while (_sheetStack.length) {
     const top = _sheetStack[_sheetStack.length - 1];
-    if (top && (top.onBack || top.suspended)) { _sheetStack.pop(); n++; }
-    else break;
+    if (top && (top.onBack || top.suspended)) {
+      if (top.fromView) under = top.fromView; // вид, что был ПОД картой-оверлеем
+      _sheetStack.pop(); n++;
+    } else break;
   }
-  if (n > 0) _scheduleHistTrim(n);
+  if (n > 0) {
+    // уходя с карты-из-события ВКЛАДКОЙ, вернуть state.view к виду под оверлеем:
+    // иначе switchView сочтёт map «текущей вкладкой» и создаст дубль {tab:map},
+    // который переживёт схлопывание и даст мёртвое «назад» (баг verify #65).
+    // Только bookkeeping — перерисует applyView внутри switchView следом.
+    if (under) state.view = under;
+    _scheduleHistTrim(n);
+  }
 }
 
 // запись перехода между вкладками в ЕДИНЫЙ стек (зеркальна showSheet для модалок):

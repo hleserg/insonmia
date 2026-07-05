@@ -191,6 +191,39 @@ const BASE = `http://127.0.0.1:${PORT}`;
     console.log('✓ 9. смешанная цепочка (дедуп + схлопывание) разматывается ровно, без лишних «назад»');
   }
 
+  // --- 10. РЕГРЕСС verify #65: событие→карта НЕ плодит дубль {tab:map} → нет
+  //         мёртвого «назад». Путь: карта→программа→событие→«на карте»→программа→
+  //         карта→назад ДОЛЖЕН сразу сменить экран (а не остаться на карте).
+  {
+    const { ctx, page } = await fresh();
+    await clickTab(page, 'map');         // [{tab:now}], view=map
+    await clickTab(page, 'schedule');    // [{tab:now},{tab:map}], view=schedule
+    // открыть событие с кнопкой «на карте»
+    const n = await page.evaluate(() => document.querySelectorAll('.event .event-main').length);
+    let opened = false;
+    for (let i = 0; i < n; i++) {
+      await page.evaluate(idx => document.querySelectorAll('.event .event-main')[idx].click(), i);
+      await page.waitForTimeout(140);
+      if (await page.evaluate(() => !!document.querySelector('#sheet .geo-jump'))) { opened = true; break; }
+      await page.click('#sheet .sheet-titlebar .icon-btn[data-close]'); await page.waitForTimeout(100);
+    }
+    assert.ok(opened, '10: нашли событие с кнопкой «на карте»');
+    await page.click('#sheet .geo-jump'); await page.waitForTimeout(600); // событие→карта (оверлей)
+    assert.ok(await activeTab(page) === 'map' && !(await vis(page, '#sheet')), '10: на карте-оверлее');
+    await clickTab(page, 'schedule');    // уход с оверлея ВКЛАДКОЙ: state.view вернётся под оверлей
+    assert.ok(await activeTab(page) === 'schedule' && !(await vis(page, '#sheet')), '10: ушли на программу, дубль {tab:map} не создан');
+    await clickTab(page, 'map');         // возврат на карту — схлопнуть до одной записи map
+    assert.equal(await activeTab(page), 'map', '10: снова на карте');
+    await back(page);
+    // ключевая проверка: «назад» СРАЗУ уводит с карты (не мёртвое нажатие)
+    assert.ok(await activeTab(page) !== 'map', '10: «назад» СРАЗУ сменил экран (нет мёртвого нажатия из дубля {tab:map})');
+    assert.equal(await activeTab(page), 'now', '10: «назад» вернул на стартовую «сейчас»');
+    assert.ok(await alive(page), '10: живы');
+    await back(page); assert.ok(!(await alive(page)), '10: ещё «назад» с дна → выход');
+    await ctx.close();
+    console.log('✓ 10. verify #65: событие→карта не плодит дубль {tab:map}, «назад» без мёртвого нажатия');
+  }
+
   await browser.close();
   killSrv();
   console.log('\n=== ВКЛАДКИ В ЕДИНОМ HISTORY-СТЕКЕ: ВСЁ ОК ===');
