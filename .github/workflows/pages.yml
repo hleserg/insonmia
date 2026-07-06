@@ -47,7 +47,12 @@ jobs:
             echo "секреты TG_* не заданы — config.js не создаётся, пинг выключен"
           fi
 
+      # enablement:true — на лету включаем Pages с build_type «workflow» через
+      # API (есть permission pages:write). Без этого при источнике «Deploy from a
+      # branch» actions/deploy-pages падает с «Deployment failed, try again later».
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
