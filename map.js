@@ -1024,6 +1024,10 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
     const hadError = !!GEO.nearby.error;
     GEO.nearby.error = null;
     if (hadError) {
+      // переход code 1 → code 2/3 (доступ вернули, спутников ещё нет): дедлайн
+      // «долгого поиска» был погашен на code 1 — переармируем, иначе спиннер
+      // без фикса стал бы тупиковым (ни эскалации, ни «повторить»).
+      armGeoDeadline();
       if (state.view === 'nearby') render();
       else if (state.view === 'map') updateMyCoordRow();
     }

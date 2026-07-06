@@ -96,6 +96,29 @@ const PT = [54.68025, 35.08971];
     await ctx.close();
   }
 
+  // --- 4b. РЕГРЕСС verify (раунд 2): отказ → доступ ВЕРНУЛИ, но фикса ещё нет
+  //         (потеряшка под крышей). Приходит code 2/3 — экран НЕ должен стать
+  //         тупиковым спиннером: дедлайн «долгого поиска» переармируется, через
+  //         3 мин снова появляется «повторить» (иначе немой спиннер навсегда).
+  {
+    const { ctx, page } = await freshControlled({ denied: true, clock: true });
+    await page.click('.tab[data-view="nearby"]'); await page.clock.runFor(100); await page.waitForTimeout(400);
+    assert.match(await page.evaluate(() => document.querySelector('#content .empty').textContent), /не дал доступ|настройки/i, '4b: сначала отказ доступа');
+    // доступ вернули в настройках (permissions → granted), но спутников ещё нет → code 2
+    await page.evaluate(() => {
+      navigator.permissions.query = d => d && d.name === 'geolocation' ? Promise.resolve({ state: 'granted' }) : Promise.resolve({ state: 'prompt' });
+      window.__fireGeoErr(2);
+    });
+    await page.waitForTimeout(400);
+    const emptyTxt = await page.evaluate(() => document.querySelector('#content .empty').textContent);
+    assert.ok(/спутник/i.test(emptyTxt) && !/не дал доступ/i.test(emptyTxt), '4b: code 2 после отказа → спиннер «поиск», не отказ: ' + emptyTxt.slice(0, 50));
+    assert.ok(!(await page.evaluate(() => [...document.querySelectorAll('.geo-searching .btn')].some(b => /повторить/.test(b.textContent)))), '4b: сразу после code 2 — обычный поиск, без «повторить»');
+    await page.clock.runFor(181000); await page.waitForTimeout(400); // >SEARCH_MS без фикса
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.geo-searching .btn')].some(b => /повторить/.test(b.textContent))), '4b: через 3 мин «долгий поиск» + «повторить» (дедлайн переармирован на code1→code2)');
+    console.log('✓ 4b. отказ→доступ вернули без фикса: спиннер не тупиковый, эскалация «долгого поиска» наступает');
+    await ctx.close();
+  }
+
   // --- 5. РЯДОМ: нет фикса → крутилка + «поиск спутников» + дисклеймер, без событий
   {
     const { ctx, page } = await freshControlled();
