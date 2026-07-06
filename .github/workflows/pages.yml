@@ -47,9 +47,29 @@ jobs:
             echo "секреты TG_* не заданы — config.js не создаётся, пинг выключен"
           fi
 
-      # enablement:true — на лету включаем Pages с build_type «workflow» через
-      # API (есть permission pages:write). Без этого при источнике «Deploy from a
-      # branch» actions/deploy-pages падает с «Deployment failed, try again later».
+      # ЯВНО переводим источник Pages на «GitHub Actions» (build_type=workflow).
+      # configure-pages enablement:true лишь СОЗДАЁТ сайт, но НЕ конвертирует уже
+      # существующий legacy-сайт («Deploy from a branch») → deploy-pages падает
+      # «Deployment failed, try again later». PUT /pages с pages:write это чинит.
+      # Шаг не валит job: печатаем HTTP-код (403 → нужна ручная настройка владельцем).
+      - name: Force Pages build_type=workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=$(curl -sS -o /tmp/pages_put.json -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/pages" \
+            -d '{"build_type":"workflow"}') || true
+          echo "PUT /pages build_type=workflow -> HTTP $code"
+          cat /tmp/pages_put.json 2>/dev/null || true
+          echo
+          # 2xx = переключили; 404 = сайта ещё нет → создаст configure-pages ниже;
+          # 403 = токену нельзя → нужна ручная Settings → Pages → Source: GitHub Actions
+
+      # enablement:true — на лету создаём Pages (build_type «workflow»), если его
+      # ещё нет (permission pages:write). Существующий сайт уже переключён PUT выше.
       - uses: actions/configure-pages@v5
         with:
           enablement: true
