@@ -952,28 +952,6 @@
         <styleUrl>#line-0F9D58-5069-nodesc-highlight</styleUrl>
       </Pair>
     </StyleMap>
-    <Style id="line-0F9D58-5236-normal">
-      <LineStyle>
-        <color>ff589d0f</color>
-        <width>5.236</width>
-      </LineStyle>
-    </Style>
-    <Style id="line-0F9D58-5236-highlight">
-      <LineStyle>
-        <color>ff589d0f</color>
-        <width>7.854</width>
-      </LineStyle>
-    </Style>
-    <StyleMap id="line-0F9D58-5236">
-      <Pair>
-        <key>normal</key>
-        <styleUrl>#line-0F9D58-5236-normal</styleUrl>
-      </Pair>
-      <Pair>
-        <key>highlight</key>
-        <styleUrl>#line-0F9D58-5236-highlight</styleUrl>
-      </Pair>
-    </StyleMap>
     <Style id="line-0F9D58-5236-nodesc-normal">
       <LineStyle>
         <color>ff589d0f</color>
@@ -3500,24 +3478,6 @@
             35.089342,54.683747,0
             35.089155,54.683685,0
             35.0889943,54.6833729,0
-          </coordinates>
-        </LineString>
-      </Placemark>
-      <Placemark>
-        <name>Пешая. Проход вглубь леса через лагерь Детской</name>
-        <description>04.06.2026 13:54:56</description>
-        <styleUrl>#line-0F9D58-5236</styleUrl>
-        <LineString>
-          <tessellate>1</tessellate>
-          <coordinates>
-            35.0946793,54.6828665,0
-            35.094417,54.683015,0
-            35.094277,54.683143,0
-            35.093939,54.683254,0
-            35.093751,54.683322,0
-            35.093596,54.683372,0
-            35.093446,54.683399,0
-            35.093258,54.683458,0
           </coordinates>
         </LineString>
       </Placemark>
