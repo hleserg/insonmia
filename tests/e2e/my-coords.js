@@ -26,6 +26,9 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   const external = [];
   page.on('request', r => { const u = new URL(r.url()); if (!['127.0.0.1', 'localhost'].includes(u.hostname)) external.push(r.url()); });
   page.on('pageerror', e => { console.error('pageerror:', e.message); process.exitCode = 1; });
+  // мокаем часы: живой watch троттлит onFix 10с, а фикс протухает через 60с —
+  // прогоняем эти окна детерминированно (page.clock.runFor), не ждём реальных секунд
+  await page.clock.install({ time: new Date('2026-07-10T14:00:00Z') });
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
   await page.click('.tab[data-view="map"]');
@@ -45,7 +48,7 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   assert.ok(!clipped, 'координаты обрезаются многоточием (scrollWidth > clientWidth)');
   console.log('✓ 1. granted → живой watch показывает координаты автоматически (не обрезаны), 🔗 активна');
 
-  // --- 3. тап по координатам копирует СВЕЖИЕ «lat, lng» (перезапрос getCurrentPosition)
+  // --- 3. тап по координатам копирует текущие «lat, lng» (живой фикс watch)
   await page.click('#myCoordText');
   await page.waitForTimeout(500);
   const clipCoord = await page.evaluate(() => navigator.clipboard.readText());
@@ -63,17 +66,20 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   assert.ok(decodeURIComponent(clipShare).includes('Я здесь'), 'имя «Я здесь» в диплинке');
   console.log('✓ 4. 🔗 → буфер (Huawei-фолбэк): текст + #pin= + geo:');
 
-  // --- 4b. потеряшка ушёл: сместились → 🔗 шлёт СВЕЖИЕ координаты, не первый фикс
+  // --- 4b. потеряшка ушёл: живой watch подхватывает новую точку (после троттла
+  //         10с) → 🔗 и строка отдают СВЕЖИЕ координаты, не залипший первый фикс
   const MOVED = { latitude: 54.69111, longitude: 35.10222 };
-  await ctx.setGeolocation(MOVED);
+  await page.clock.runFor(11000);   // переживаем троттл живого watch (10с) детерминированно
+  await ctx.setGeolocation(MOVED);  // смена позиции → onFix проходит троттл, GEO.nearby.pos=MOVED
+  await page.waitForTimeout(400);
+  const rowMoved = await page.textContent('#myCoordText');
+  assert.match(rowMoved, /54\.691/, 'строка обновилась на свежую после троттла: ' + rowMoved);
   await page.click('#myCoordShare');
   await page.waitForTimeout(300);
   const clipMoved = await page.evaluate(() => navigator.clipboard.readText());
   assert.ok(/Я здесь:\s*54\.691\d*,\s*35\.102\d*/.test(clipMoved), 'после смещения шлёт новую точку: ' + clipMoved);
   assert.ok(!clipMoved.includes('54.680'), 'старый фикс не протёк в шаринг: ' + clipMoved);
-  const rowMoved = await page.textContent('#myCoordText');
-  assert.match(rowMoved, /54\.691/, 'строка тоже обновилась на свежую: ' + rowMoved);
-  console.log('✓ 4b. смещение → 🔗 и строка отдают СВЕЖИЕ координаты (не залипший фикс)');
+  console.log('✓ 4b. смещение → живой watch обновляет строку и 🔗 на СВЕЖИЕ координаты (не залипший фикс)');
 
   // --- 4c. фолбэк-поле шаринга чистит превью/кнопку от прошлого импорта
   const clean = await page.evaluate(() => {
@@ -90,17 +96,18 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   await page.click('#pinImport .sheet-titlebar .icon-btn[data-close]').catch(() => {});
   await page.waitForTimeout(150);
   console.log('✓ 4c. фолбэк-поле шаринга без залипшего превью/импорта');
-  await ctx.setGeolocation(PT); // вернём исходную точку для остальных сценариев
 
-  // --- 4d. провал СВЕЖЕГО фикса (таймаут GPS) инвалидирует строку: 🔗 гаснет,
-  //         не врёт старой точкой — возвращаемся к «поиск спутников…» (watch ещё ищет)
-  await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, err) => err({ code: 3, message: 'timeout' }); });
-  await page.click('#myCoordShare');
+  // --- 4d. фикс протухает через минуту без обновления → строка гаснет к «поиск
+  //         спутников», 🔗 неактивна: не врём замороженной старой точкой (потеряшке
+  //         нужно ТОЛЬКО текущее). Прогоняем 60с окно детерминированно (page.clock).
+  await page.clock.runFor(61000); // >60с без нового фикса → armGeoStale гасит точку
   await page.waitForTimeout(300);
   const t4d = await page.textContent('#myCoordText');
-  assert.ok(!/📍\s*54\.6/.test(t4d), 'после таймаута строка НЕ показывает старую точку: ' + t4d);
-  assert.ok(await page.evaluate(() => document.querySelector('#myCoordShare').disabled), '🔗 неактивна после провала фикса');
-  console.log('✓ 4d. провал свежего фикса гасит строку — 🔗 не врёт старой точкой');
+  assert.ok(!/📍\s*54\.6/.test(t4d), '4d: протухший фикс НЕ показывает старую точку: ' + t4d);
+  assert.match(t4d, /поиск спутников/, '4d: протух → снова «поиск спутников» (watch ещё ищет)');
+  assert.ok(await page.evaluate(() => document.querySelector('#myCoordShare').disabled), '4d: 🔗 неактивна у протухшего фикса');
+  console.log('✓ 4d. фикс протухает через минуту → строка гаснет к «поиск спутников», 🔗 не врёт старой точкой');
+  // вернём свежий фикс для сценария 5 (нужен clipShare-диплинк из scenario 4 — он уже снят)
 
   // --- 5. открытие этого же #pin= офлайн → входящая точка «Я здесь»
   const hash = clipShare.split('\n').find(l => l.includes('#pin='));
