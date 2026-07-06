@@ -48,6 +48,27 @@
     return `${p.y}-${pad2(p.mo + 1)}-${pad2(p.day)}`;
   }
 
+  // Слоты по времени НАЧАЛА события (мск-час старта). Ночь — единый длинный
+  // хвост 23:00–07:59: главное festival-время, не дробим. Слот определяется
+  // ТОЛЬКО по часу старта в мск (независимо от таймзоны устройства); фестдень
+  // считается отдельно через getFestivalDay — событие в 01:30 попадёт в слот
+  // «23-08» И в фестдень предыдущей календарной даты, это два разных измерения.
+  const TIME_SLOTS = [
+    { key: '08-11', label: '08:00–11:00', from: 8, to: 11 },
+    { key: '11-14', label: '11:00–14:00', from: 11, to: 14 },
+    { key: '14-17', label: '14:00–17:00', from: 14, to: 17 },
+    { key: '17-20', label: '17:00–20:00', from: 17, to: 20 },
+    { key: '20-23', label: '20:00–23:00', from: 20, to: 23 },
+    { key: '23-08', label: '23:00–08:00', from: 23, to: 8, night: true },
+  ];
+  function timeSlotKey(startMs) {
+    if (startMs == null) return null;
+    const h = mskOf(startMs).h;
+    if (h >= 23 || h < 8) return '23-08'; // ночной хвост через полночь
+    for (const s of TIME_SLOTS) { if (!s.night && h >= s.from && h < s.to) return s.key; }
+    return null; // 8..22 полностью покрыты дневными слотами — сюда не доходим
+  }
+
   function statusOf(e, nowMs) {
     // все случаи nowMs >= start уже разобраны первыми тремя ветками
     const s = e._startMs, en = e._endMs;
@@ -434,6 +455,8 @@
   exports.epochFromISO = epochFromISO;
   exports.mskOf = mskOf;
   exports.getFestivalDay = getFestivalDay;
+  exports.TIME_SLOTS = TIME_SLOTS;
+  exports.timeSlotKey = timeSlotKey;
   exports.statusOf = statusOf;
   exports.sortByStart = sortByStart;
   exports.nightInfo = nightInfo;
