@@ -23,7 +23,7 @@ const PT = [54.68025, 35.08971];
   // контекст с УПРАВЛЯЕМОЙ геолокацией: watchPosition копит колбэки, фикс шлём
   // руками через window.__fireGeo(lat,lng) — так детерминированно ловим состояния
   // «поиск» → «есть фикс» и проверяем, что «последнее известное» не всплывает.
-  const freshControlled = async ({ denied = false } = {}) => {
+  const freshControlled = async ({ denied = false, clock = false } = {}) => {
     const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block' });
     await ctx.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
     await ctx.addInitScript((denied) => {
@@ -36,6 +36,7 @@ const PT = [54.68025, 35.08971];
     }, denied);
     const page = await ctx.newPage();
     page.on('pageerror', e => { console.error('pageerror:', e.message); process.exitCode = 1; });
+    if (clock) await page.clock.install({ time: new Date('2026-07-10T14:00:00Z') }); // мокаем таймеры для теста «протух через минуту»
     await page.goto(BASE + '/', { waitUntil: 'load' }); await page.waitForTimeout(600);
     return { ctx, page };
   };
@@ -114,6 +115,24 @@ const PT = [54.68025, 35.08971];
     await page.click('.tab[data-view="nearby"]'); await page.waitForTimeout(250);
     assert.ok(await page.evaluate(() => !!document.querySelector('.geo-searching')), '7: при возврате в «рядом» снова «поиск спутников» (не старые события)');
     console.log('✓ 7. рядом: при возврате снова «поиск спутников» (только текущее местоположение)');
+    await ctx.close();
+  }
+
+  // --- 9. фикс протухает через минуту → гаснет к «поиск спутников» (строго для
+  //        потеряшек: замороженную старую точку не показываем; ловит и «тихую»
+  //        потерю сигнала без ошибки). Таймеры мокаем page.clock — не ждём 60с.
+  {
+    const { ctx, page } = await freshControlled({ clock: true });
+    await page.evaluate(() => { window.__alive = 'festa'; });
+    await page.click('.tab[data-view="map"]'); await page.clock.runFor(1000); await page.waitForTimeout(200);
+    await fire(page, PT[0], PT[1]); await page.waitForTimeout(200);
+    assert.match(await rowText(page), /📍\s*54\.680/, '9: фикс показал координаты');
+    assert.ok(await hasSelf(page), '9: маркер есть при свежем фиксе');
+    await page.clock.runFor(61000); await page.waitForTimeout(200); // >1 мин без нового фикса
+    assert.ok(!/📍\s*54\.680/.test(await rowText(page)), '9: через минуту старая точка НЕ показывается');
+    assert.match(await rowText(page), /поиск спутников/, '9: протухший фикс → снова «поиск спутников»');
+    assert.ok(!(await hasSelf(page)), '9: маркер снят у протухшего фикса');
+    console.log('✓ 9. фикс протухает через минуту → гаснет к «поиск спутников» (не замороженная точка)');
     await ctx.close();
   }
 
