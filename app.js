@@ -851,21 +851,26 @@ let _exitTimer = 0;
 let _exitGuardScheduled = false;
 const EXIT_WINDOW_MS = 2000;
 
+// поставить стража СИНХРОННО, если мы на дне и его ещё нет. Идемпотентно.
+function ensureExitGuard() {
+  if (_exitArmed) return;          // окно выхода открыто — стража быть НЕ должно
+  if (_sheetStack.length) return;  // не на дне — слои сами буфер, страж не нужен
+  if (_exitGuard) return;          // уже стоит
+  // после полного рефреша / тихого reload приложение оказывается СТОЯЩИМ на
+  // записи-страже (pushState-запись переживает reload, а флаг _exitGuard сброшен
+  // свежим модулем) — усыновляем её, не плодя второго стража; иначе выход
+  // требовал бы 3 нажатий, и стражи копились бы с каждым reload (verify #66 р2).
+  if (history.state && history.state.exitGuard) { _exitGuard = true; return; }
+  try { history.pushState({ exitGuard: 1 }, ''); _exitGuard = true; } catch { /* ignore */ }
+}
+
+// отложенно (микротаск/next-tick) — когда синхронный push нежелателен: сразу после
+// popstate (pushState в popstate ненадёжен на Android, см. #64) или после истечения
+// окна выхода. При флаки-пуше фича деградирует безопасно (второе «назад» выходит).
 function armExitGuardSoon() {
   if (_exitGuardScheduled) return;
   _exitGuardScheduled = true;
-  setTimeout(() => {
-    _exitGuardScheduled = false;
-    if (_exitArmed) return;          // окно выхода открыто — стража быть НЕ должно
-    if (_sheetStack.length) return;  // не на дне — слои сами буфер, страж не нужен
-    if (_exitGuard) return;          // уже стоит
-    // после полного рефреша / тихого reload приложение оказывается СТОЯЩИМ на
-    // записи-страже (pushState-запись переживает reload, а флаг _exitGuard сброшен
-    // свежим модулем) — усыновляем её, не плодя второго стража; иначе выход
-    // требовал бы 3 нажатий, и стражи копились бы с каждым reload (verify #66 р2).
-    if (history.state && history.state.exitGuard) { _exitGuard = true; return; }
-    try { history.pushState({ exitGuard: 1 }, ''); _exitGuard = true; } catch { /* ignore */ }
-  }, 0);
+  setTimeout(() => { _exitGuardScheduled = false; ensureExitGuard(); }, 0);
 }
 
 // закрыть окно «нажмите ещё раз»: пользователь после первого «назад» на дне не
@@ -1734,7 +1739,12 @@ function scheduleSilentReload() {
   // перезагрузка только после паузы без действий И без открытых модалок
   __reloadTimer = setTimeout(() => {
     if (!__reloadArmed || window.__reloadingForUpdate) return;
-    if (anyModalOpen()) return; // ждём: закрытие модалки — интеракция → перепланируем
+    // reload только на ДНЕ навигации: не только «нет модалок», но и стек пуст
+    // (нет открытых вкладочных слоёв/карты-из-события). Иначе после reload под
+    // свежим стражем остались бы устаревшие записи [base][guard][tab], и «двойное
+    // назад для выхода» тихо съедало бы их вместо выхода — нарушение инварианта.
+    // Действие пользователя (bump) перепланирует reload, когда он вернётся на дно.
+    if (anyModalOpen() || _sheetStack.length) return;
     window.__reloadingForUpdate = true;
     location.reload();
   }, 2500);
@@ -2180,6 +2190,14 @@ function tick() {
 
 /* ---------- boot ---------- */
 async function boot() {
+  // Стража выхода ставим ПЕРВЫМ делом — ДО async-загрузок (program/geo/basemap).
+  // Иначе на медленном устройстве «назад» во время загрузки выходит из приложения
+  // без тоста (главный симптом: свежий запуск → сразу «назад» → выход). В Playwright
+  // загрузка мгновенная, потому баг там не воспроизводился. Синхронно, чтобы запись
+  // истории точно была к моменту первого «назад». Диплинк-хеш (#pin=/#import-pins)
+  // пропускаем: его чистят/читают хендлеры в конце boot, а ранний страж залипил бы
+  // хеш в своей записи и зациклил hashchange — там стража ставит ensureExitGuard ниже.
+  if (!location.hash) ensureExitGuard();
   loadFavs();
   loadPins();
   state.lead = parseInt(localStorage.getItem(LS.lead) || '15', 10);
@@ -2207,7 +2225,7 @@ async function boot() {
   updateNotifStatus();
   handleIncomingPin(); // открыли по чужой #pin=-ссылке — предложить добавить
   handleImportHash();  // гайд «связь на поляне» ведёт на форму импорта меток
-  armExitGuardSoon();  // защита от случайного выхода: «нажмите назад ещё раз»
+  ensureExitGuard();   // подстраховка: если диплинк-модалка открылась/закрылась в boot
   // ссылки могут прилетать и в уже открытое приложение (same-document навигация)
   window.addEventListener('hashchange', () => { handleIncomingPin() || handleImportHash(); });
 }
