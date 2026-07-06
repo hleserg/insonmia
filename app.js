@@ -219,6 +219,14 @@ function filteredEvents() {
 const AGE_NA = '';   // пустой ценз/локация → чип «не указано»
 function ageKey(e) { return (e.age || '').trim(); }
 function venueKey(e) { return (e.venue || '').trim(); }
+function slotKey(e) { return window.InsomniaCore.timeSlotKey(e._startMs); }
+// вселенная слотов — ФИКСИРОВАННЫЕ 6 промежутков (не зависят от данных): порядок
+// как в TIME_SLOTS, ночь последней. Так набор чипов и «выбрать все» стабильны.
+function slotUniverse() { return window.InsomniaCore.TIME_SLOTS.map(s => s.key); }
+function slotLabel(key) {
+  const s = window.InsomniaCore.TIME_SLOTS.find(x => x.key === key);
+  return s ? s.label : key;
+}
 function cmpAge(a, b) {
   const na = parseInt(a, 10), nb = parseInt(b, 10);
   if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
@@ -243,15 +251,24 @@ function venueUniverse() {
 function initEventFilters() {
   const ages = ageUniverse();
   const venues = venueUniverse();
-  state.filters = { age: new Set(ages), venue: new Set(venues), _ages: ages, _venues: venues };
+  const slots = slotUniverse();
+  state.filters = { age: new Set(ages), venue: new Set(venues), slot: new Set(slots),
+                    _ages: ages, _venues: venues, _slots: slots };
 }
 function ageFilterActive() { const f = state.filters; return !!f && f.age.size < f._ages.length; }
 function venueFilterActive() { const f = state.filters; return !!f && f.venue.size < f._venues.length; }
+function slotFilterActive() { const f = state.filters; return !!f && f.slot.size < f._slots.length; }
 // «активен хоть один» — для бейджа и развилки экспорта (в «рядом» — только ценз)
-function anyFilterActive() { return ageFilterActive() || venueFilterActive(); }
+function anyFilterActive() { return ageFilterActive() || venueFilterActive() || slotFilterActive(); }
 function passesAge(e) { return !state.filters || state.filters.age.has(ageKey(e)); }
 function passesVenue(e) { return !state.filters || state.filters.venue.has(venueKey(e)); }
-function passesFilters(e) { return passesAge(e) && passesVenue(e); }
+// слот по времени НАЧАЛА (мск-час старта). Когда выбраны все слоты (фильтр
+// неактивен) — пропускаем всё, включая события без времени старта (slotKey=null);
+// при сужении такие события в выбранные слоты не попадают (null нет в наборе).
+function passesSlot(e) { return !state.filters || !slotFilterActive() || state.filters.slot.has(slotKey(e)); }
+// слот применяется только в «сейчас/программе» (passesFilters); «рядом» фильтрует
+// напрямую passesAge, поэтому слот его не касается (как и локация)
+function passesFilters(e) { return passesAge(e) && passesVenue(e) && passesSlot(e); }
 
 /* ---------- сохранение фильтров/дня/радиуса/поиска (sessionStorage) ----------
    Задача: рефреш (F5/свайп/тихий reload SW) НЕ должен сбрасывать настроенный
@@ -274,6 +291,7 @@ function saveFilterState() {
     // потащила бы устаревшее сужение; «всё» = отсутствие ключа
     if (f && ageFilterActive()) data.age = [...f.age];
     if (f && venueFilterActive()) data.venue = [...f.venue];
+    if (f && slotFilterActive()) data.slot = [...f.slot];
     sessionStorage.setItem(FILT_KEY, JSON.stringify(data));
   } catch { /* приватный режим/квота — просто не переживёт рефреш, не критично */ }
 }
@@ -300,6 +318,10 @@ function restoreFilterState() {
   if (f && Array.isArray(data.venue)) {
     const valid = data.venue.filter(v => f._venues.includes(v));
     if (data.venue.length === 0 || valid.length) f.venue = new Set(valid);
+  }
+  if (f && Array.isArray(data.slot)) {
+    const valid = data.slot.filter(s => f._slots.includes(s));
+    if (data.slot.length === 0 || valid.length) f.slot = new Set(valid);
   }
   if (data.query) {
     state.query = data.query;
@@ -1093,23 +1115,26 @@ let filterDraft = null;
 function openFilterSheet() {
   if (!state.filters) return;
   const nearby = state.view === 'nearby';
-  filterDraft = { age: new Set(state.filters.age), venue: new Set(state.filters.venue) };
-  // локация — только «сейчас/программа»; в «рядом» блок скрыт (фильтр по цензу)
+  filterDraft = { age: new Set(state.filters.age), venue: new Set(state.filters.venue), slot: new Set(state.filters.slot) };
+  // локация и время — только «сейчас/программа»; в «рядом» блоки скрыты (там
+  // фильтр только по цензу, «время» бессмысленно — раздел и так про «сейчас/скоро»)
   $('#filterVenueBlock').classList.toggle('hidden', nearby);
+  $('#filterSlotBlock').classList.toggle('hidden', nearby);
   $('#filterVenueSearch').value = '';
   renderFilterChips();
   showSheet('#filterSheet');
 }
 function filterChipLabel(val) { return val === '' ? 'не указано' : val; }
-function buildFilterChips(host, universe, draftSet, q) {
+function buildFilterChips(host, universe, draftSet, q, labelFn) {
   host.innerHTML = '';
+  const label = labelFn || filterChipLabel;
   universe.forEach(val => {
     // поиск сужает список; «не указано» (пустое) при активном поиске прячем
     if (q && (val === '' || !val.toLowerCase().includes(q))) return;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'fchip' + (draftSet.has(val) ? ' on' : '');
-    b.textContent = filterChipLabel(val);
+    b.textContent = label(val);
     b.setAttribute('aria-pressed', draftSet.has(val) ? 'true' : 'false');
     b.addEventListener('click', () => {
       if (draftSet.has(val)) draftSet.delete(val); else draftSet.add(val);
@@ -1123,17 +1148,20 @@ function buildFilterChips(host, universe, draftSet, q) {
 function renderFilterChips() {
   const q = ($('#filterVenueSearch').value || '').trim().toLowerCase();
   buildFilterChips($('#filterAgeChips'), state.filters._ages, filterDraft.age, '');
+  buildFilterChips($('#filterSlotChips'), state.filters._slots, filterDraft.slot, '', slotLabel);
   buildFilterChips($('#filterVenueChips'), state.filters._venues, filterDraft.venue, q);
 }
 // «выбрать все»/«снять все» — ПО ГРУППАМ: ссылка действует только на свою
-// группу (ценз или площадка), не трогая соседнюю
+// группу (ценз / время / площадка), не трогая соседние
 function filterGroupBulk(group, selectAll) {
   if (group === 'age') filterDraft.age = selectAll ? new Set(state.filters._ages) : new Set();
+  else if (group === 'slot') filterDraft.slot = selectAll ? new Set(state.filters._slots) : new Set();
   else filterDraft.venue = selectAll ? new Set(state.filters._venues) : new Set();
   renderFilterChips();
 }
 function applyFilters() {
   state.filters.age = new Set(filterDraft.age);
+  state.filters.slot = new Set(filterDraft.slot);
   state.filters.venue = new Set(filterDraft.venue);
   saveFilterState();
   hideSheet('#filterSheet');
@@ -1141,6 +1169,7 @@ function applyFilters() {
 }
 function resetFilters() {
   state.filters.age = new Set(state.filters._ages);
+  state.filters.slot = new Set(state.filters._slots);
   state.filters.venue = new Set(state.filters._venues);
   saveFilterState();
   render();
@@ -2029,6 +2058,8 @@ function wireUI() {
   // групповые ссылки «выбрать все»/«снять все» — каждая на свою группу
   $('#ageSelectAll').addEventListener('click', () => filterGroupBulk('age', true));
   $('#ageClear').addEventListener('click', () => filterGroupBulk('age', false));
+  $('#slotSelectAll').addEventListener('click', () => filterGroupBulk('slot', true));
+  $('#slotClear').addEventListener('click', () => filterGroupBulk('slot', false));
   $('#venueSelectAll').addEventListener('click', () => filterGroupBulk('venue', true));
   $('#venueClear').addEventListener('click', () => filterGroupBulk('venue', false));
   $('#filterVenueSearch').addEventListener('input', renderFilterChips);
