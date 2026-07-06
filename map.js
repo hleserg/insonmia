@@ -842,6 +842,7 @@ async function locateMe() {
     GEO.nearby.pos = { lat: pos.lat, lng: pos.lng }; // питает строку «мои координаты»
     GEO.nearby.posAt = Date.now();
     GEO.nearby.error = null;
+    armGeoStale(); // ручной фикс тоже протухает через минуту
     updateMyCoordRow();
   } catch (err) {
     toast(geoErrorText(err), 8000); // текст длинный — даём время прочитать
@@ -905,6 +906,7 @@ async function freshPosForAction() {
   GEO.nearby.pos = { lat: pos.lat, lng: pos.lng };
   GEO.nearby.posAt = Date.now();
   GEO.nearby.error = null;
+  armGeoStale(); // фикс под шаринг/копирование тоже живёт минуту
   showSelfMarker(pos);
   updateMyCoordRow();
   return GEO.nearby.pos;
@@ -982,7 +984,24 @@ function geoHelpEl() {
 /* ---------- «рядом» ---------- */
 const NEARBY_RADII = [150, 300, 600, 0]; // 0 = всё
 
-const POS_FRESH_MS = 5 * 60000; // позиция старше — не «последняя известная», а вчерашняя
+// строго для потеряшек: фикс старше минуты — уже НЕ текущий. По истечении гасим
+// координаты/маркер/список (→ «поиск спутников»), не показываем замороженную точку.
+const POS_FRESH_MS = 60000;
+
+// фикс протух (минуту нет нового) — гасим точку/маркер/список и показываем снова
+// «поиск спутников»: для потеряшек нельзя оставлять замороженную старую точку.
+// Ловит и «тихую» потерю сигнала (watchPosition просто перестал слать фиксы, без
+// ошибки) — onError такой случай не покрывает. Таймер перезаводится каждым фиксом.
+let _geoStaleTimer = 0;
+function armGeoStale() {
+  clearTimeout(_geoStaleTimer);
+  _geoStaleTimer = setTimeout(() => {
+    GEO.nearby.pos = null; GEO.nearby.posAt = 0;
+    if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+    if (state.view === 'nearby') render();
+    else if (state.view === 'map') updateMyCoordRow();
+  }, POS_FRESH_MS);
+}
 
 const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
   typeof navigator !== 'undefined' ? navigator.geolocation : null,
@@ -990,6 +1009,7 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
     GEO.nearby.pos = pos;
     GEO.nearby.posAt = Date.now();
     GEO.nearby.error = null;
+    armGeoStale(); // текущий фикс живёт максимум минуту без обновления
     if (state.view === 'nearby') render();
     // на карте — обновляем строку координат и маркер «я тут» ЖИВЫМ фиксом
     // (без перецентровки — карту не дёргаем; центрирует только 🎯)
@@ -1032,6 +1052,7 @@ function startNearbyWatch() {
 // известное» (требование: всегда только текущее местоположение).
 function stopNearbyWatch() {
   nearbyWatcher.stop();
+  clearTimeout(_geoStaleTimer);
   GEO.geoWatching = false;
   GEO.nearby.pos = null;
   GEO.nearby.posAt = 0;
