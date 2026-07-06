@@ -957,6 +957,11 @@ function armGeoStale() {
   _geoStaleTimer = setTimeout(() => {
     GEO.nearby.pos = null; GEO.nearby.posAt = 0;
     if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+    // ВЕРНУЛИСЬ в «поиск без фикса» с активным watch (потеряшка ушёл под крышу
+    // после первого фикса) → заново отсчитываем «долгий поиск», иначе эскалация
+    // (_geoSlow + «повторить») больше НИКОГДА не наступит: startNearbyWatch на
+    // ре-рендерах не переармирует дедлайн (watch уже активен), а onFix его погасил.
+    armGeoDeadline();
     if (state.view === 'nearby') render();
     else if (state.view === 'map') updateMyCoordRow();
   }, POS_FRESH_MS);
@@ -1013,7 +1018,15 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
     // спиннер (geoWatching=true, error=null). Свежий фикс есть — молча по нему;
     // протух — его гасит armGeoStale; «долго ищем» покажет armGeoDeadline.
     if (GEO.nearby.pos && Date.now() - GEO.nearby.posAt < POS_FRESH_MS) return;
-    GEO.nearby.error = null; // держим состояние «ищем», а не «ошибка»
+    // держим состояние «ищем», а не «ошибка». Если раньше показывали «включите
+    // гео» (был code 1, доступ вернули — а спутников ещё нет), сбрасываем и СРАЗУ
+    // перерисовываем в спиннер, не ждём внешнего тика/навигации.
+    const hadError = !!GEO.nearby.error;
+    GEO.nearby.error = null;
+    if (hadError) {
+      if (state.view === 'nearby') render();
+      else if (state.view === 'map') updateMyCoordRow();
+    }
   });
 
 // живой GPS-watch для карты И «рядом»: идемпотентен (start() внутри watcher

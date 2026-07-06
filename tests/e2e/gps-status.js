@@ -171,6 +171,23 @@ const PT = [54.68025, 35.08971];
     await ctx.close();
   }
 
+  // --- 11b. РЕГРЕСС verify: фикс был → сигнал пропал под крышей (armGeoStale гасит
+  //          точку) → «долгий поиск» должен наступить СНОВА (дедлайн переармирован),
+  //          иначе спиннер крутится вечно без «повторить». Bug 1 из adversarial-verify.
+  {
+    const { ctx, page } = await freshControlled({ clock: true });
+    await page.click('.tab[data-view="nearby"]'); await page.clock.runFor(1000); await page.waitForTimeout(200);
+    await fire(page, PT[0], PT[1]); await page.waitForTimeout(300); // первый фикс поймали
+    assert.ok(await page.evaluate(() => document.querySelectorAll('.map-point').length) > 0, '11b: первый фикс → события есть');
+    await page.clock.runFor(61000); await page.waitForTimeout(300); // сигнал пропал → фикс протух (>60с)
+    assert.ok(await page.evaluate(() => !!document.querySelector('.geo-searching .gps-spinner')), '11b: после потери фикса снова «поиск спутников»');
+    assert.ok(!(await page.evaluate(() => [...document.querySelectorAll('.geo-searching .btn')].some(b => /повторить/.test(b.textContent)))), '11b: сразу после потери — ещё обычный поиск, без «повторить»');
+    await page.clock.runFor(181000); await page.waitForTimeout(300); // ещё >3 мин без фикса
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.geo-searching .btn')].some(b => /повторить/.test(b.textContent))), '11b: «долгий поиск» наступил СНОВА после потери фикса (дедлайн переармирован)');
+    console.log('✓ 11b. фикс→потеря сигнала под крышей→эскалация «долгого поиска» наступает снова (не вечный немой спиннер)');
+    await ctx.close();
+  }
+
   // --- 12. Опции watchPosition: длинный таймаут (≥3 мин, не 15с), maximumAge:0
   //         (никогда старый/кэшированный фикс), enableHighAccuracy (именно GPS).
   {
