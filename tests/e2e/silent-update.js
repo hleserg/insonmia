@@ -65,6 +65,19 @@ function bumpSW(dir) {
   // теперь есть контроллер; ставим маркер, который переживёт только БЕЗ reload
   await page.evaluate(() => { window.__mark = 'v1'; localStorage.setItem('insomnia.favs', JSON.stringify(['probe-fav'])); });
 
+  // 2a. Обновление кода на НЕ-стартовой вкладке (стек навигации не пуст, но модалок
+  //     нет) → тихий reload отложен: reload только на ДНЕ, иначе под свежим стражем
+  //     остались бы устаревшие записи и «двойное назад для выхода» их тихо съедало бы
+  await page.click('.tab[data-view="schedule"]'); await page.waitForTimeout(300); // стек = [{tab:now}]
+  bumpSW(dir);
+  const navsTab = navs;
+  await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); if (r) await r.update(); });
+  await page.waitForTimeout(4000); // > debounce, но мы на вкладке (стек не пуст)
+  assert.equal(navs, navsTab, '2a: на вкладке (стек не пуст) тихий reload отложен');
+  assert.equal(await page.evaluate(() => window.__mark), 'v1', '2a: страница не перезагрузилась на вкладке');
+  console.log('✓ 2a. обновление на не-стартовой вкладке — reload отложен (дно навигации)');
+  await page.evaluate(() => history.back()); await page.waitForTimeout(400); // назад на дно (программно, без bump)
+
   // 2. Обновление кода ПРИ ОТКРЫТОЙ модалке → reload НЕ происходит
   await page.click('#btnSettings');
   await page.waitForTimeout(300);
