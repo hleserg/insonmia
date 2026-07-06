@@ -81,18 +81,21 @@ const results = [];
     await ctx.close();
   }
 
-  // 3. POSITION_UNAVAILABLE (повторные ошибки) + раскрытая подсказка живёт + ретрай даёт позицию
+  // 3. POSITION_UNAVAILABLE/TIMEOUT (код 2/3): доступ ЕСТЬ, спутников пока нет →
+  //    НЕ ошибка «включите гео», а спиннер «поиск спутников»; повторные ошибки
+  //    НЕ дёргают render (раскрытая подсказка живёт); ТОТ ЖЕ watch ловит фикс.
   {
     const { ctx, page } = await launch({ geolocation: GEO, permissions: ['geolocation'] }, () => {
       let calls = 0;
       window.__watchCalls = () => calls;
       navigator.geolocation.watchPosition = (ok, err) => {
         calls++;
-        if (calls === 1) {
-          setTimeout(() => err({ code: 2 }), 60);
-          setTimeout(() => err({ code: 2 }), 700);  // дубль — не должен дёргать render
-          setTimeout(() => err({ code: 3 }), 1400); // смена кода — render, но open переживает
-        } else setTimeout(() => ok({ coords: { latitude: 54.681149, longitude: 35.091007 } }), 60);
+        // одна подписка: сыпет ошибками «нет спутников/таймаут», затем ловит фикс —
+        // как реальный watchPosition под крышей, выходящий под открытое небо
+        setTimeout(() => err({ code: 2 }), 60);
+        setTimeout(() => err({ code: 2 }), 700);  // дубль — не должен дёргать render
+        setTimeout(() => err({ code: 3 }), 1400); // таймаут — тоже НЕ «включите гео»
+        setTimeout(() => ok({ coords: { latitude: 54.681149, longitude: 35.091007 } }), 2100);
         return calls;
       };
       navigator.geolocation.clearWatch = () => {};
@@ -100,18 +103,20 @@ const results = [];
     await tapNearby(page);
     await page.waitForTimeout(400);
     const txt = await page.locator('#content .empty').textContent();
-    assert.ok(/GPS|спутник|помещени/i.test(txt), 'нет текста про GPS/помещение: ' + txt.slice(0, 120));
+    // код 2/3 → спиннер «поиск спутников» + дисклеймер; НЕ «включить геолокацию»
+    assert.ok(/спутник/i.test(txt), 'нет текста про поиск спутников: ' + txt.slice(0, 120));
+    assert.ok(!/включ/i.test(txt), 'код 2/3 ошибочно просит «включить геолокацию»: ' + txt.slice(0, 120));
+    assert.ok(await page.locator('#content .geo-searching .gps-spinner').count() === 1, 'нет крутилки при коде 2/3');
     await page.click('#content details.geo-help summary'); // раскрыли подсказку
     await page.waitForTimeout(1600); // за это время прилетели err(2)-дубль и err(3)
     const stillOpen = await page.evaluate(() => document.querySelector('#content details.geo-help').open);
     assert.ok(stillOpen, 'раскрытая подсказка схлопнулась при повторных ошибках');
-    await page.click('#content .empty button:has-text("повторить")');
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(900); // тот же watch ловит фикс (~2100мс)
     const pts = await page.locator('#content .map-point').count();
     const calls = await page.evaluate(() => window.__watchCalls());
-    assert.ok(pts > 0, `после ретрая точек ${pts}`);
-    assert.ok(calls >= 2, `watchPosition вызван ${calls} раз(а)`);
-    results.push(`3. unavailable→retry: OK — подсказка пережила повторные ошибки, после «повторить» ${pts} точек`);
+    assert.ok(pts > 0, `тот же watch поймал фикс, точек ${pts}`);
+    assert.equal(calls, 1, `watch НЕ перезапускался на кодах 2/3 (вызван ${calls} раз)`);
+    results.push(`3. код 2/3: OK — спиннер (не «включите гео»), подсказка жива, тот же watch поймал фикс (${pts} точек)`);
     await ctx.close();
   }
 

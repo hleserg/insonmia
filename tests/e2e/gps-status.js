@@ -27,9 +27,10 @@ const PT = [54.68025, 35.08971];
     const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block' });
     await ctx.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
     await ctx.addInitScript((denied) => {
-      window.__geoCbs = []; window.__geoErrs = []; window.__lastGeo = null;
+      window.__geoCbs = []; window.__geoErrs = []; window.__lastGeo = null; window.__watchOpts = null;
       window.__fireGeo = (lat, lng) => { window.__lastGeo = { lat, lng }; window.__geoCbs.forEach(cb => cb({ coords: { latitude: lat, longitude: lng, accuracy: 5 } })); };
-      navigator.geolocation.watchPosition = (ok, err) => { window.__geoCbs.push(ok); if (err) window.__geoErrs.push(err); if (denied) setTimeout(() => err && err({ code: 1 }), 30); return window.__geoCbs.length; };
+      window.__fireGeoErr = (code) => { window.__geoErrs.forEach(cb => cb({ code })); }; // код 1/2/3 руками
+      navigator.geolocation.watchPosition = (ok, err, opts) => { window.__geoCbs.push(ok); if (err) window.__geoErrs.push(err); window.__watchOpts = opts || null; if (denied) setTimeout(() => err && err({ code: 1 }), 30); return window.__geoCbs.length; };
       navigator.geolocation.getCurrentPosition = (ok, err) => { if (denied) return err && err({ code: 1 }); if (window.__lastGeo) ok({ coords: { latitude: window.__lastGeo.lat, longitude: window.__lastGeo.lng, accuracy: 5 } }); else err && err({ code: 3 }); };
       navigator.geolocation.clearWatch = () => {};
       if (navigator.permissions && navigator.permissions.query) navigator.permissions.query = d => d && d.name === 'geolocation' ? Promise.resolve({ state: denied ? 'denied' : 'granted' }) : Promise.resolve({ state: 'prompt' });
@@ -136,7 +137,55 @@ const PT = [54.68025, 35.08971];
     await ctx.close();
   }
 
-  // --- 8. офлайн: статус и фикс работают без сети (GPS без интернета)
+  // --- 10. КОРЕНЬ БАГА #69: код 2/3 (POSITION_UNAVAILABLE/TIMEOUT) — доступ ЕСТЬ,
+  //         спутников пока нет → НЕ «включить геолокацию», продолжаем крутить спиннер.
+  {
+    const { ctx, page } = await freshControlled();
+    await page.click('.tab[data-view="map"]'); await page.waitForTimeout(700);
+    await page.evaluate(() => window.__fireGeoErr(2)); await page.waitForTimeout(200);
+    assert.ok(!/включить геолокацию/.test(await rowText(page)), '10: код 2 НЕ показывает «включить геолокацию» (доступ есть)');
+    assert.match(await rowText(page), /поиск спутников/, '10: код 2 → остаёмся в «поиск спутников»');
+    assert.ok(await page.evaluate(() => !!document.querySelector('#myCoordText .gps-spinner')), '10: спиннер крутится при коде 2');
+    await page.evaluate(() => window.__fireGeoErr(3)); await page.waitForTimeout(200); // таймаут — так же
+    assert.match(await rowText(page), /поиск спутников/, '10: код 3 (таймаут) → тоже «поиск спутников», не «включите»');
+    await fire(page, PT[0], PT[1]); await page.waitForTimeout(300); // фикс после ошибок всё равно ловится
+    assert.match(await rowText(page), /📍\s*54\.680/, '10: фикс после ошибок 2/3 показывает координаты');
+    console.log('✓ 10. код 2/3 (нет спутников/таймаут) → «поиск спутников», НЕ «включить геолокацию»; фикс потом ловится');
+    await ctx.close();
+  }
+
+  // --- 11. Долгий поиск: прошло SEARCH_MS (3 мин) без фикса → это НЕ провал —
+  //         спиннер продолжает крутиться, но текст «долго ищем» + кнопка «повторить».
+  {
+    const { ctx, page } = await freshControlled({ clock: true });
+    await page.click('.tab[data-view="nearby"]'); await page.clock.runFor(1000); await page.waitForTimeout(200);
+    assert.ok(await page.evaluate(() => !!document.querySelector('.geo-searching .gps-spinner')), '11: сначала обычный «поиск спутников»');
+    await page.clock.runFor(181000); await page.waitForTimeout(300); // > SEARCH_MS (180000)
+    assert.ok(await page.evaluate(() => !!document.querySelector('.geo-searching .gps-spinner')), '11: спиннер ВСЁ ЕЩЁ крутится (поиск не сдался)');
+    const slow = await page.evaluate(() => document.querySelector('.geo-searching').textContent);
+    assert.match(slow, /всё ещё не поймались|открытое место|попробуй заново/i, '11: текст сменился на «долгий поиск»: ' + slow.slice(0, 60));
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.geo-searching .btn')].some(b => /повторить/.test(b.textContent))), '11: кнопка «повторить» появилась при долгом поиске');
+    await fire(page, PT[0], PT[1]); await page.waitForTimeout(300); // фикс всё равно ловится
+    assert.ok(await page.evaluate(() => document.querySelectorAll('.map-point').length) > 0, '11: фикс после долгого поиска → события появились');
+    console.log('✓ 11. долгий поиск (>3 мин): спиннер крутится, текст «долго» + «повторить»; фикс всё равно ловится');
+    await ctx.close();
+  }
+
+  // --- 12. Опции watchPosition: длинный таймаут (≥3 мин, не 15с), maximumAge:0
+  //         (никогда старый/кэшированный фикс), enableHighAccuracy (именно GPS).
+  {
+    const { ctx, page } = await freshControlled();
+    await page.click('.tab[data-view="map"]'); await page.waitForTimeout(500);
+    const opts = await page.evaluate(() => window.__watchOpts || {});
+    assert.ok(opts.timeout >= 180000, '12: timeout watchPosition ≥180000 (не 15с): ' + opts.timeout);
+    assert.equal(opts.maximumAge, 0, '12: maximumAge=0 (никогда старый/кэшированный фикс)');
+    assert.equal(opts.enableHighAccuracy, true, '12: enableHighAccuracy=true (GPS, не сеть)');
+    console.log('✓ 12. watchPosition: timeout ≥3 мин, maximumAge=0, enableHighAccuracy=true');
+    await ctx.close();
+  }
+
+  // --- 8. офлайн: статус и фикс работают без сети (GPS без интернета). ПОСЛЕДНИМ —
+  //        убивает http-сервер, дальше сетевые сценарии уже не поднять.
   {
     const { ctx, page } = await freshControlled();
     await page.click('.tab[data-view="map"]'); await page.waitForTimeout(500);

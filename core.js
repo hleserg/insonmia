@@ -158,7 +158,10 @@
           lastAt = t;
           onFix({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         }, err => { if (onError) onError(err); },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+        // enableHighAccuracy — именно GPS (сетевого определения в поле нет);
+        // timeout ДЛИННЫЙ (3 мин) под полевой захват спутников — 15с сдавались
+        // до первого фикса; maximumAge:0 — только свежий фикс, никогда кэш/старый
+        { enableHighAccuracy: true, timeout: 180000, maximumAge: 0 });
       },
       stop() {
         if (watchId != null && geolocation) {
