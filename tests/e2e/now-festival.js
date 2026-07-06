@@ -139,7 +139,7 @@ const MSK = (y, mo, d, h, mi = 0) => Date.UTC(y, mo, d, h, mi) - 3 * 3600 * 1000
     await ctx.close();
   }
 
-  // --- 6. АВТО-переключение по ходу часов БЕЗ клика: 13.07 05:59:30 → +40с → 13-й
+  // --- 6. АВТО-переключение по ходу часов БЕЗ клика: 13.07 05:59:00 → +70с → 13-й
   {
     const { ctx, page } = await openAt(MSK(2026, 6, 13, 5, 59)); // 05:59:00
     let s = await snapshot(page);
@@ -149,6 +149,33 @@ const MSK = (y, mo, d, h, mi = 0) => Date.UTC(y, mo, d, h, mi) - 3 * 3600 * 1000
     await page.waitForTimeout(300);
     s = await snapshot(page);
     check(s.activeIdx === idxOf('2026-07-13'), '6. +70с (06:00 пройден): активный день САМ сдвинулся на «пн 13» без клика');
+    await ctx.close();
+  }
+
+  // --- 7. АВТО-наступление 8→9 БЕЗ клика: 09.07 05:59 (предстарт, полоса пуста)
+  //        → +70с через рубеж 06:00 → активна «чт 9» сама (tick перерисовал)
+  {
+    const { ctx, page } = await openAt(MSK(2026, 6, 9, 5, 59));
+    let s = await snapshot(page);
+    check(s.activeIdx === -1 && s.prestart, '7. 09.07 05:59: предстарт, полоса не подсвечена');
+    await page.clock.runFor(70000); // до 06:00:10, минимум один tick — БЕЗ клика
+    await page.waitForTimeout(300);
+    s = await snapshot(page);
+    check(s.activeIdx === idxOf('2026-07-09'), '7. +70с (06:00): активна «чт 9» САМА, без клика');
+    await ctx.close();
+  }
+
+  // --- 8. АВТО-оживание LIVE при наступлении первого события БЕЗ клика:
+  //        09.07 09:59 (ещё нет live) → +95с через 10:00 → «Идёт сейчас» появилось само
+  {
+    const { ctx, page } = await openAt(MSK(2026, 6, 9, 9, 59));
+    let s = await snapshot(page);
+    check(!s.hasLive && s.prestart, '8. 09.07 09:59: live ещё нет, «до старта»');
+    await page.clock.runFor(95000); // минуем 10:00:00, tick перерисует — БЕЗ клика
+    await page.waitForTimeout(300);
+    s = await snapshot(page);
+    check(s.hasLive, '8. +95с (10:00 пройден): группа «Идёт сейчас» появилась САМА, без клика');
+    check(!s.prestart, '8. баннер «до старта» снят сам на старте');
     await ctx.close();
   }
 
