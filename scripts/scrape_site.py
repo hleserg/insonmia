@@ -77,17 +77,6 @@ def clean_text(v):
     return s.strip()
 
 
-def normalize_venue(v):
-    """The site names one stage with keyboard-mash placeholder text
-    ('тстцтсттсцтс'); show a readable 'stage TBD' label instead. Mirrors
-    convert_xlsx.py and app.js so event ids stay identical."""
-    s = clean_text(v)
-    letters = re.sub(r"[^а-яёa-z]", "", s.lower())
-    if letters and set(letters) <= set("тсц"):
-        return "Сцена (уточняется)"
-    return s
-
-
 def fnv1a(text):
     """FNV-1a 32-bit over UTF-8 — mirrored in app.js and convert_xlsx.py so
     favourites keep matching across data refreshes."""
@@ -163,11 +152,12 @@ def convert_export(data):
         pname = clean_text(place.get("placeName"))
         pdesc = clean_text(place.get("placeDescription"))
         if pname and pdesc:
-            # key by the normalized name so lookups by event venue resolve
-            venue_info[normalize_venue(pname)] = pdesc
+            # key by the venue name AS-IS (clean_text only) so lookups by event
+            # venue resolve — no renaming of placeholders like «тстцтсттсцтс»
+            venue_info[pname] = pdesc
         for e in place.get("placeEvents", []):
             loc = clean_text(e.get("eventLocationPlace"))
-            base = normalize_venue(pname)
+            base = pname
             venue = f"{base} / {loc}" if loc and loc.lower() != "none" else base
             participants = []
             plist = e.get("eventParticipants")
@@ -190,7 +180,7 @@ def convert_export(data):
                 events.append(ev)
 
     for screen in data.get("screens", []):
-        sname = normalize_venue(screen.get("screenName"))
+        sname = clean_text(screen.get("screenName"))  # as-is, без переименований
         for pr in screen.get("screenPrograms", []):
             film_details = []
             films = []

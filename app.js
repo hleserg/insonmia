@@ -1469,10 +1469,10 @@ function exportToProgram(data) {
     events.push(ev);
   };
   (data.places || []).forEach(place => {
-    const base = normalizeVenue(unescapeHtmlEntities(place.placeName));
+    const base = cleanText(place.placeName); // площадка as-is, без переименований
     const pdesc = cleanText(place.placeDescription);
-    // ключ — как итоговый event.venue (двойной unescape), паритет с Python
-    if (base && pdesc) venueInfo[cleanText(base)] = pdesc;
+    // ключ — как итоговый event.venue (уже cleanText), паритет с Python
+    if (base && pdesc) venueInfo[base] = pdesc;
     (place.placeEvents || []).forEach(e => {
       const loc = cleanText(e.eventLocationPlace);
       const venue = loc && loc.toLowerCase() !== 'none' ? `${base} / ${loc}` : base;
@@ -1486,7 +1486,7 @@ function exportToProgram(data) {
     });
   });
   (data.screens || []).forEach(screen => {
-    const sname = normalizeVenue(unescapeHtmlEntities(screen.screenName));
+    const sname = cleanText(screen.screenName); // as-is, без переименований
     (screen.screenPrograms || []).forEach(pr => {
       const films = [];
       const filmDetails = [];
@@ -1556,12 +1556,6 @@ function normalizeText(v) {
     .replace(/[ \t]+/g, ' ')
     .trim();
 }
-function normalizeVenue(v) {
-  const s = normalizeText(v);
-  const letters = s.toLowerCase().replace(/[^а-яёa-z]/g, '');
-  if (letters && [...letters].every(ch => 'тсц'.includes(ch))) return 'Сцена (уточняется)';
-  return s;
-}
 function detectKind(titleCell) {
   const t = (titleCell || '').toLowerCase();
   if (t.includes('неанимац')) return 'program';
@@ -1587,7 +1581,7 @@ function workbookToProgram(workbooks) {
       for (let i = 2; i < rows.length; i++) {
         const r = rows[i] || [];
         const timeRaw = normalizeText(r[0]);
-        const place = normalizeVenue(r[1]);
+        const place = normalizeText(r[1]); // площадка as-is (паритет с clean() в Python)
         const title = normalizeText(r[2]);
         const desc = normalizeText(r[3]);
         const age = normalizeText(r[4]);
