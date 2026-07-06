@@ -96,16 +96,6 @@ def clean(v):
     return s.strip()
 
 
-def normalize_venue(v):
-    """The source table leaves some stage names as keyboard-mash placeholders
-    (e.g. 'тстцтсттсцтс'). Show a readable 'stage TBD' label instead."""
-    s = clean(v)
-    letters = re.sub(r"[^а-яёa-z]", "", s.lower())
-    if letters and set(letters) <= set("тсц"):
-        return "Сцена (уточняется)"
-    return s
-
-
 def split_films(text):
     if not text:
         return []
@@ -147,7 +137,7 @@ def convert():
                 if not r:
                     continue
                 time_raw = clean(r[0]) if len(r) > 0 else ""
-                col_place = normalize_venue(r[1]) if len(r) > 1 else ""
+                col_place = clean(r[1]) if len(r) > 1 else ""  # площадка as-is
                 col_title = clean(r[2]) if len(r) > 2 else ""
                 col_desc = clean(r[3]) if len(r) > 3 else ""
                 col_age = clean(r[4]) if len(r) > 4 else ""

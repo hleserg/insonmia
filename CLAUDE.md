@@ -86,9 +86,14 @@ Two independent halves share one contract — `data/program.json`:
   clears their sessionStorage keys). Pure logic lives in `core.js` (loaded
   first; `window.InsomniaCore` in browser, `require('./core.js')` in tests) —
   change logic THERE, keep app.js wrappers thin. Display times via `mskOf(ms)`.
-- **Venue placeholder:** the site names one stage with keyboard-mash text
-  (`тстцтсттсцтс`); `normalize_venue` in all three converters maps any all-`тсц`
-  string to `Сцена (уточняется)`.
+- **Venue names are AS-IS.** The pipeline must NOT rename/relabel venues. One
+  stage is a keyboard-mash placeholder (`тстцтсттсцтс`) in the source xlsx AND in
+  the KML — kept verbatim (only `clean_text` whitespace/BOM folding applies). It
+  matches its map point `Тстцтсттсцтс` by name (`norm_key` lowercases). An earlier
+  `normalize_venue` heuristic (all-`тсц` → `Сцена (уточняется)`) was REMOVED from
+  all three converters — the owner needs raw data; when orgs give a real name,
+  auto-update picks it up. No "improve strange/empty values" heuristics on
+  displayed fields anywhere.
 - Text normalization (`clean_text` / `normalizeText`) folds NBSP, U+2028, bare
   `\r`, NEL (U+0085) and strips BOM identically in all three converters — any
   change must land in all of them or ids diverge.
