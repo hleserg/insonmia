@@ -238,11 +238,23 @@ const PT = [54.68025, 35.08971];
     assert.match(await rowText(page), /📍\s*54\.680/, '13: фикс показан (гейт снят, принимаем любой)');
     assert.ok(await hasSelf(page), '13: маркер «я тут» есть');
     assert.equal(await accRadius(), 800, '13: круг точности = accuracy 800 м');
-    // точный фикс после троттла (10с) — круг сжался
+    // ЧЕСТНОСТЬ: грубый фикс в строке помечен ±N (не выдаётся за точные координаты)
+    assert.match(await rowText(page), /±800 м/, '13: строка карты помечает погрешность ±800 м');
+    // и текст шаринга «я здесь» тоже честный (получатель не примет за точную точку)
+    const shareText = await page.evaluate(async () => {
+      let captured = null;
+      navigator.share = (o) => { captured = o.text; return Promise.resolve(); };
+      document.querySelector('#myCoordShare').click();
+      await new Promise(r => setTimeout(r, 50));
+      return captured;
+    });
+    assert.ok(shareText && /±800 м/.test(shareText) && /примерно/i.test(shareText), '13: шаринг помечает погрешность: ' + shareText);
+    // точный фикс после троттла (10с) — круг сжался, ±N в строке НЕ пишем
     await page.clock.runFor(11000);
     await fireAcc(PT[0], PT[1], 15); await page.waitForTimeout(300);
     assert.equal(await accRadius(), 15, '13: круг точности сжался до accuracy 15 м');
-    console.log('✓ 13. карта: круг точности соответствует accuracy (800 м → 15 м)');
+    assert.ok(!/±\d/.test(await rowText(page)), '13: точный фикс (15 м) — голые координаты, без ±N');
+    console.log('✓ 13. карта: круг точности + честная пометка ±N на грубом фиксе (800 м → 15 м)');
     await ctx.close();
   }
 

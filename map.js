@@ -855,7 +855,12 @@ function updateMyCoordRow() {
   if (!txt || !share) return;
   const pos = GEO.nearby.pos; // ТОЛЬКО текущий фикс живого watch, без stale-фолбэка
   if (pos) {
-    txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    // при БОЛЬШОЙ погрешности (>200 м) помечаем ±N прямо в строке — иначе грубый
+    // фикс читался бы как точные координаты (круг на карте виден не всем/не в
+    // скопированном тексте). Точный фикс (≤200 м) — голые цифры, как раньше.
+    const prof = window.InsomniaCore.accuracyProfile(pos.acc);
+    const accSuffix = prof.approx ? ` · ${fmtAccuracy(pos.acc)}` : '';
+    txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}${accSuffix}`;
     txt.classList.remove('gps-searching');
     share.disabled = false;
   } else if (GEO.nearby.error && GEO.nearby.error.code === 1) {
@@ -921,7 +926,11 @@ async function shareMyCoord() {
   if (!pos) return;
   const la = pos.lat.toFixed(5), lo = pos.lng.toFixed(5);
   const url = pinUrl({ lat: pos.lat, lng: pos.lng, name: 'Я здесь', emoji: '📍' });
-  const text = `Я здесь: ${la}, ${lo}\n${url}\ngeo:${la},${lo}`;
+  // при большой погрешности честно помечаем ±N в человекочитаемой строке, чтобы
+  // получатель не принял точку за точную (geo:/#pin= — машинные, оставляем как есть)
+  const prof = window.InsomniaCore.accuracyProfile(pos.acc);
+  const here = prof.approx ? `Я примерно здесь (${fmtAccuracy(pos.acc)})` : 'Я здесь';
+  const text = `${here}: ${la}, ${lo}\n${url}\ngeo:${la},${lo}`;
   if (navigator.share) {
     try { await navigator.share({ title: 'Я здесь', text }); return; }
     catch (e) { if (e && e.name === 'AbortError') return; /* сам отменил */ }
@@ -958,11 +967,12 @@ function geoHelpEl() {
 /* ---------- «рядом» ---------- */
 // радиусы фильтра — ДИНАМИЧЕСКИЕ (core.accuracyProfile), зависят от точности GPS
 
-// точность в человекочитаемое: <1 км — метры (округл. до 10), ≥1 км — километры
+// точность в человекочитаемое: <1 км — метры (округл. до 5, минимум ±5 — нулевой
+// погрешности не бывает, «±0 м» врал бы), ≥1 км — километры с десятыми
 function fmtAccuracy(acc) {
   if (acc == null) return '';
   if (acc >= 1000) return '±' + (Math.round(acc / 100) / 10) + ' км';
-  return '±' + (Math.round(acc / 10) * 10) + ' м';
+  return '±' + Math.max(5, Math.round(acc / 5) * 5) + ' м';
 }
 
 // строго для потеряшек: фикс старше минуты — уже НЕ текущий. По истечении гасим
@@ -1352,6 +1362,7 @@ function resetMapLayers() {
   GEO.pointById = {};
   GEO.highlight = null;
   GEO.selfMarker = null;
+  GEO.accCircle = null; // круг точности жил на снятой карте — снять висячую ссылку
   GEO.filters = null;
   const row = $('#mapChips');
   if (row) { row.innerHTML = ''; delete row.dataset.built; }
