@@ -6,6 +6,49 @@ const core = require('../../core.js');
 
 const HERE = { lat: 54.681149, lng: 35.091007 }; // Экран полевой
 
+test('accuracyProfile: тиры радиусов по точности GPS', () => {
+  const p = core.accuracyProfile;
+  // ≤50 м — точный GPS: мелкие радиусы, дистанции точные
+  assert.deepEqual(p(30).radii, [150, 300, 600, 0]);
+  assert.equal(p(30).approx, false);
+  assert.equal(p(30).unusable, false);
+  assert.equal(p(50).tierKey, 'fine', 'ровно 50 — ещё точный');
+  // 50–200 м — средний
+  assert.deepEqual(p(120).radii, [300, 600, 1000, 0]);
+  assert.equal(p(120).approx, false);
+  assert.equal(p(200).tierKey, 'mid', 'ровно 200 — ещё средний');
+  // >200 м — грубый: крупные радиусы, дистанции приблизительные (~)
+  assert.deepEqual(p(500).radii, [500, 1000, 2000, 0]);
+  assert.equal(p(500).approx, true, '>200 → дистанции с ~');
+  assert.equal(p(201).approx, true, 'ровно за границей 200 → approx');
+  assert.equal(p(500).unusable, false);
+  // >1000 м — «рядом» не работает осмысленно
+  assert.equal(p(1000).unusable, false, 'ровно 1000 — ещё юзабельно');
+  assert.equal(p(1500).unusable, true, '>1000 → unusable');
+  assert.equal(p(1500).approx, true);
+});
+
+test('accuracyProfile: null/0/некорректная точность → лучший тир (мок/десктоп)', () => {
+  const p = core.accuracyProfile;
+  for (const bad of [null, undefined, 0, -5, NaN]) {
+    const r = p(bad);
+    assert.deepEqual(r.radii, [150, 300, 600, 0], `acc=${bad} → мелкие радиусы`);
+    assert.equal(r.approx, false, `acc=${bad} → не approx`);
+    assert.equal(r.unusable, false, `acc=${bad} → не unusable`);
+  }
+  assert.equal(p(null).acc, null, 'acc сохраняется как null');
+  assert.equal(p(30).acc, 30);
+});
+
+test('accuracyProfile: tierKey стабилен внутри категории (плавное обновление)', () => {
+  const p = core.accuracyProfile;
+  // джиттер внутри «fine» — ключ и радиусы не меняются (список не «дёргается»)
+  assert.equal(p(20).tierKey, p(45).tierKey);
+  assert.deepEqual(p(20).radii, p(45).radii);
+  // пересечение границы — ключ меняется (радиусы адаптируются один раз)
+  assert.notEqual(p(45).tierKey, p(120).tierKey);
+});
+
 test('distanceM: известные дистанции с допуском ±1%', () => {
   // 1 градус широты ≈ 111.19 км
   assert.ok(Math.abs(core.distanceM({ lat: 54, lng: 35 }, { lat: 55, lng: 35 }) - 111195) < 1112);

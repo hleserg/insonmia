@@ -804,12 +804,27 @@ async function geoDenied() {
   } catch { return false; }
 }
 
+// снять маркер «я тут» И круг точности разом (парно, чтобы круг не «залипал»)
+function clearSelfMarker() {
+  if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+  if (GEO.accCircle) { GEO.accCircle.remove(); GEO.accCircle = null; }
+}
+
 function showSelfMarker(pos) {
   if (!GEO.map) return;
-  if (GEO.selfMarker) GEO.selfMarker.remove();
+  clearSelfMarker();
   GEO.selfMarker = L.marker([pos.lat, pos.lng], {
     icon: L.divIcon({ className: 'geo-marker', html: '<div class="geo-self"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
   }).addTo(GEO.map);
+  // круг зоны неопределённости = accuracy в МЕТРАХ (L.circle radius — метры), как
+  // в гугл/яндекс картах: человек видит, почему «150 м» может оказаться далеко.
+  if (pos.acc != null && pos.acc > 0) {
+    GEO.accCircle = L.circle([pos.lat, pos.lng], {
+      radius: pos.acc, interactive: false,
+      color: '#5fd35f', weight: 1, opacity: 0.5,
+      fillColor: '#5fd35f', fillOpacity: 0.12,
+    }).addTo(GEO.map);
+  }
 }
 
 // 🎯: центрируем карту на ТЕКУЩЕМ фиксе живого watch. Своего одноразового запроса
@@ -840,7 +855,12 @@ function updateMyCoordRow() {
   if (!txt || !share) return;
   const pos = GEO.nearby.pos; // ТОЛЬКО текущий фикс живого watch, без stale-фолбэка
   if (pos) {
-    txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    // при БОЛЬШОЙ погрешности (>200 м) помечаем ±N прямо в строке — иначе грубый
+    // фикс читался бы как точные координаты (круг на карте виден не всем/не в
+    // скопированном тексте). Точный фикс (≤200 м) — голые цифры, как раньше.
+    const prof = window.InsomniaCore.accuracyProfile(pos.acc);
+    const accSuffix = prof.approx ? ` · ${fmtAccuracy(pos.acc)}` : '';
+    txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}${accSuffix}`;
     txt.classList.remove('gps-searching');
     share.disabled = false;
   } else if (GEO.nearby.error && GEO.nearby.error.code === 1) {
@@ -906,7 +926,11 @@ async function shareMyCoord() {
   if (!pos) return;
   const la = pos.lat.toFixed(5), lo = pos.lng.toFixed(5);
   const url = pinUrl({ lat: pos.lat, lng: pos.lng, name: 'Я здесь', emoji: '📍' });
-  const text = `Я здесь: ${la}, ${lo}\n${url}\ngeo:${la},${lo}`;
+  // при большой погрешности честно помечаем ±N в человекочитаемой строке, чтобы
+  // получатель не принял точку за точную (geo:/#pin= — машинные, оставляем как есть)
+  const prof = window.InsomniaCore.accuracyProfile(pos.acc);
+  const here = prof.approx ? `Я примерно здесь (${fmtAccuracy(pos.acc)})` : 'Я здесь';
+  const text = `${here}: ${la}, ${lo}\n${url}\ngeo:${la},${lo}`;
   if (navigator.share) {
     try { await navigator.share({ title: 'Я здесь', text }); return; }
     catch (e) { if (e && e.name === 'AbortError') return; /* сам отменил */ }
@@ -941,7 +965,15 @@ function geoHelpEl() {
 }
 
 /* ---------- «рядом» ---------- */
-const NEARBY_RADII = [150, 300, 600, 0]; // 0 = всё
+// радиусы фильтра — ДИНАМИЧЕСКИЕ (core.accuracyProfile), зависят от точности GPS
+
+// точность в человекочитаемое: <1 км — метры (округл. до 5, минимум ±5 — нулевой
+// погрешности не бывает, «±0 м» врал бы), ≥1 км — километры с десятыми
+function fmtAccuracy(acc) {
+  if (acc == null) return '';
+  if (acc >= 1000) return '±' + (Math.round(acc / 100) / 10) + ' км';
+  return '±' + Math.max(5, Math.round(acc / 5) * 5) + ' м';
+}
 
 // строго для потеряшек: фикс старше минуты — уже НЕ текущий. По истечении гасим
 // координаты/маркер/список (→ «поиск спутников»), не показываем замороженную точку.
@@ -956,7 +988,7 @@ function armGeoStale() {
   clearTimeout(_geoStaleTimer);
   _geoStaleTimer = setTimeout(() => {
     GEO.nearby.pos = null; GEO.nearby.posAt = 0;
-    if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+    clearSelfMarker();
     // ВЕРНУЛИСЬ в «поиск без фикса» с активным watch (потеряшка ушёл под крышу
     // после первого фикса) → заново отсчитываем «долгий поиск», иначе эскалация
     // (_geoSlow + «повторить») больше НИКОГДА не наступит: startNearbyWatch на
@@ -987,13 +1019,10 @@ function armGeoDeadline() {
   }, SEARCH_MS);
 }
 
-// Гейт честности точности: фикс грубее этого (метры) — не GPS-захват, а сетевой/
-// сотовый фолбэк (в поле это километры). НЕ показываем его как местоположение —
-// поляна ~3 км в поперечнике, «рядом» считает по 150/300/600 м, так что фикс с
-// accuracy в километр там бессмысленен и врёт. Реальный GPS под небом — единицы-
-// десятки метров, легко проходит; грубый фолбэк отсекается, watch ищет дальше.
-const GPS_ACCURACY_LIMIT_M = 500;
-
+// Фиксы принимаем ЛЮБОЙ точности (accuracy прокинута в фикс) — честность теперь
+// не в том, чтобы прятать грубый фикс, а в том, чтобы показать его погрешность:
+// «рядом» адаптирует радиусы под accuracy (core.accuracyProfile), рисует круг
+// точности на карте и при >1000 м честно говорит «GPS неточный, смотри карту».
 const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
   typeof navigator !== 'undefined' ? navigator.geolocation : null,
   pos => {
@@ -1015,7 +1044,7 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
       clearTimeout(_geoDeadline); _geoSlow = false;
       if (GEO.nearby.error && GEO.nearby.error.code === 1) return; // дедуп
       GEO.nearby.error = err;
-      if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+      clearSelfMarker();
       if (state.view === 'nearby') render();
       else if (state.view === 'map') updateMyCoordRow();
       return;
@@ -1038,7 +1067,7 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
       if (state.view === 'nearby') render();
       else if (state.view === 'map') updateMyCoordRow();
     }
-  }, GPS_ACCURACY_LIMIT_M);
+  });
 
 // живой GPS-watch для карты И «рядом»: идемпотентен (start() внутри watcher
 // защищён watchId). geoWatching=true → пока нет фикса/ошибки, показываем «поиск
@@ -1077,7 +1106,7 @@ function stopNearbyWatch() {
   GEO.nearby.pos = null;
   GEO.nearby.posAt = 0;
   GEO.nearby.error = null;
-  if (GEO.selfMarker) { GEO.selfMarker.remove(); GEO.selfMarker = null; }
+  clearSelfMarker();
 }
 
 function getNearby(points, events, position, now, radiusM) {
@@ -1086,18 +1115,14 @@ function getNearby(points, events, position, now, radiusM) {
 }
 
 function renderNearby(root) {
-  const radRow = document.createElement('div');
-  radRow.className = 'chip-row';
-  radRow.appendChild(createFilterChipButton()); // воронка — первой, слева
-  NEARBY_RADII.forEach(r => {
-    const b = document.createElement('button');
-    b.className = 'chip' + (GEO.nearby.radius === r ? ' active' : '');
-    b.textContent = r ? `${r} м` : 'всё';
-    b.addEventListener('click', () => { GEO.nearby.radius = r; saveFilterState(); render(); });
-    radRow.appendChild(b);
-  });
-  root.appendChild(radRow);
-  updateFilterButton(); // индикатор на только что созданной кнопке-воронке
+  const pos = GEO.nearby.pos;
+  // профиль точности: радиусы, приблизительность (~), негодность (>1 км)
+  const prof = window.InsomniaCore.accuracyProfile(pos ? pos.acc : null);
+  // выбранный радиус мельче доступных в текущем тире → перенастроим на минимальный
+  // (радиус мельче погрешности врёт; при возврате к точному GPS тир вернёт мелкие)
+  if (GEO.nearby.radius !== 0 && !prof.radii.includes(GEO.nearby.radius)) {
+    GEO.nearby.radius = prof.radii[0];
+  }
 
   if (!GEO.data) {
     root.appendChild(emptyState('🗺', 'Карта не загружена — откройте приложение онлайн один раз.'));
@@ -1106,6 +1131,46 @@ function renderNearby(root) {
   // (пере)запускаем слежение при каждом входе в раздел: покидание вкладки
   // делает clearWatch, а позиция должна обновляться при возвращении
   startNearbyWatch();
+
+  // честная строка точности: почему дистанции примерные
+  const gpsLine = () => {
+    if (!(pos && pos.acc != null)) return;
+    const g = document.createElement('div');
+    g.className = 'gps-accuracy small muted';
+    g.textContent = '🛰 GPS: ' + fmtAccuracy(pos.acc) + (prof.approx ? ' · дистанции примерные' : '');
+    root.appendChild(g);
+  };
+
+  // GPS слишком неточный (>1 км): «рядом» осмысленно не работает — не притворяемся,
+  // что можем сказать «что рядом»; честно шлём на карту (там виден круг точности).
+  if (pos && prof.unusable) {
+    gpsLine();
+    const st = emptyState('🛰', `Сейчас GPS неточный (${fmtAccuracy(pos.acc)}) — честно сказать, что рядом, не получится. Выйди под открытое небо и подожди захвата, или смотри карту.`);
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = 'смотреть карту';
+    b.addEventListener('click', () => switchView('map'));
+    st.appendChild(b);
+    root.appendChild(st);
+    root.appendChild(geoHelpEl());
+    return;
+  }
+
+  // радиус-чипы — ДИНАМИЧЕСКИЕ по точности (core.accuracyProfile)
+  const radRow = document.createElement('div');
+  radRow.className = 'chip-row';
+  radRow.appendChild(createFilterChipButton()); // воронка — первой, слева
+  prof.radii.forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (GEO.nearby.radius === r ? ' active' : '');
+    b.textContent = r ? `${r} м` : 'всё';
+    b.addEventListener('click', () => { GEO.nearby.radius = r; saveFilterState(); render(); });
+    radRow.appendChild(b);
+  });
+  root.appendChild(radRow);
+  updateFilterButton(); // индикатор на только что созданной кнопке-воронке
+  gpsLine();
+
   if (!GEO.nearby.pos) {
     const st = document.createElement('div');
     st.className = 'empty';
@@ -1161,6 +1226,8 @@ function renderNearby(root) {
 
   // свои метки — первым блоком (лагерь/машина важнее чужих туалетов)
   const dM = window.InsomniaCore.distanceM;
+  // при неточном GPS (approx) дистанции показываем с «~» — они прикидочные
+  const distTxt = (d) => (prof.approx ? '~' : '') + d + ' м';
   let myNear = (state.pins || [])
     .map(p => ({ ...p, dist: dM(GEO.nearby.pos, p) }))
     .filter(p => !GEO.nearby.radius || p.dist <= GEO.nearby.radius)
@@ -1173,6 +1240,13 @@ function renderNearby(root) {
     items = items.filter(p => pointMatchesQuery(p, q) || (p.events || []).some(e => eventMatchesQuery(e, q)));
     myNear = myNear.filter(p => window.InsomniaCore.matchesQuery(q, [p.name, p.note]));
   }
+  // при большой погрешности честно предупреждаем: порядок и дистанции примерные
+  if (prof.approx && (myNear.length || items.length)) {
+    const d = document.createElement('div');
+    d.className = 'muted small nearby-approx-note';
+    d.textContent = 'Порядок и дистанции примерные — GPS неточный, точку знаем с погрешностью.';
+    root.appendChild(d);
+  }
   if (myNear.length) {
     const head = document.createElement('div');
     head.className = 'time-group-label';
@@ -1184,7 +1258,7 @@ function renderNearby(root) {
       el.innerHTML = `
         <div class="map-point-name">
           <span><span class="pin-my pin-inline">${escapeHtml(p.emoji || '📍')}</span> ${escapeHtml(p.name || 'без названия')}</span>
-          <span class="muted small">${p.dist} м ${bearingLabel(GEO.nearby.pos, p)}</span>
+          <span class="muted small">${distTxt(p.dist)} ${bearingLabel(GEO.nearby.pos, p)}</span>
         </div>`;
       el.addEventListener('click', () => {
         switchView('map');
@@ -1227,7 +1301,7 @@ function renderNearby(root) {
     el.innerHTML = `
       <div class="map-point-name">
         <span>${meta.emoji} ${escapeHtml(p.name)}</span>
-        <span class="muted small">${p.dist} м ${bearingLabel(GEO.nearby.pos, p)}</span>
+        <span class="muted small">${distTxt(p.dist)} ${bearingLabel(GEO.nearby.pos, p)}</span>
       </div>
       ${evHtml}
     `;
@@ -1288,6 +1362,7 @@ function resetMapLayers() {
   GEO.pointById = {};
   GEO.highlight = null;
   GEO.selfMarker = null;
+  GEO.accCircle = null; // круг точности жил на снятой карте — снять висячую ссылку
   GEO.filters = null;
   const row = $('#mapChips');
   if (row) { row.innerHTML = ''; delete row.dataset.built; }

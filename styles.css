@@ -153,6 +153,9 @@ button { font-family: inherit; cursor: pointer; }
 .day-btn.active .dow { color: #04260f; } /* был #0b4f22 — 3.83:1 на зелёном; теперь как основная подпись */
 .chip-row { display: flex; gap: 8px; overflow-x: auto; padding: 6px 14px 4px; scrollbar-width: none; }
 .chip-row::-webkit-scrollbar { display: none; }
+/* строка точности GPS и предупреждение о примерности дистанций в «рядом» */
+.gps-accuracy { padding: 2px 14px 4px; }
+.nearby-approx-note { padding: 0 14px 6px; }
 .chip {
   flex: 0 0 auto; background: var(--card); border: 1px solid var(--line); color: var(--muted);
   border-radius: 999px; padding: 0 14px; min-height: var(--tap); font-size: 0.8rem; white-space: nowrap;
