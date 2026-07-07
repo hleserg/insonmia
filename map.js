@@ -951,11 +951,20 @@ async function shareMyCoord() {
 function geoHelpEl() {
   const d = document.createElement('details');
   d.className = 'geo-help';
+  // на iPhone «Точная геопозиция» часто выключена по умолчанию для новых
+  // приложений — тогда iOS отдаёт координаты с погрешностью в километры, и
+  // «рядом» не работает не из-за спутников. Подсказываем, где включить.
+  const iosPrecise = IS_IOS
+    ? `<li><b>iPhone — «Точная геопозиция»:</b> если координаты «пляшут» на километры,
+        включите её: Настройки → Конфиденциальность → Службы геолокации → ваш браузер
+        → «Точная геопозиция». Без неё iOS нарочно огрубляет позицию.</li>`
+    : '';
   d.innerHTML = `
     <summary>Не работает геолокация?</summary>
     <ul>
       <li><b>Яндекс Браузер</b> капризен с GPS в установленных приложениях. Надёжнее всего
         поставить наше приложение из Chrome — метки, избранное и карта те же.</li>
+      ${iosPrecise}
       <li><b>На поляне:</b> GPS работает без интернета, но первый захват — до пары минут
         под открытым небом.</li>
     </ul>`;
@@ -1145,7 +1154,12 @@ function renderNearby(root) {
   // что можем сказать «что рядом»; честно шлём на карту (там виден круг точности).
   if (pos && prof.unusable) {
     gpsLine();
-    const st = emptyState('🛰', `Сейчас GPS неточный (${fmtAccuracy(pos.acc)}) — честно сказать, что рядом, не получится. Выйди под открытое небо и подожди захвата, или смотри карту.`);
+    // на iPhone огромная погрешность чаще всего = выключена «Точная геопозиция»,
+    // а не отсутствие спутников — подсказываем проверить это ПЕРВЫМ делом
+    const iosTip = IS_IOS
+      ? ' На iPhone это часто из-за выключенной «Точной геопозиции» — проверьте её в Настройках (см. «Не работает геолокация?»).'
+      : '';
+    const st = emptyState('🛰', `Сейчас GPS неточный (${fmtAccuracy(pos.acc)}) — честно сказать, что рядом, не получится. Выйди под открытое небо и подожди захвата, или смотри карту.${iosTip}`);
     const b = document.createElement('button');
     b.className = 'btn';
     b.textContent = 'смотреть карту';
@@ -1228,6 +1242,11 @@ function renderNearby(root) {
   const dM = window.InsomniaCore.distanceM;
   // при неточном GPS (approx) дистанции показываем с «~» — они прикидочные
   const distTxt = (d) => (prof.approx ? '~' : '') + d + ' м';
+  // направление показываем ТОЛЬКО при годной точности: при большой погрешности
+  // «севернее» к точке в 100 м — монетка (может быть ровно наоборот), а неверная
+  // стрелка ХУЖЕ её отсутствия — уводит человека не туда. Дистанцию (грубую, с ~)
+  // оставляем как ориентир масштаба, направление — молчим.
+  const bearTxt = (p) => prof.approx ? '' : ' ' + bearingLabel(GEO.nearby.pos, p);
   let myNear = (state.pins || [])
     .map(p => ({ ...p, dist: dM(GEO.nearby.pos, p) }))
     .filter(p => !GEO.nearby.radius || p.dist <= GEO.nearby.radius)
@@ -1258,7 +1277,7 @@ function renderNearby(root) {
       el.innerHTML = `
         <div class="map-point-name">
           <span><span class="pin-my pin-inline">${escapeHtml(p.emoji || '📍')}</span> ${escapeHtml(p.name || 'без названия')}</span>
-          <span class="muted small">${distTxt(p.dist)} ${bearingLabel(GEO.nearby.pos, p)}</span>
+          <span class="muted small">${distTxt(p.dist)}${bearTxt(p)}</span>
         </div>`;
       el.addEventListener('click', () => {
         switchView('map');
@@ -1301,7 +1320,7 @@ function renderNearby(root) {
     el.innerHTML = `
       <div class="map-point-name">
         <span>${meta.emoji} ${escapeHtml(p.name)}</span>
-        <span class="muted small">${distTxt(p.dist)} ${bearingLabel(GEO.nearby.pos, p)}</span>
+        <span class="muted small">${distTxt(p.dist)}${bearTxt(p)}</span>
       </div>
       ${evHtml}
     `;

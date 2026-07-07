@@ -258,6 +258,33 @@ const PT = [54.68025, 35.08971];
     await ctx.close();
   }
 
+  // --- 14. БАТАРЕЯ: уход в фон/гашение экрана глушит GPS-watch (enableHighAccuracy
+  //         держит приёмник горячим — севший телефон в поле = потеряшка). Возврат
+  //         на гео-вкладку — watch заводится заново.
+  {
+    const { ctx, page } = await freshControlled();
+    await page.click('.tab[data-view="map"]'); await page.waitForTimeout(500);
+    await fire(page, PT[0], PT[1]); await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => GEO.geoWatching), true, '14: на карте watch активен');
+    // эмулируем document.hidden + событие (наш хендлер читает visibilityState)
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => GEO.geoWatching), false, '14: в фоне GPS-watch заглушён (батарея)');
+    assert.ok(!(await hasSelf(page)), '14: маркер снят вместе с watch');
+    // вернулись — watch заводится заново на гео-вкладке
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => GEO.geoWatching), true, '14: возврат на карту — watch снова активен');
+    console.log('✓ 14. батарея: фон глушит GPS-watch, возврат на гео-вкладку заводит заново');
+    await ctx.close();
+  }
+
   // --- 8. офлайн: статус и фикс работают без сети (GPS без интернета). ПОСЛЕДНИМ —
   //        убивает http-сервер, дальше сетевые сценарии уже не поднять.
   {
