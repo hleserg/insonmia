@@ -2248,11 +2248,29 @@ async function boot() {
   setInterval(tick, 30000);
   registerSW();
   updateNotifStatus();
+  wireGeoBatteryGuard(); // фон/экран погас → гасим GPS-watch (батарея в поле = ориентир)
   handleIncomingPin(); // открыли по чужой #pin=-ссылке — предложить добавить
   handleImportHash();  // гайд «связь на поляне» ведёт на форму импорта меток
   ensureExitGuard();   // подстраховка: если диплинк-модалка открылась/закрылась в boot
   // ссылки могут прилетать и в уже открытое приложение (same-document навигация)
   window.addEventListener('hashchange', () => { handleIncomingPin() || handleImportHash(); });
+}
+
+// F2 (гео-аудит): GPS-watch с enableHighAccuracy держит приёмник горячим и жрёт
+// батарею. Watch и так активен только на вкладках «карта»/«рядом», но при
+// сворачивании приложения / гашении экрана он НЕ останавливался — телефон в
+// кармане молотил GPS. Севший в поле телефон = потеряшка без ориентира, ровно та
+// беда, которую мы не создаём. Уход в фон → глушим watch; возврат на гео-вкладку
+// → заводим заново (свежий фикс, как при входе в раздел; старую точку не показываем).
+function wireGeoBatteryGuard() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      if (typeof stopNearbyWatch === 'function') stopNearbyWatch();
+    } else if (document.visibilityState === 'visible' &&
+               (state.view === 'map' || state.view === 'nearby')) {
+      render(); // renderMap/renderNearby перезапустят watch и покажут «поиск спутников»
+    }
+  });
 }
 
 // ./#import-pins (из mesh.html): открыть «добавить из текста» с фокусом в поле
