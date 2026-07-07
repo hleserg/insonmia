@@ -987,6 +987,13 @@ function armGeoDeadline() {
   }, SEARCH_MS);
 }
 
+// Гейт честности точности: фикс грубее этого (метры) — не GPS-захват, а сетевой/
+// сотовый фолбэк (в поле это километры). НЕ показываем его как местоположение —
+// поляна ~3 км в поперечнике, «рядом» считает по 150/300/600 м, так что фикс с
+// accuracy в километр там бессмысленен и врёт. Реальный GPS под небом — единицы-
+// десятки метров, легко проходит; грубый фолбэк отсекается, watch ищет дальше.
+const GPS_ACCURACY_LIMIT_M = 500;
+
 const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
   typeof navigator !== 'undefined' ? navigator.geolocation : null,
   pos => {
@@ -1031,7 +1038,7 @@ const nearbyWatcher = window.InsomniaCore.createGeoWatcher(
       if (state.view === 'nearby') render();
       else if (state.view === 'map') updateMyCoordRow();
     }
-  });
+  }, GPS_ACCURACY_LIMIT_M);
 
 // живой GPS-watch для карты И «рядом»: идемпотентен (start() внутри watcher
 // защищён watchId). geoWatching=true → пока нет фикса/ошибки, показываем «поиск

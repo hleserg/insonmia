@@ -163,21 +163,29 @@
     });
   }
 
-  function createGeoWatcher(geolocation, onFix, throttleMs = 10000, clock = Date.now, onError = null) {
+  function createGeoWatcher(geolocation, onFix, throttleMs = 10000, clock = Date.now, onError = null, accuracyLimitM = Infinity) {
     // жизненный цикл watchPosition c троттлингом; clearWatch ровно один раз;
     // clock инжектируется — тесты проверяют троттлинг детерминированно.
     // enableHighAccuracy заставляет браузер дёргать именно GPS: сетевое
-    // определение (дефолт Яндекс Браузера) без интернета не работает вовсе
+    // определение (дефолт Яндекс Браузера) без интернета не работает вовсе.
+    // accuracyLimitM — гейт честности: грубый фикс (accuracy хуже порога —
+    // сетевой/сотовый фолбэк на километры, который браузер отдаёт даже при
+    // enableHighAccuracy) НЕ выдаём за местоположение. Пропускаем его ДО
+    // троттла (lastAt не трогаем) — watch продолжает слать фиксы, следующий
+    // точный обработается сразу; в UI держится честный «поиск спутников».
     let watchId = null;
     let lastAt = -Infinity;
     return {
       start() {
         if (!geolocation || watchId != null) return;
         watchId = geolocation.watchPosition(pos => {
+          const acc = pos.coords ? pos.coords.accuracy : null;
+          // грубый фикс отбрасываем (никогда не показываем «5 км» как точку)
+          if (accuracyLimitM !== Infinity && acc != null && acc > accuracyLimitM) return;
           const t = clock();
           if (t - lastAt < throttleMs) return;
           lastAt = t;
-          onFix({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          onFix({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc });
         }, err => { if (onError) onError(err); },
         // enableHighAccuracy — именно GPS (сетевого определения в поле нет);
         // timeout ДЛИННЫЙ (3 мин) под полевой захват спутников — 15с сдавались

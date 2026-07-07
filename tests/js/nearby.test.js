@@ -168,6 +168,41 @@ test('watch-throttle: прореживает внутри интервала и 
   assert.equal(fixes.length, 3);
 });
 
+test('watch-accuracy-гейт: грубый фикс (сетевой/сотовый) НЕ выдаётся за место', () => {
+  let handler;
+  const fakeGeo = { watchPosition(cb) { handler = cb; return 3; }, clearWatch() {} };
+  const fixes = [];
+  let fakeNow = 1000000;
+  // порог 500 м: реальный GPS (метры) проходит, километровый фолбэк — нет
+  const w = core.createGeoWatcher(fakeGeo, p => fixes.push(p), 10000, () => fakeNow, null, 500);
+  w.start();
+  const mk = (lat, acc) => ({ coords: { latitude: lat, longitude: 35, accuracy: acc } });
+  handler(mk(54.9, 5000));   // 5 км — грубый фолбэк, ОТБРОШЕН (не «врём» точкой)
+  assert.equal(fixes.length, 0, 'фикс с accuracy 5000 м не принят');
+  // грубый фикс не должен был занять троттл-окно: следующий ТОЧНЫЙ идёт сразу
+  handler(mk(54.68, 12));    // 12 м — реальный GPS, ПРИНЯТ немедленно
+  assert.deepEqual(fixes.map(f => f.lat), [54.68]);
+  assert.equal(fixes[0].acc, 12, 'accuracy прокинута в фикс');
+  // граница: ровно порог — принимаем (не хуже), чуть хуже — нет
+  fakeNow += 20000; handler(mk(54.60, 500));
+  fakeNow += 20000; handler(mk(54.61, 500.1));
+  assert.deepEqual(fixes.map(f => f.lat), [54.68, 54.60], 'accuracy==500 принят, >500 отброшен');
+  // accuracy=0 (дефолт Playwright newContext({geolocation})) — валиден, проходит
+  fakeNow += 20000; handler(mk(54.62, 0));
+  assert.equal(fixes[fixes.length - 1].lat, 54.62, 'accuracy==0 принят (не путать с «нет фикса»)');
+});
+
+test('watch-accuracy: без порога (по умолчанию) точность игнорируется — обратная совместимость', () => {
+  let handler;
+  const fakeGeo = { watchPosition(cb) { handler = cb; return 4; }, clearWatch() {} };
+  const fixes = [];
+  const w = core.createGeoWatcher(fakeGeo, p => fixes.push(p), 0); // без accuracyLimitM
+  w.start();
+  handler({ coords: { latitude: 54.7, longitude: 35, accuracy: 99999 } });
+  handler({ coords: { latitude: 54.7, longitude: 35 } }); // accuracy отсутствует
+  assert.equal(fixes.length, 2, 'без порога любой фикс проходит (в т.ч. без accuracy)');
+});
+
 test('watch-ошибки: onError получает код, опции форсят GPS (ЯБ/офлайн)', () => {
   let errHandler = null, opts = null;
   const fakeGeo = {
