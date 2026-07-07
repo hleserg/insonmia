@@ -202,6 +202,36 @@
     };
   }
 
+  // «Рядом» адаптируется под РЕАЛЬНУЮ точность GPS: радиус мельче погрешности
+  // врёт («в 150 м» при ±500 м — обман). Пороги фильтра зависят от accuracy,
+  // минимальный радиус НЕ мельче ~точности (округлён вверх до «красивого» шага):
+  //   ≤50 м    → 150/300/600   (точный GPS под небом)
+  //   50–200 м → 300/600/1000
+  //   >200 м   → 500/1000/2000  (дистанции приблизительные, с ~)
+  //   >1000 м  → «рядом» осмысленно не работает (unusable) — честно шлём на карту.
+  // tierKey стабилен внутри категории → список радиусов не «дёргается» на каждый
+  // фикс (меняется только при смене категории; фиксы и так троттлятся до 10 с).
+  const NEARBY_TIERS = [
+    { key: 'fine',   maxAcc: 50,       radii: [150, 300, 600, 0] },
+    { key: 'mid',    maxAcc: 200,      radii: [300, 600, 1000, 0] },
+    { key: 'coarse', maxAcc: Infinity, radii: [500, 1000, 2000, 0] },
+  ];
+  const GPS_APPROX_ACC = 200;    // хуже — дистанции приблизительные (~)
+  const GPS_UNUSABLE_ACC = 1000; // хуже — «рядом» не работает, только карта
+
+  function accuracyProfile(acc) {
+    // acc null/0/неизвестна → лучший тир (мок ?mockgeo=, десктоп, Playwright acc=0)
+    const a = (acc == null || !(acc >= 0)) ? 0 : acc;
+    const tier = NEARBY_TIERS.find(t => a <= t.maxAcc);
+    return {
+      acc: (acc == null ? null : acc),
+      radii: tier.radii,
+      tierKey: tier.key,               // стабильный ключ для «плавного» обновления
+      approx: a > GPS_APPROX_ACC,      // дистанции показываем с ~
+      unusable: a > GPS_UNUSABLE_ACC,  // «рядом» не работает осмысленно
+    };
+  }
+
   /* ---------- пользовательские метки (user pins) ---------- */
   // bbox поляны + мягкий запас: за пределами — предупреждаем, но не запрещаем
   const FEST_BBOX = { latMin: 54.67, latMax: 54.70, lngMin: 35.05, lngMax: 35.10 };
@@ -475,6 +505,7 @@
   exports.bearingLabel = bearingLabel;
   exports.getNearby = getNearby;
   exports.createGeoWatcher = createGeoWatcher;
+  exports.accuracyProfile = accuracyProfile;
   exports.normalizeSearch = normalizeSearch;
   exports.matchesQuery = matchesQuery;
 })(typeof module !== 'undefined' && module.exports

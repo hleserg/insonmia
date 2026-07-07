@@ -225,23 +225,24 @@ const PT = [54.68025, 35.08971];
     await ctx.close();
   }
 
-  // --- 13. ГЕЙТ ЧЕСТНОСТИ ТОЧНОСТИ: грубый фикс (accuracy 5 км — сетевой/сотовый
-  //         фолбэк) НЕ выдаётся за местоположение (не «врём» точкой, как офиц.
-  //         приложение). Держим «поиск спутников», без координат/маркера; точный
-  //         фикс (accuracy 12 м) сразу показывается — троттл грубым не занят.
+  // --- 13. КАРТА: круг точности = accuracy (L.circle radius в метрах). Фиксы
+  //         принимаем любой точности (гейт снят) — честность в КРУГЕ погрешности,
+  //         а не в сокрытии. Грубый фикс → большой круг, точный → маленький.
   {
-    const { ctx, page } = await freshControlled();
+    const { ctx, page } = await freshControlled({ clock: true });
     await page.click('.tab[data-view="map"]'); await page.waitForTimeout(600);
     const fireAcc = (la, ln, acc) => page.evaluate(([a, b, c]) => window.__fireGeoAcc(a, b, c), [la, ln, acc]);
-    await fireAcc(54.5, 35.2, 5000); await page.waitForTimeout(300); // 5 км — отбрасываем
-    assert.ok(!/📍\s*54\.5/.test(await rowText(page)), '13: грубый фикс 5 км НЕ показан как координаты');
-    assert.match(await rowText(page), /поиск спутников/, '13: при грубом фиксе держим «поиск спутников»');
-    assert.ok(!(await hasSelf(page)), '13: маркер «я тут» НЕ ставим на грубый фикс');
-    assert.ok(await shareDisabled(page), '13: 🔗 неактивна на грубом фиксе');
-    await fireAcc(PT[0], PT[1], 12); await page.waitForTimeout(300); // 12 м — реальный GPS
-    assert.match(await rowText(page), /📍\s*54\.680\d+,\s*35\.089\d+/, '13: точный фикс (12 м) сразу показан');
-    assert.ok(await hasSelf(page), '13: маркер «я тут» на точном фиксе');
-    console.log('✓ 13. accuracy-гейт: грубый фикс (5 км) отброшен как «поиск», точный (12 м) показан');
+    const accRadius = () => page.evaluate(() =>
+      (typeof GEO !== 'undefined' && GEO.accCircle) ? Math.round(GEO.accCircle.getRadius()) : null);
+    await fireAcc(PT[0], PT[1], 800); await page.waitForTimeout(300); // грубоватый фикс — принят
+    assert.match(await rowText(page), /📍\s*54\.680/, '13: фикс показан (гейт снят, принимаем любой)');
+    assert.ok(await hasSelf(page), '13: маркер «я тут» есть');
+    assert.equal(await accRadius(), 800, '13: круг точности = accuracy 800 м');
+    // точный фикс после троттла (10с) — круг сжался
+    await page.clock.runFor(11000);
+    await fireAcc(PT[0], PT[1], 15); await page.waitForTimeout(300);
+    assert.equal(await accRadius(), 15, '13: круг точности сжался до accuracy 15 м');
+    console.log('✓ 13. карта: круг точности соответствует accuracy (800 м → 15 м)');
     await ctx.close();
   }
 
