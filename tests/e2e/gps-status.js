@@ -29,6 +29,7 @@ const PT = [54.68025, 35.08971];
     await ctx.addInitScript((denied) => {
       window.__geoCbs = []; window.__geoErrs = []; window.__lastGeo = null; window.__watchOpts = null;
       window.__fireGeo = (lat, lng) => { window.__lastGeo = { lat, lng }; window.__geoCbs.forEach(cb => cb({ coords: { latitude: lat, longitude: lng, accuracy: 5 } })); };
+      window.__fireGeoAcc = (lat, lng, acc) => { window.__geoCbs.forEach(cb => cb({ coords: { latitude: lat, longitude: lng, accuracy: acc } })); }; // фикс с заданной точностью
       window.__fireGeoErr = (code) => { window.__geoErrs.forEach(cb => cb({ code })); }; // код 1/2/3 руками
       navigator.geolocation.watchPosition = (ok, err, opts) => { window.__geoCbs.push(ok); if (err) window.__geoErrs.push(err); window.__watchOpts = opts || null; if (denied) setTimeout(() => err && err({ code: 1 }), 30); return window.__geoCbs.length; };
       navigator.geolocation.getCurrentPosition = (ok, err) => { if (denied) return err && err({ code: 1 }); if (window.__lastGeo) ok({ coords: { latitude: window.__lastGeo.lat, longitude: window.__lastGeo.lng, accuracy: 5 } }); else err && err({ code: 3 }); };
@@ -221,6 +222,26 @@ const PT = [54.68025, 35.08971];
     assert.equal(opts.maximumAge, 0, '12: maximumAge=0 (никогда старый/кэшированный фикс)');
     assert.equal(opts.enableHighAccuracy, true, '12: enableHighAccuracy=true (GPS, не сеть)');
     console.log('✓ 12. watchPosition: timeout ≥3 мин, maximumAge=0, enableHighAccuracy=true');
+    await ctx.close();
+  }
+
+  // --- 13. ГЕЙТ ЧЕСТНОСТИ ТОЧНОСТИ: грубый фикс (accuracy 5 км — сетевой/сотовый
+  //         фолбэк) НЕ выдаётся за местоположение (не «врём» точкой, как офиц.
+  //         приложение). Держим «поиск спутников», без координат/маркера; точный
+  //         фикс (accuracy 12 м) сразу показывается — троттл грубым не занят.
+  {
+    const { ctx, page } = await freshControlled();
+    await page.click('.tab[data-view="map"]'); await page.waitForTimeout(600);
+    const fireAcc = (la, ln, acc) => page.evaluate(([a, b, c]) => window.__fireGeoAcc(a, b, c), [la, ln, acc]);
+    await fireAcc(54.5, 35.2, 5000); await page.waitForTimeout(300); // 5 км — отбрасываем
+    assert.ok(!/📍\s*54\.5/.test(await rowText(page)), '13: грубый фикс 5 км НЕ показан как координаты');
+    assert.match(await rowText(page), /поиск спутников/, '13: при грубом фиксе держим «поиск спутников»');
+    assert.ok(!(await hasSelf(page)), '13: маркер «я тут» НЕ ставим на грубый фикс');
+    assert.ok(await shareDisabled(page), '13: 🔗 неактивна на грубом фиксе');
+    await fireAcc(PT[0], PT[1], 12); await page.waitForTimeout(300); // 12 м — реальный GPS
+    assert.match(await rowText(page), /📍\s*54\.680\d+,\s*35\.089\d+/, '13: точный фикс (12 м) сразу показан');
+    assert.ok(await hasSelf(page), '13: маркер «я тут» на точном фиксе');
+    console.log('✓ 13. accuracy-гейт: грубый фикс (5 км) отброшен как «поиск», точный (12 м) показан');
     await ctx.close();
   }
 
