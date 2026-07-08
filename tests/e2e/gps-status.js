@@ -45,6 +45,9 @@ const PT = [54.68025, 35.08971];
   const fire = (page, lat, lng) => page.evaluate(([la, ln]) => window.__fireGeo(la, ln), [lat, lng]);
   const rowHtml = (page) => page.evaluate(() => document.querySelector('#myCoordText').innerHTML);
   const rowText = (page) => page.textContent('#myCoordText');
+  // 🔗 «поделиться координатами»: БЕЗ фикса — приглушена (класс .pending), но НИКОГДА
+  // не disabled (тап даёт честный тост, а не «ничего не происходит»). Проверяем оба.
+  const sharePending = (page) => page.evaluate(() => document.querySelector('#myCoordShare').classList.contains('pending'));
   const shareDisabled = (page) => page.evaluate(() => document.querySelector('#myCoordShare').disabled);
   const hasSelf = (page) => page.evaluate(() => !!document.querySelector('.geo-self'));
 
@@ -55,12 +58,13 @@ const PT = [54.68025, 35.08971];
     const html = await rowHtml(page);
     assert.ok(/gps-spinner/.test(html), '1: в строке есть крутилка (.gps-spinner): ' + html.slice(0, 60));
     assert.match(await rowText(page), /поиск спутников/, '1: текст «поиск спутников…»');
-    assert.ok(await shareDisabled(page), '1: 🔗 неактивна без фикса');
+    assert.ok(await sharePending(page), '1: 🔗 приглушена (.pending) без фикса');
+    assert.ok(!(await shareDisabled(page)), '1: 🔗 НЕ disabled — тап даёт честный тост, не «ничего не происходит»');
     assert.ok(!(await hasSelf(page)), '1: маркер «я тут» НЕ показан без фикса');
     // --- 2. фикс пришёл → координаты + маркер + 🔗 активна
     await fire(page, PT[0], PT[1]); await page.waitForTimeout(300);
     assert.match(await rowText(page), /📍\s*54\.680\d+,\s*35\.089\d+/, '2: фикс → координаты в строке');
-    assert.ok(!(await shareDisabled(page)), '2: 🔗 активна при фиксе');
+    assert.ok(!(await sharePending(page)), '2: 🔗 «живая» (без .pending) при фиксе');
     assert.ok(await hasSelf(page), '2: маркер «я тут» показан при фиксе');
     console.log('✓ 1–2. карта: «поиск спутников» (крутилка, без координат) → фикс → координаты + маркер');
 
@@ -92,8 +96,9 @@ const PT = [54.68025, 35.08971];
     const { ctx, page } = await freshControlled({ denied: true });
     await page.click('.tab[data-view="map"]'); await page.waitForTimeout(700);
     assert.match(await rowText(page), /включить геолокацию/, '4: denied → «включить геолокацию»');
-    assert.ok(await shareDisabled(page), '4: 🔗 неактивна при denied');
-    console.log('✓ 4. карта denied → «включить геолокацию», 🔗 неактивна');
+    assert.ok(await sharePending(page), '4: 🔗 приглушена (.pending) при denied');
+    assert.ok(!(await shareDisabled(page)), '4: 🔗 НЕ disabled при denied — тап даёт тост');
+    console.log('✓ 4. карта denied → «включить геолокацию», 🔗 приглушена но кликабельна (тап = тост)');
     await ctx.close();
   }
 

@@ -635,7 +635,9 @@ a.btn { display: block; text-align: center; text-decoration: none; box-sizing: b
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .my-coord-share { flex: 0 0 auto; }
-.my-coord-share:disabled { opacity: 0.45; }
+/* «ещё нет фикса»: приглушаем, но НЕ disabled — кнопка кликабельна и тап даёт
+   честный тост «ищем спутники» (мёртвая кнопка = «жму, ничего не происходит») */
+.my-coord-share.pending { opacity: 0.45; }
 .my-coord-text.gps-searching { color: var(--muted); }
 
 /* GPS «поиск спутников»: крутилка (строка карты + пустое состояние «рядом»),

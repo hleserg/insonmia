@@ -105,7 +105,10 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
   const t4d = await page.textContent('#myCoordText');
   assert.ok(!/📍\s*54\.6/.test(t4d), '4d: протухший фикс НЕ показывает старую точку: ' + t4d);
   assert.match(t4d, /поиск спутников/, '4d: протух → снова «поиск спутников» (watch ещё ищет)');
-  assert.ok(await page.evaluate(() => document.querySelector('#myCoordShare').disabled), '4d: 🔗 неактивна у протухшего фикса');
+  // протух → 🔗 приглушена (.pending), но НЕ disabled: тап даёт честный тост
+  // «ищем спутники», а не «ничего не происходит» (потеряшке нужна реакция)
+  assert.ok(await page.evaluate(() => document.querySelector('#myCoordShare').classList.contains('pending')), '4d: 🔗 приглушена (.pending) у протухшего фикса');
+  assert.ok(!(await page.evaluate(() => document.querySelector('#myCoordShare').disabled)), '4d: 🔗 НЕ disabled у протухшего фикса — тап даёт тост');
   console.log('✓ 4d. фикс протухает через минуту → строка гаснет к «поиск спутников», 🔗 не врёт старой точкой');
   // вернём свежий фикс для сценария 5 (нужен clipShare-диплинк из scenario 4 — он уже снят)
 

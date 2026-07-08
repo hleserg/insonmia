@@ -856,8 +856,9 @@ async function locateMe() {
 
 // строка на карте = ЖИВОЙ статус связи со спутниками (для потеряшек координаты
 // всегда под рукой, но ТОЛЬКО текущие — «последнее известное» не показываем):
-//  • есть фикс → «📍 lat, lng», 🔗 активна;
-//  • отказ/ошибка → «включить геолокацию» (тап = запрос), 🔗 неактивна;
+//  • есть фикс → «📍 lat, lng», 🔗 «живая» (без .pending);
+//  • отказ/ошибка → «включить геолокацию» (тап = запрос), 🔗 приглушена
+//    (.pending) но КЛИКАБЕЛЬНА — тап даёт честный тост, не «ничего не происходит»;
 //  • watch активен, фикса ещё нет → крутилка + «поиск спутников…» (не пустота);
 //  • не в гео-разделе → «включить геолокацию».
 // Координаты — ГОЛЫЕ, без подписи: на 360px подпись съедала ширину и долгота
@@ -874,30 +875,31 @@ function updateMyCoordRow() {
     const accSuffix = prof.approx ? ` · ${fmtAccuracy(pos.acc)}` : '';
     txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}${accSuffix}`;
     txt.classList.remove('gps-searching');
-    share.disabled = false;
+    share.classList.remove('pending'); // фикс есть → 🔗 «живая»
   } else if (GEO.nearby.error && GEO.nearby.error.code === 1) {
     // ЕДИНСТВЕННЫЙ случай «включить геолокацию» — реальный отказ в доступе (code 1)
     txt.textContent = '📍 включить геолокацию';
     txt.classList.remove('gps-searching');
-    share.disabled = true;
+    share.classList.add('pending'); // фикса нет → 🔗 приглушена, но КЛИКАБЕЛЬНА: тап даёт честный тост (не мёртвая кнопка)
   } else if (GEO.geoWatching && !(GEO.nearby.error && GEO.nearby.error.code === 0)) {
     // доступ есть, спутников пока нет → КРУТИЛКА (не «включите гео»!). Долго ищем
     // (>SEARCH_MS) — зовём под небо, но поиск ПРОДОЛЖАЕТСЯ.
     txt.innerHTML = '<span class="gps-spinner" aria-hidden="true"></span>'
       + (_geoSlow ? '🛰 спутники не ловятся — под небо…' : '🛰 поиск спутников…');
     txt.classList.add('gps-searching');
-    share.disabled = true;
+    share.classList.add('pending'); // фикса нет → 🔗 приглушена, но КЛИКАБЕЛЬНА: тап даёт честный тост (не мёртвая кнопка)
   } else {
     txt.textContent = '📍 включить геолокацию';
     txt.classList.remove('gps-searching');
-    share.disabled = true;
+    share.classList.add('pending'); // фикса нет → 🔗 приглушена, но КЛИКАБЕЛЬНА: тап даёт честный тост (не мёртвая кнопка)
   }
 }
 
 // текущий фикс для действия (копирование/шаринг). Берём ЖИВОЙ фикс watch
 // (maximumAge:0 — он и так свежий, обновляется живьём), НЕ отдельный
 // getCurrentPosition (конфликтует с активным watch и таймаутит). Нет фикса —
-// ещё ищем/отказан доступ; кнопки шаринга и так неактивны без фикса.
+// ещё ищем/отказан доступ: возвращаем null и показываем ЧЕСТНЫЙ тост (кнопка
+// шаринга кликабельна даже без фикса — тап не должен «проваливаться в пустоту»).
 function actionPosOrToast() {
   if (GEO.nearby.pos) return GEO.nearby.pos;
   if ((GEO.nearby.error && GEO.nearby.error.code === 1)) toast(geoErrorText({ code: 1 }), 8000);
