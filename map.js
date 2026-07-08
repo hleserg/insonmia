@@ -552,18 +552,30 @@ function pinUrl(pin) {
   return location.origin + location.pathname + window.InsomniaCore.pinToHash(pin);
 }
 
+// Общий шаринг ссылки (метка / «я здесь»). КРИТИЧНО для iOS/Android: navigator.share
+// зовём СИНХРОННО из обработчика клика — БЕЗ единого await до него. Любой await
+// раньше (ждать GPS-фикс и т.п.) съедает пользовательский жест (transient
+// activation) и браузер бросает NotAllowedError. Поэтому: url собирается из УЖЕ
+// известной позиции синхронно, сначала share, а буфер/поле — только фолбэк, если
+// share недоступен или упал по причине НЕ «отмена». Проверяем существование
+// navigator.share и navigator.clipboard перед вызовом.
+async function shareLink(url, text) {
+  const msg = text ? url + '\n' + text : url; // фолбэк-строка: ссылка + описание
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Бессонница 2026', text: text || '', url }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; /* отмена — молча; иначе фолбэк ниже */ }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { await navigator.clipboard.writeText(msg); toast('> ссылка скопирована в буфер'); return; }
+    catch { /* буфер недоступен — отдаём в поле */ }
+  }
+  showTextInImportField(msg);
+  toast('Буфер недоступен — текст в поле, скопируйте руками', 5000);
+}
+
 function sharePin(pin) {
-  const url = pinUrl(pin);
-  const text = `${pin.emoji || '📍'} ${pin.name} — метка на карте «Бессонницы»`;
-  if (navigator.share) { navigator.share({ title: pin.name, text, url }).catch(() => {}); return; }
-  const copy = navigator.clipboard && navigator.clipboard.writeText
-    ? navigator.clipboard.writeText(url) : Promise.reject();
-  copy.then(() => toast('> ссылка на метку скопирована'))
-    .catch(() => {
-      // буфер недоступен — отдаём ссылку в выделяемое поле, не в тост
-      showTextInImportField(url);
-      toast('Буфер недоступен — ссылка в поле, скопируйте руками', 5000);
-    });
+  // url из уже известной метки, синхронно — без await до shareLink → share
+  shareLink(pinUrl(pin), `${pin.emoji || '📍'} ${pin.name} — метка на карте «Бессонницы»`);
 }
 
 function selectPinEmoji(emoji) {
@@ -918,32 +930,19 @@ function showTextInImportField(text) {
   showSheet('#pinImport');
 }
 
-// 🔗 «Я здесь»: СВЕЖИЙ фикс → navigator.share (текст + #pin=-диплинк + geo:),
-// с фолбэком в буфер (Huawei без GMS share'а файлов не даёт — а текст даёт не
-// всегда), затем в поле. Провал фикса — не делимся старой точкой, честный тост.
-async function shareMyCoord() {
-  const pos = actionPosOrToast(); // живой фикс watch; нет — честный тост, не делимся старым
+// 🔗 «Я здесь»: берём УЖЕ имеющийся живой фикс (GEO.nearby.pos, БЕЗ await) и сразу
+// шарим общей shareLink (navigator.share синхронно, без потери жеста). Провал фикса —
+// честный тост, старой точкой не делимся. url — #pin=-диплинк, text — человекочитаемая
+// строка + geo:; фолбэк-строка (shareLink) = url + text.
+function shareMyCoord() {
+  const pos = actionPosOrToast(); // синхронно: живой фикс watch или null (+тост)
   if (!pos) return;
   const la = pos.lat.toFixed(5), lo = pos.lng.toFixed(5);
   const url = pinUrl({ lat: pos.lat, lng: pos.lng, name: 'Я здесь', emoji: '📍' });
-  // при большой погрешности честно помечаем ±N в человекочитаемой строке, чтобы
-  // получатель не принял точку за точную (geo:/#pin= — машинные, оставляем как есть)
+  // при большой погрешности честно помечаем ±N (получатель не примет точку за точную)
   const prof = window.InsomniaCore.accuracyProfile(pos.acc);
   const here = prof.approx ? `Я примерно здесь (${fmtAccuracy(pos.acc)})` : 'Я здесь';
-  const text = `${here}: ${la}, ${lo}\n${url}\ngeo:${la},${lo}`;
-  if (navigator.share) {
-    try { await navigator.share({ title: 'Я здесь', text }); return; }
-    catch (e) { if (e && e.name === 'AbortError') return; /* сам отменил */ }
-    // share упал (нет сервисов) — падаем в буфер
-  }
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      toast('> координаты скопированы'); return;
-    }
-  } catch { /* буфер тоже недоступен */ }
-  showTextInImportField(text);
-  toast('Буфер недоступен — координаты в поле, скопируйте', 5000);
+  shareLink(url, `${here}: ${la}, ${lo}\ngeo:${la},${lo}`);
 }
 
 // сворачиваемая подсказка для «рядом» и карты; открытость переживает
