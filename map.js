@@ -874,23 +874,23 @@ function updateMyCoordRow() {
     const accSuffix = prof.approx ? ` · ${fmtAccuracy(pos.acc)}` : '';
     txt.textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}${accSuffix}`;
     txt.classList.remove('gps-searching');
-    share.disabled = false;
+    share.classList.remove('pending'); // фикс есть → 🔗 «живая»
   } else if (GEO.nearby.error && GEO.nearby.error.code === 1) {
     // ЕДИНСТВЕННЫЙ случай «включить геолокацию» — реальный отказ в доступе (code 1)
     txt.textContent = '📍 включить геолокацию';
     txt.classList.remove('gps-searching');
-    share.disabled = true;
+    share.classList.add('pending'); // фикса нет → 🔗 приглушена, но КЛИКАБЕЛЬНА: тап даёт честный тост (не мёртвая кнопка)
   } else if (GEO.geoWatching && !(GEO.nearby.error && GEO.nearby.error.code === 0)) {
     // доступ есть, спутников пока нет → КРУТИЛКА (не «включите гео»!). Долго ищем
     // (>SEARCH_MS) — зовём под небо, но поиск ПРОДОЛЖАЕТСЯ.
     txt.innerHTML = '<span class="gps-spinner" aria-hidden="true"></span>'
       + (_geoSlow ? '🛰 спутники не ловятся — под небо…' : '🛰 поиск спутников…');
     txt.classList.add('gps-searching');
-    share.disabled = true;
+    share.classList.add('pending'); // фикса нет → 🔗 приглушена, но КЛИКАБЕЛЬНА: тап даёт честный тост (не мёртвая кнопка)
   } else {
     txt.textContent = '📍 включить геолокацию';
     txt.classList.remove('gps-searching');
-    share.disabled = true;
+    share.classList.add('pending'); // фикса нет → 🔗 приглушена, но КЛИКАБЕЛЬНА: тап даёт честный тост (не мёртвая кнопка)
   }
 }
 

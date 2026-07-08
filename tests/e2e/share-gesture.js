@@ -102,6 +102,36 @@ const PT = { latitude: 54.68025, longitude: 35.08971 };
     await ctx.close();
   }
 
+  // === 5. НЕТ фикса GPS (в помещении/доступ закрыт) → 🔗 НЕ мёртвая: кликабельна и
+  //        тап даёт ЧЕСТНЫЙ тост (баг «жму на поделиться и ничего не происходит»).
+  //        Раньше кнопка была disabled — тап не давал ни шита, ни тоста.
+  {
+    const ctx = await browser.newContext({
+      viewport: { width: 360, height: 740 }, timezoneId: 'UTC', serviceWorkers: 'block',
+      // геолокацию НЕ разрешаем → watch падает с code 1 (нет живого фикса)
+    });
+    await ctx.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
+    const page = await ctx.newPage();
+    await page.goto(BASE + '/', { waitUntil: 'load' });
+    await page.waitForTimeout(500);
+    await page.click('.tab[data-view="map"]');
+    await page.waitForTimeout(1200);
+    check(!(await page.evaluate(() => document.querySelector('#myCoordShare').disabled)),
+      '5. без фикса 🔗 НЕ disabled (тап не «проваливается» в пустоту)');
+    const res = await page.evaluate(() => new Promise((resolve) => {
+      let called = false;
+      navigator.share = () => { called = true; return Promise.resolve(); };
+      document.querySelector('#myCoordShare').click();
+      setTimeout(() => {
+        const t = document.querySelector('#toast');
+        resolve({ shareCalled: called, toast: t && !t.classList.contains('hidden') ? t.textContent : '' });
+      }, 120);
+    }));
+    check(res.shareCalled === false, '5. без фикса share НЕ зовётся (нечего слать — не врём)');
+    check(!!res.toast, '5. без фикса тап даёт ЧЕСТНЫЙ тост (есть реакция): ' + res.toast.slice(0, 50));
+    await ctx.close();
+  }
+
   await browser.close();
   killSrv();
   console.log(`\n=== ШАРИНГ: ЖЕСТ СОХРАНЁН, ФОЛБЭКИ ЧЕСТНЫЕ (${ok} проверок) ===`);
