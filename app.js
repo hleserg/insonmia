@@ -201,7 +201,8 @@ function filteredEvents() {
   if (state.type !== 'all') evs = evs.filter(e => e.type === state.type);
   // Воронка (ценз/локация) и поиск работают ПО И (пересечение), как и
   // тип-чип. День-фильтр — исключение: поиск идёт по всем дням (баг #33),
-  // полоса дат при поиске заглушается в renderSchedule.
+  // renderSchedule группирует выдачу по датам; полоса дат при поиске без
+  // активного дня, но кликабельна (тап = выйти из поиска на этот день).
   evs = evs.filter(passesFilters);
   if (state.query) {
     const q = nQuery();
@@ -431,12 +432,29 @@ function renderNow(root) {
 function renderSchedule(root) {
   if (!state.day) state.day = pickDefaultDay(); // ДО полосы — иначе нет активного дня
 
-  // Активный поиск — по ВСЕЙ программе, не только по выбранному дню:
-  // иначе событие «теряется», если оно на другой дате. Полоса дат на время
-  // поиска заглушена (день-фильтр не действует); state.day не трогаем —
-  // после очистки запроса вернётся выбранный день.
-  if (state.query) {
-    buildDayStrip(true, null);
+  const searching = !!state.query;
+  // Полоса дат: при поиске ни один день не «активен» (поиск идёт по ВСЕЙ
+  // программе), НО кнопки кликабельны — тап по дню выходит из поиска на этот
+  // день. Раньше полоса была disabled → на фесте читалось как «дни сломались».
+  buildDayStrip(false, searching ? null : state.day);
+
+  // «вся программа в календарь» — разовый снимок без напоминаний (модалка
+  // предупредит); показываем ВСЕГДА в «Программе» — в т.ч. при активном поиске
+  // (кнопка выгружает всю программу, от дня и запроса не зависит), даже если
+  // день/выдача пусты. Раньше при поиске ранний return прятал её → «пропала».
+  const progExport = document.createElement('div');
+  progExport.className = 'program-export';
+  progExport.innerHTML = `
+    <button class="btn ghost" id="btnProgramExport" aria-label="Выгрузить всю программу в календарь">📅 вся программа в календарь</button>
+    <button class="btn ghost cal-dl" id="btnProgramDownload" aria-label="Скачать всю программу .ics">⬇️</button>`;
+  progExport.querySelector('#btnProgramExport').addEventListener('click', () => openProgramExport('calendar'));
+  progExport.querySelector('#btnProgramDownload').addEventListener('click', () => openProgramExport('download'));
+  root.appendChild(progExport);
+
+  // Активный поиск — по ВСЕЙ программе, не только по выбранному дню: иначе
+  // событие «теряется», если оно на другой дате. state.day не трогаем —
+  // после очистки запроса (или тапа по дню) вернётся выбранный день.
+  if (searching) {
     const evs = filteredEvents().filter(e => e._startMs != null).sort(sortByStart);
     if (!evs.length) {
       root.appendChild(queryEmptyState('🔍', 'Ничего не найдено'));
@@ -449,18 +467,6 @@ function renderSchedule(root) {
     });
     return;
   }
-
-  buildDayStrip();
-  // «вся программа в календарь» — разовый снимок без напоминаний (модалка
-  // предупредит); показываем всегда в «Программе», даже если день пуст
-  const progExport = document.createElement('div');
-  progExport.className = 'program-export';
-  progExport.innerHTML = `
-    <button class="btn ghost" id="btnProgramExport" aria-label="Выгрузить всю программу в календарь">📅 вся программа в календарь</button>
-    <button class="btn ghost cal-dl" id="btnProgramDownload" aria-label="Скачать всю программу .ics">⬇️</button>`;
-  progExport.querySelector('#btnProgramExport').addEventListener('click', () => openProgramExport('calendar'));
-  progExport.querySelector('#btnProgramDownload').addEventListener('click', () => openProgramExport('download'));
-  root.appendChild(progExport);
 
   const evs = filteredEvents()
     .filter(e => e._festDay === state.day)
@@ -626,7 +632,14 @@ function buildDayStrip(readonly = false, activeDay = state.day) {
     btn.className = 'day-btn' + (date === activeDay ? ' active' : '');
     btn.innerHTML = `<span class="dow">${WD[p.dow]}</span><span>${p.day} ${MON[p.mo]}</span>`;
     if (readonly) btn.disabled = true;
-    else btn.addEventListener('click', () => { state.day = date; saveFilterState(); render(); });
+    else btn.addEventListener('click', () => {
+      state.day = date;
+      // тап по дню во время поиска = выйти из поиска на ЭТОТ день (полоса не
+      // «мёртвая»): clearSearch сам сбросит запрос, сохранит и перерисует
+      if (state.query) { clearSearch(); return; }
+      saveFilterState();
+      render();
+    });
     strip.appendChild(btn);
   });
   strip.scrollLeft = keepScroll;
