@@ -11,7 +11,7 @@ const LS = {
   favs: 'insomnia.favs',
   lead: 'insomnia.leadMinutes',
   program: 'insomnia.program',      // imported/updated program JSON
-  notified: 'insomnia.notified',    // ids already notified (in-app scheduler dedup)
+  calAlarm: 'insomnia.calAlarm',    // класть ли VALARM в выгружаемые в календарь события ('0'=нет)
   urlSrc: 'insomnia.updateUrl',
   pins: 'insomnia.pins',            // пользовательские метки на карте
   installBarHidden: 'insomnia.installBarHidden', // ✕ на плашке установки
@@ -28,6 +28,8 @@ const state = {
   favs: new Set(),
   pins: [],           // пользовательские метки [{lat,lng,name,emoji,note}]
   lead: 15,
+  calAlarm: true,     // тумблер «напоминание в календаре»: класть VALARM в .ics
+
   deferredInstall: null,
   swReg: null,
   sim: null,          // {anchor, setAt} — симуляция времени (?now=)
@@ -105,17 +107,11 @@ function loadPins() {
 }
 function savePins() { localStorage.setItem(LS.pins, JSON.stringify(state.pins || [])); }
 
-let simNotified = new Set(); // дедуп напоминаний в симуляции — только в памяти
-function getNotified() {
-  if (state.sim) return simNotified;
-  try { return new Set(JSON.parse(localStorage.getItem(LS.notified) || '[]')); }
-  catch { return new Set(); }
-}
-function setNotified(set) {
-  // симулированное время НЕ отравляет реальный дедуп напоминаний
-  if (state.sim) { simNotified = set; return; }
-  localStorage.setItem(LS.notified, JSON.stringify([...set]));
-}
+// Напоминания вынесены в КАЛЕНДАРЬ телефона (VALARM в .ics): свои push/in-app
+// уведомления на нашей аудитории (Huawei без GMS, старый Android, iOS без
+// standalone) молча не доходили. Тумблер ниже лишь решает, класть ли VALARM.
+function calAlarmOn() { return state.calAlarm !== false; }
+function saveCalAlarm() { localStorage.setItem(LS.calAlarm, state.calAlarm ? '1' : '0'); }
 
 /* ---------- data loading ---------- */
 function decorateProgram(p) {
@@ -569,9 +565,7 @@ function renderFavorites(root) {
   const info = document.createElement('p');
   info.className = 'muted small center';
   info.style.marginTop = '16px';
-  info.textContent = notifGranted()
-    ? `Напоминания включены: за ${state.lead} мин до начала.`
-    : 'Включите уведомления в настройках, чтобы получать напоминания.';
+  info.textContent = 'Напоминание — добавь событие в календарь (кнопка 📅). Телефон напомнит сам, даже офлайн.';
   root.appendChild(info);
 }
 
@@ -704,6 +698,7 @@ function openDetail(id, restore) {
       <button class="btn ghost" id="detailShare" aria-label="Поделиться">${window.InsomniaCore.shareIcon()} поделиться</button>
       <button class="btn ghost cal-dl" id="detailIcs" aria-label="Скачать .ics">⬇️</button>
     </div>
+    <p class="cal-hint muted small">&gt; напоминание — через «в календарь». телефон напомнит сам, даже офлайн.</p>
   `;
   $('#detailFav').addEventListener('click', () => {
     toggleFav(id);
@@ -1013,8 +1008,10 @@ function routeShareText(events) {
 
 async function exportICS(events, filename, opts = {}) {
   // forceDownload — принудительно качать; shareText — «поделиться» с текстом;
-  // withAlarm — ставить ли VALARM (false для полной выгрузки программы)
-  const { forceDownload = false, shareText = null, withAlarm = true } = opts;
+  // withAlarm — ставить ли VALARM. Явное значение (напр. полная выгрузка → false)
+  // побеждает; иначе решает тумблер «напоминание в календаре» (state.calAlarm).
+  const { forceDownload = false, shareText = null } = opts;
+  const withAlarm = 'withAlarm' in opts ? opts.withAlarm : calAlarmOn();
   // filename — латиница: кириллица в именах файлов ломается на части систем
   const list = (events || []).filter(e => e && (e._startMs != null || e.startISO));
   if (!list.length) { toast('Нет событий для экспорта'); return; }
@@ -1266,12 +1263,11 @@ function toggleFav(id) {
   if (!isStandalone()) { showInstallGate(); return; }
   if (state.favs.has(id)) {
     state.favs.delete(id);
-    cancelNotification(id);
     toast('> seat released.');
   } else {
     state.favs.add(id);
-    toast('> seat acquired. напомним за ' + state.lead + ' мин ⏰');
-    scheduleNotification(id);
+    // напоминание теперь через КАЛЕНДАРЬ (кнопка 📅 на карточке), не push
+    toast('> seat acquired. напоминание? → жми 📅 «в календарь»');
   }
   saveFavs();
   // ⭐ НЕ должна ронять прокрутку списка: toggle меняет только флаг у карточки,
@@ -1284,123 +1280,25 @@ function toggleFav(id) {
   window.scrollTo(0, y);
 }
 
-/* ---------- notifications ---------- */
-function notifText(e) {
-  return {
-    title: `Скоро: ${e.title}`,
-    body: `${e.start} · ${e.venue || ''}`.trim(),
-  };
-}
-
-async function requestNotifications() {
-  if (!('Notification' in window)) { toast('Уведомления не поддерживаются'); return false; }
-  let perm = Notification.permission;
-  if (perm === 'default') perm = await Notification.requestPermission();
-  updateNotifStatus();
-  if (perm === 'granted') {
-    // (re)schedule all current favorites
-    state.favs.forEach(scheduleNotification);
-    toast('> уведомления: ok ✅');
-    return true;
+/* ---------- напоминания в календаре (VALARM) ---------- */
+// Своих push/in-app уведомлений больше нет — они молча не доходили на нашей
+// аудитории. Тумблер решает лишь, класть ли VALARM в выгружаемые в календарь
+// события; «за сколько минут» → TRIGGER этого VALARM. Всё через .ics — надёжно
+// и офлайн.
+function updateCalAlarmUI() {
+  const btn = $('#toggleCalAlarm');
+  if (btn) {
+    const on = calAlarmOn();
+    btn.textContent = on ? 'Напоминание в календаре: вкл ✓' : 'Напоминание в календаре: выкл';
+    btn.classList.toggle('ghost', !on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
-  toast('Уведомления отклонены');
-  return false;
 }
-
-function supportsTrigger() {
-  return 'Notification' in window && 'showTrigger' in Notification.prototype && !!state.swReg;
-}
-// голый идентификатор Notification кидает ReferenceError там, где API нет
-// (iOS Safari) — проверяем только через 'in window'
-function notifGranted() {
-  return 'Notification' in window && Notification.permission === 'granted';
-}
-
-// Если планирование OS-триггера хоть раз упало, до конца сессии страхует
-// внутренний поллер — иначе напоминания молча исчезают.
-let osTriggerBroken = false;
-
-async function scheduleNotification(id) {
-  if (!notifGranted()) return;
-  const e = eventById(id);
-  if (!e || e._startMs == null) return;
-  const when = e._startMs - state.lead * 60000; // всегда реальное время события
-  if (when <= Date.now()) return; // too late / already started
-  const { title, body } = notifText(e);
-
-  // Best case: OS-scheduled trigger that fires even when the app is closed.
-  if (supportsTrigger() && !osTriggerBroken) {
-    try {
-      await state.swReg.showNotification(title, {
-        body,
-        tag: 'ev-' + id,
-        icon: 'icons/icon-192.png',
-        badge: 'icons/icon-192.png',
-        showTrigger: new TimestampTrigger(when),
-      });
-      return;
-    } catch (err) { osTriggerBroken = true; }
-  }
-  // Fallback handled by the in-app polling scheduler (runs while app is open).
-}
-
-async function cancelNotification(id) {
-  if (!state.swReg) return;
-  try {
-    // includeTriggered: true — иначе ЗАПЛАНИРОВАННЫЙ (ещё не показанный)
-    // OS-триггер не найдётся и его нельзя будет отменить
-    const notes = await state.swReg.getNotifications({ tag: 'ev-' + id, includeTriggered: true });
-    notes.forEach(n => n.close());
-  } catch { /* ignore */ }
-  const notified = getNotified();
-  notified.delete(id);
-  setNotified(notified);
-}
-
-// In-app safety-net scheduler: while the app is open, poll favorites and fire
-// a notification when we cross the lead-time threshold. Deduped via LS.notified.
-function pollNotifications() {
-  if (!notifGranted()) return;
-  if (supportsTrigger() && !osTriggerBroken) return; // OS triggers already cover it
-  const notified = getNotified();
-  const t = getNow(); // симуляция позволяет тестировать напоминания
-  let changed = false;
-  state.favs.forEach(id => {
-    if (notified.has(id)) return;
-    const e = eventById(id);
-    if (!e || e._startMs == null) return;
-    const start = e._startMs;
-    const fireAt = start - state.lead * 60000;
-    if (t >= fireAt && t < start) {
-      const { title, body } = notifText(e);
-      try {
-        const p = state.swReg
-          ? state.swReg.showNotification(title, { body, tag: 'ev-' + id, icon: 'icons/icon-192.png' })
-          : (new Notification(title, { body, icon: 'icons/icon-192.png' }), null);
-        // отметка «уведомлён» — только при успехе, иначе напоминание
-        // молча теряется навсегда; при отказе попробуем на следующем тике
-        if (p && p.catch) p.catch(() => {
-          const n2 = getNotified(); n2.delete(id); setNotified(n2);
-        });
-        notified.add(id);
-        changed = true;
-      } catch { /* показ не удался — не помечаем, повторим через 30с */ }
-    } else if (t >= start) {
-      notified.add(id); // missed window; don't fire late
-      changed = true;
-    }
-  });
-  if (changed) setNotified(notified);
-}
-
-function updateNotifStatus() {
-  const el = $('#notifStatus');
-  if (!('Notification' in window)) { el.textContent = 'Браузер не поддерживает уведомления.'; return; }
-  const p = Notification.permission;
-  const bg = supportsTrigger() ? ' Работают и в фоне (по расписанию ОС).' : ' Работают, пока приложение открыто/свёрнуто.';
-  el.textContent = p === 'granted' ? 'Разрешены.' + bg
-    : p === 'denied' ? 'Запрещены в настройках браузера.' : 'Не запрошены.';
-  $('#btnEnableNotif').textContent = p === 'granted' ? 'Уведомления включены ✓' : 'Разрешить уведомления';
+function toggleCalAlarm() {
+  state.calAlarm = !calAlarmOn();
+  saveCalAlarm();
+  updateCalAlarmUI();
+  toast(state.calAlarm ? '> напоминание в календаре: вкл' : '> напоминание в календаре: выкл');
 }
 
 /* ---------- версия данных ---------- */
@@ -1692,8 +1590,6 @@ function applyImportedProgram(program, msg, persist = true) {
   // избранное НЕ чистим: осиротевшие отметки живут в плашке «избранного»
   // и переживают откат/повтор обновления данных
   resetFiltersToAll(); // вселенная сменилась → тип/ценз/локация/день/поиск → «всё»
-  localStorage.removeItem(LS.notified);
-  if (notifGranted()) state.favs.forEach(scheduleNotification);
   $('#importStatus').textContent = msg;
   noteDataVersion(program);
   updateDataInfo();
@@ -1711,7 +1607,6 @@ async function refreshMapQuiet() {
 
 function resetData() {
   localStorage.removeItem(LS.program);
-  localStorage.removeItem(LS.notified);
   loadProgram().then(p => {
     state.program = decorateProgram(p);
     const ids = new Set(p.events.map(e => e.id));
@@ -2049,7 +1944,7 @@ function wireUI() {
   });
 
   // settings sheet
-  $('#btnSettings').addEventListener('click', () => { updateNotifStatus(); updateDataInfo(); showSheet('#settings'); });
+  $('#btnSettings').addEventListener('click', () => { updateCalAlarmUI(); updateDataInfo(); showSheet('#settings'); });
   // закрывает СВОЙ шит (крестик/светофор/бэкдроп лежат внутри .sheet); идёт через
   // hideSheet, чтобы снять запись истории — крестик и «назад» дают одно и то же
   $$('[data-close]').forEach(el => el.addEventListener('click', () => {
@@ -2075,18 +1970,13 @@ function wireUI() {
   $('#venueClear').addEventListener('click', () => filterGroupBulk('venue', false));
   $('#filterVenueSearch').addEventListener('input', renderFilterChips);
 
-  // notifications
-  $('#btnEnableNotif').addEventListener('click', requestNotifications);
+  // напоминания в календаре: тумблер (класть ли VALARM) + «за сколько минут»
+  $('#toggleCalAlarm').addEventListener('click', toggleCalAlarm);
   $('#leadSelect').addEventListener('change', (e) => {
     state.lead = parseInt(e.target.value, 10);
     localStorage.setItem(LS.lead, state.lead);
-    // reschedule
-    localStorage.removeItem(LS.notified);
-    if (notifGranted()) {
-      // cancel & reschedule triggers
-      state.favs.forEach(async id => { await cancelNotification(id); scheduleNotification(id); });
-    }
-    toast(`> напомним за ${state.lead} мин`);
+    // значение идёт в TRIGGER VALARM при следующей выгрузке в календарь
+    toast(`> напоминание за ${state.lead} мин`);
     if (state.view === 'favorites') render();
   });
 
@@ -2193,7 +2083,6 @@ function initSim() {
 function setSim(anchor) {
   state.sim = { anchor, setAt: Date.now() };
   sessionStorage.setItem(SIM_KEY, JSON.stringify(state.sim));
-  simNotified = new Set(); // симуляционный дедуп с чистого листа
   state.day = pickDefaultDay();
   updateSimBar();
   render();
@@ -2201,7 +2090,6 @@ function setSim(anchor) {
 
 function clearSim() {
   state.sim = null;
-  simNotified = new Set();
   sessionStorage.removeItem(SIM_KEY);
   // убрать ?now= из адреса, чтобы перезагрузка не вернула симуляцию
   try {
@@ -2226,7 +2114,6 @@ function updateSimBar() {
 /* ---------- ticking ---------- */
 function tick() {
   updateSimBar(); // заодно пишет #brandClock
-  pollNotifications();
   if (state.view === 'now') render(); // keep "now" fresh
 }
 
@@ -2244,6 +2131,7 @@ async function boot() {
   loadPins();
   state.lead = parseInt(localStorage.getItem(LS.lead) || '15', 10);
   const leadSel = $('#leadSelect'); if (leadSel) leadSel.value = String(state.lead);
+  state.calAlarm = localStorage.getItem(LS.calAlarm) !== '0'; // дефолт ВКЛ
   initSim();
   try {
     state.program = decorateProgram(await loadProgram());
@@ -2264,7 +2152,7 @@ async function boot() {
   tick();
   setInterval(tick, 30000);
   registerSW();
-  updateNotifStatus();
+  updateCalAlarmUI();
   wireGeoBatteryGuard(); // фон/экран погас → гасим GPS-watch (батарея в поле = ориентир)
   handleIncomingPin(); // открыли по чужой #pin=-ссылке — предложить добавить
   handleImportHash();  // гайд «связь на поляне» ведёт на форму импорта меток

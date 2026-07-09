@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline and handles notification taps. */
-const CACHE = 'insomnia-2026-v75';
+const CACHE = 'insomnia-2026-v76';
 const ASSETS = [
   './',
   'index.html',
@@ -142,14 +142,7 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if ('focus' in client) return client.focus();
-      }
-      if (self.clients.openWindow) return self.clients.openWindow('./');
-    })
-  );
-});
+// notificationclick убран: своих уведомлений приложение больше не шлёт
+// (напоминания вынесены в календарь телефона через VALARM в .ics). Тап по
+// возможному «висящему» OS-триггеру старой установки браузер обработает
+// дефолтно (сфокусирует вкладку) — отдельный хендлер не нужен.
