@@ -5,6 +5,7 @@
 
 ```bash
 node tests/e2e/offline.js       # офлайн-паранойя: установка → офлайн навсегда → 4 дня, kill×5, чистый localStorage, битая подложка
+node tests/e2e/config-offline.js # авиарежим: config.js (не прекэшируется, async из pages.yml) не должен вешать boot; зависшая сеть → холодный запуск из кэша ≤8с
 node tests/e2e/pins.js          # метки: создание/лонгтап/рядом/шаринг/диплинк/импорт/экспорт (10 сценариев)
 node tests/e2e/geo.js           # геолокация: granted / denied без диалога / unavailable→retry / карта / офлайн
 node tests/e2e/ux.js            # UX-проход: тап-таргеты, 360px, пустые состояния, контраст
