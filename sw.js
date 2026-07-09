@@ -1,5 +1,5 @@
 /* Service worker: makes the app fully offline (напоминания — через календарь, не push). */
-const CACHE = 'insomnia-2026-v76';
+const CACHE = 'insomnia-2026-v77';
 const ASSETS = [
   './',
   'index.html',

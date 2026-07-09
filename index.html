@@ -452,8 +452,10 @@
   <script src="vendor/leaflet.js" defer></script>
   <script src="vendor/leaflet.markercluster.js" defer></script>
   <script src="map.js" defer></script>
-  <!-- inject:config — при деплое через Actions CI вставляет сюда загрузку config.js
-       из секретов (см. .github/workflows/pages.yml). Локально/в тестах строки нет →
+  <!-- inject:config — при деплое через Actions CI вставляет сюда <script src="config.js"
+       ASYNC> из секретов (см. .github/workflows/pages.yml). ASYNC критично: config.js
+       НЕ прекэшируется SW (свежий токен), офлайн его запрос может зависнуть — а defer
+       держал бы app.js по порядку → «вечная загрузка». Локально/в тестах строки нет →
        window.APP_CONFIG нет → пинг «установили» молча выключен. -->
   <script src="app.js" defer></script>
 </body>
