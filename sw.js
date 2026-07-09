@@ -1,4 +1,4 @@
-/* Service worker: makes the app fully offline and handles notification taps. */
+/* Service worker: makes the app fully offline (напоминания — через календарь, не push). */
 const CACHE = 'insomnia-2026-v76';
 const ASSETS = [
   './',

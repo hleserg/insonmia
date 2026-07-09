@@ -109,15 +109,20 @@ Two independent halves share one contract — `data/program.json`:
   rewriting when content (minus meta) is unchanged — no cron commit churn.
   The app shows a quiet «Расписание обновлено» toast when the version changes.
 
-### Notifications & install gate
+### Reminders (calendar) & install gate
 
-- Reminder delivery is two-tier: OS-scheduled **Notification Triggers**
-  (`swReg.showNotification({showTrigger})`) when the browser supports them,
-  else the in-app poller `pollNotifications()` (runs on `tick()` every 30s
-  while the app is open). Dedup ids live in localStorage `insomnia.notified`;
-  during time simulation the poller uses an **in-memory** set instead, so sim
-  never poisons real reminders. OS triggers always schedule against real
-  event epochs regardless of simulation. Lead time 5–60 min (`leadSelect`).
+- Reminders are delivered **via the phone calendar (VALARM in the exported
+  `.ics`)**, NOT push/in-app Notification. Own push/in-app notifications were
+  removed — on our audience (Huawei без GMS, старый Android, iOS без standalone)
+  they silently never arrived. The settings block is a **calendar-alarm**
+  control: the toggle (`#toggleCalAlarm` → `state.calAlarm`, persisted
+  `insomnia.calAlarm`, default ON) gates whether `exportICS` adds a VALARM;
+  `#leadSelect` (`state.lead`, 5–60 min, `insomnia.leadMinutes`) becomes the
+  VALARM `TRIGGER:-PTnM`. `exportICS`: `withAlarm = 'withAlarm' in opts ?
+  opts.withAlarm : calAlarmOn()` — single-event/favourites respect the flag;
+  full-program export passes `withAlarm:false` explicitly (never a VALARM,
+  700+ events). The `.ics` VALARM logic lives in `core.js icsVevent`. No
+  `Notification`/`showNotification`/`notificationclick` anywhere anymore.
 - **Install gate**: in a browser tab (`!isStandalone()`), tapping ⭐ does NOT
   save — it opens the `#installGate` modal (deliberately on every tap, no
   "don't show again"), reusing the `beforeinstallprompt` deferred event or
