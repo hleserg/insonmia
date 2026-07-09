@@ -39,9 +39,13 @@ jobs:
             # это осознанно: мусорный бот, при абьюзе просто пересоздаётся)
             printf 'window.APP_CONFIG = { tg: { token: "%s", chat: "%s" } };\n' \
               "$TG_BOT_TOKEN" "$TG_CHAT_ID" > config.js
-            # вставляем загрузку config.js ПЕРЕД app.js (порядок: APP_CONFIG готов
-            # до исполнения app.js). Чистый checkout — вставка ровно одна.
-            sed -i 's#<script src="app.js" defer></script>#<script src="config.js" defer></script>\n  <script src="app.js" defer></script>#' index.html
+            # config.js подключаем ASYNC, НЕ defer. config.js НЕ прекэшируется SW
+            # (свежий токен, см. #61) → офлайн его сетевой запрос МОЖЕТ ЗАВИСНУТЬ
+            # (wifi без интернета в поле). defer исполняет скрипты ПО ПОРЯДКУ, и
+            # зависший config.js навсегда блокировал бы app.js → «вечная загрузка».
+            # async ни от чего не зависит и app.js не держит; APP_CONFIG нужен лишь
+            # к appinstalled (жест юзера, сильно позже) — порядок не важен.
+            sed -i 's#<script src="app.js" defer></script>#<script src="config.js" async></script>\n  <script src="app.js" defer></script>#' index.html
             echo "config.js собран и подключён (пинг включён)"
           else
             echo "секреты TG_* не заданы — config.js не создаётся, пинг выключен"

@@ -2133,8 +2133,15 @@ async function boot() {
   const leadSel = $('#leadSelect'); if (leadSel) leadSel.value = String(state.lead);
   state.calAlarm = localStorage.getItem(LS.calAlarm) !== '0'; // дефолт ВКЛ
   initSim();
+  // Три загрузки СТАРТУЮТ параллельно: офлайн с «зависшей» сетью (wifi без
+  // интернета в поле) каждый data-fetch ждёт таймаут SW (~3.5с). Последовательно
+  // это 3×3.5с≈10с «загрузки»; параллельно — один таймаут ≈3.5с. loadGeo/
+  // loadBasemap не зависят от программы, потому их можно запустить сразу.
+  const progP = loadProgram();
+  const geoP = loadGeo();
+  const baseP = loadBasemap();
   try {
-    state.program = decorateProgram(await loadProgram());
+    state.program = decorateProgram(await progP);
   } catch (err) {
     $('#content').innerHTML = '<div class="empty"><span class="big">⚠️</span>Не удалось загрузить программу.</div>';
     return;
@@ -2144,8 +2151,8 @@ async function boot() {
   restoreFilterState();          // фильтры/день/радиус/поиск переживают рефреш (sessionStorage)
   if (!state.day) state.day = pickDefaultDay(); // день не восстановили → дефолт
   initMockGeo();
-  GEO.data = await loadGeo();
-  GEO.basemap = await loadBasemap();
+  GEO.data = await geoP;
+  GEO.basemap = await baseP;
   wireUI();
   updateSimBar();
   render();
