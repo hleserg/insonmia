@@ -157,6 +157,52 @@ const STANDALONE = () => {
   console.log('✓ 9. длинный слитный запрос не рвёт ширину (360px)');
   await page.click('#btnSearchClose');
 
+  // --- 12. РЕГРЕСС (баг с поля): активный поиск на «Программе» НЕ калечит вкладку.
+  //  Остаточный запрос делал полосу дней disabled (серой) и ранним return прятал
+  //  кнопку «вся программа в календарь» → «дни сломались, выгрузка пропала».
+  //  Теперь: кнопка выгрузки на месте, дни кликабельны (без активного — выдача по
+  //  всем дням), тап по дню = выход из поиска на этот день.
+  await page.click('.tab[data-view="schedule"]');
+  await page.waitForTimeout(200);
+  // сценарий 6 снял все возрасты в воронке — вернём чистое состояние (иначе поиск пуст)
+  await page.evaluate(() => { resetFiltersToAll(); render(); });
+  await page.waitForTimeout(200);
+  const schedBase = await page.evaluate(() => ({
+    exp: !!document.querySelector('#btnProgramExport'),
+    disabled: [...document.querySelectorAll('#dayStrip .day-btn')].filter(b => b.disabled).length,
+  }));
+  assert.ok(schedBase.exp, '12: без поиска кнопка «вся программа» видна');
+  assert.equal(schedBase.disabled, 0, '12: без поиска дни кликабельны');
+  await page.click('#btnSearch');
+  await type(distinct);
+  const schedSearch = await page.evaluate(() => {
+    const days = [...document.querySelectorAll('#dayStrip .day-btn')];
+    return {
+      exp: !!document.querySelector('#btnProgramExport'),
+      disabled: days.filter(b => b.disabled).length,
+      active: days.filter(b => b.classList.contains('active')).length,
+      groups: document.querySelectorAll('.time-group-label').length,
+    };
+  });
+  assert.ok(schedSearch.exp, '12: ПРИ ПОИСКЕ кнопка «вся программа» ОСТАЁТСЯ (не прячется)');
+  assert.equal(schedSearch.disabled, 0, '12: ПРИ ПОИСКЕ дни НЕ disabled (полоса не «мёртвая»)');
+  assert.equal(schedSearch.active, 0, '12: при поиске ни один день не подсвечен (выдача по всем дням)');
+  assert.ok(schedSearch.groups >= 1, '12: выдача поиска сгруппирована по дню (есть заголовок даты)');
+  // тап по дню во время поиска → выходим из поиска на ЭТОТ день
+  await page.evaluate(() => document.querySelectorAll('#dayStrip .day-btn')[2].click());
+  await page.waitForTimeout(300);
+  const afterDayTap = await page.evaluate(() => ({
+    q: state.query,
+    barHidden: document.querySelector('#searchBar').classList.contains('hidden'),
+    active: (document.querySelector('#dayStrip .day-btn.active') || {}).textContent || '',
+    exp: !!document.querySelector('#btnProgramExport'),
+  }));
+  assert.equal(afterDayTap.q, '', '12: тап по дню при поиске сбросил запрос');
+  assert.ok(afterDayTap.barHidden, '12: строка поиска скрылась после тапа по дню');
+  assert.ok(afterDayTap.active, '12: выбранный день подсвечен: ' + afterDayTap.active);
+  assert.ok(afterDayTap.exp, '12: кнопка «вся программа» на месте после выхода из поиска');
+  console.log('✓ 12. поиск не калечит «Программу»: дни живые, выгрузка на месте, тап по дню = выход из поиска');
+
   // --- 8. Офлайн: ни одного внешнего запроса за весь сценарий
   assert.equal(external.length, 0, 'внешних запросов не было (офлайн): ' + JSON.stringify(external.slice(0, 3)));
   console.log('✓ 8. всё офлайн — ноль внешних запросов');
