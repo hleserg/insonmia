@@ -146,6 +146,35 @@ const SHARE_MOCK = () => {
   await page.click('#sheet .icon-btn[data-close]');
   await page.waitForTimeout(200);
 
+  // --- 2c. Тумблер «напоминание в календаре»: ВЫКЛ → .ics БЕЗ VALARM; вернуть ВКЛ ---
+  await page.click('#btnSettings');
+  await page.waitForTimeout(200);
+  assert.match(await page.textContent('#toggleCalAlarm'), /вкл/i, '2c: по умолчанию тумблер ВКЛ');
+  await page.click('#toggleCalAlarm'); // → выкл
+  await page.waitForTimeout(100);
+  assert.match(await page.textContent('#toggleCalAlarm'), /выкл/i, '2c: после клика тумблер ВЫКЛ');
+  await page.click('#settings .icon-btn[data-close]');
+  await page.waitForTimeout(150);
+  await page.click('.event-main >> nth=0');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { window.__share = null; });
+  await page.click('#detailCal');
+  await page.waitForTimeout(150);
+  const alarmOff = await page.evaluate(() => window.__share);
+  assert.ok(alarmOff && !alarmOff.text.includes('BEGIN:VALARM'), '2c: тумблер ВЫКЛ → .ics БЕЗ VALARM: ' + (alarmOff && (alarmOff.text.match(/BEGIN:VALARM/) || 'нет')));
+  assert.ok(alarmOff.text.includes('BEGIN:VEVENT'), '2c: событие всё равно добавляется в календарь (VEVENT есть)');
+  console.log('✓ 2c. тумблер ВЫКЛ → .ics без VALARM (событие без напоминания)');
+  await page.click('#sheet .icon-btn[data-close]');
+  await page.waitForTimeout(200);
+  // вернуть ВКЛ — последующие сценарии (избранное) ждут VALARM
+  await page.click('#btnSettings');
+  await page.waitForTimeout(150);
+  await page.click('#toggleCalAlarm'); // → снова вкл
+  await page.waitForTimeout(100);
+  assert.match(await page.textContent('#toggleCalAlarm'), /вкл/i, '2c: тумблер вернулся в ВКЛ');
+  await page.click('#settings .icon-btn[data-close]');
+  await page.waitForTimeout(150);
+
   // --- 3. Избранное: «весь маршрут» — один файл с 2 VEVENT ---
   await page.click('.tab[data-view="favorites"]');
   await page.waitForTimeout(400);
