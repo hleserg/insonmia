@@ -1101,8 +1101,12 @@ function openProgramExport(mode) {
   $('#programExportFilterNote').classList.toggle('hidden', !active);
   $('#programExportFiltered').classList.toggle('hidden', !active);
   if (active) {
-    $('#programExportFilterNote').textContent =
-      `Сейчас включён фильтр, показано ${filtered.length} из ${all.length}. Что выгрузить?`;
+    // при активном ПОИСКЕ «показано N» врало бы: на экране видно меньше (поиск ∧
+    // фильтр), а выгрузка «отфильтрованных» идёт по фильтру ценз/локация (все дни,
+    // поиск на неё не влияет). Поэтому явно описываем ФИЛЬТР, не «что на экране».
+    $('#programExportFilterNote').textContent = state.query
+      ? `Фильтр (ценз/локация): ${filtered.length} из ${all.length}. Поиск на выгрузку не влияет. Что выгрузить?`
+      : `Сейчас включён фильтр, показано ${filtered.length} из ${all.length}. Что выгрузить?`;
     $('#programExportFiltered').textContent = `Только отфильтрованные (${filtered.length})`;
     $('#programExportGo').textContent = `Выгрузить всё (${all.length})`;
   } else {
