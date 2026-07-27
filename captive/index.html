@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Бессонница — расписание</title>
+<meta name="theme-color" content="#14121f" />
+<meta http-equiv="Cache-Control" content="no-store" />
+
+<!-- ВАЖНО: ни одного внешнего запроса. На каптиве интернета нет:
+     ни Google Fonts, ни CDN, ни аналитики. Всё внутри файла.
+     Звук тоже: он синтезируется на месте через WebAudio, качать нечего. -->
+
+<style>
+:root{
+  /* Ночь на поляне, а не «чёрный терминал»: глубокий фиолет + тёплая лампа */
+  --night:    #14121f;
+  --night-2:  #1e1a30;
+  --ink:      #0a0812;
+  --amber:    #ffb347;
+  --amber-hot:#ffe0a8;
+  --moth:     #b8a9d9;
+  --moth-dk:  #8d7cb5;
+  --haze:     #cfc7e8;
+  --haze-dim: #7a7192;
+
+  --tap: 56px; /* минимальная зона тапа */
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+
+html,body{ height:100%; }
+
+body{
+  background:
+    radial-gradient(120% 80% at 50% 0%, #241f3d 0%, var(--night) 55%, var(--ink) 100%);
+  color:var(--haze);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing:antialiased;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:space-between;
+  min-height:100dvh;
+  padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  overflow:hidden;
+  text-align:center;
+  /* пока спит — темнее; проснулся — светлеет */
+  transition: filter .9s ease;
+  filter: brightness(.72) saturate(.7);
+}
+body.awake{ filter:none; }
+
+/* ── Тумблер звука ──────────────────────────────────── */
+
+.snd{
+  position:fixed; top:max(6px, env(safe-area-inset-top)); right:6px; z-index:5;
+  appearance:none; border:0; background:none; cursor:pointer;
+  width:46px; height:46px; border-radius:50%;
+  display:grid; place-items:center;
+  color:var(--haze-dim); opacity:.55;
+  -webkit-tap-highlight-color:transparent;
+}
+.snd:active{ background:rgba(184,169,217,.08); }
+.snd:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
+.snd svg{ width:22px; height:22px; }
+.snd .slash{ opacity:0; }
+.snd[aria-pressed="true"] .slash{ opacity:1; }
+
+/* ── Лампа = кнопка ─────────────────────────────────── */
+
+.lamp{
+  appearance:none; border:0; background:none; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  padding:8px 8px 0; color:inherit; font:inherit;
+  min-height:var(--tap);
+}
+.lamp:focus-visible{ outline:2px solid var(--amber); outline-offset:8px; border-radius:12px; }
+
+.cord{ width:2px; height:clamp(28px,7vh,64px); background:linear-gradient(var(--haze-dim), var(--moth-dk)); opacity:.5; }
+
+.bulb-wrap{ position:relative; width:96px; height:96px; display:grid; place-items:center; }
+.glow{
+  position:absolute; inset:-70%;
+  background:radial-gradient(circle, rgba(255,179,71,.55) 0%, rgba(255,179,71,.14) 38%, transparent 68%);
+  opacity:.25; transition:opacity .8s ease;
+  pointer-events:none;
+}
+body.awake .glow{ opacity:1; animation:flicker 5.5s ease-in-out infinite; }
+
+@keyframes flicker{
+  0%,100%{ opacity:1 }
+  47%{ opacity:.86 }
+  49%{ opacity:1 }
+  72%{ opacity:.92 }
+}
+
+.bulb{ width:64px; height:64px; position:relative; z-index:1; }
+
+.label{
+  font-size:clamp(15px,4.4vw,18px);
+  font-weight:700;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--amber-hot);
+  opacity:.35;
+  transition:opacity .6s ease;
+}
+body.awake .label{ opacity:1; }
+
+.lamp:active .bulb-wrap{ transform:scale(.94); }
+.bulb-wrap{ transition:transform .12s ease; }
+
+/* пульс-подсказка, когда персонаж ноет */
+body.awake .lamp.beckon .bulb-wrap{ animation:beckon 1.1s ease-in-out 3; }
+@keyframes beckon{
+  0%,100%{ transform:scale(1) }
+  50%    { transform:scale(1.11) }
+}
+
+/* ── Сцена с персонажем ─────────────────────────────── */
+
+.stage{
+  position:relative;
+  display:flex; flex-direction:column; align-items:center;
+  width:100%; max-width:380px;
+}
+
+.bubble{
+  position:relative;
+  background:var(--night-2);
+  border:1px solid rgba(184,169,217,.22);
+  border-radius:16px;
+  padding:14px 18px;
+  font-size:clamp(15px,4.2vw,17px);
+  line-height:1.45;
+  max-width:320px;
+  min-height:3.4em;
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; transform:translateY(6px);
+  transition:opacity .35s ease, transform .35s ease;
+}
+.bubble.show{ opacity:1; transform:none; }
+.bubble::after{
+  content:''; position:absolute; bottom:-8px; left:50%; margin-left:-8px;
+  width:14px; height:14px; background:var(--night-2);
+  border-right:1px solid rgba(184,169,217,.22);
+  border-bottom:1px solid rgba(184,169,217,.22);
+  transform:rotate(45deg);
+}
+
+.hint{
+  font-size:14px; color:var(--haze-dim); letter-spacing:.04em;
+  animation:pulse 2.6s ease-in-out infinite;
+}
+@keyframes pulse{ 0%,100%{opacity:.45} 50%{opacity:.9} }
+
+.moth{ width:min(280px,74vw); height:auto; margin-top:-4px; }
+
+/* дыхание */
+.body-g{ transform-origin:100px 150px; animation:breathe 3.6s ease-in-out infinite; }
+@keyframes breathe{ 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.035)} }
+
+/* моргание — только когда проснулся */
+.lid{ transform-origin:center top; transform:scaleY(1); }
+body.awake .lid{ animation:blink 5.4s ease-in-out infinite; }
+@keyframes blink{ 0%,94%,100%{transform:scaleY(0)} 97%{transform:scaleY(1)} }
+
+.eye-open{ opacity:0; }
+.eye-shut{ opacity:1; }
+body.awake .eye-open{ opacity:1; }
+body.awake .eye-shut{ opacity:0; }
+
+/* храп */
+.zzz text{ opacity:0; animation:zzz 3.4s ease-out infinite; }
+.zzz text:nth-child(2){ animation-delay:.9s; }
+.zzz text:nth-child(3){ animation-delay:1.8s; }
+body.awake .zzz{ display:none; }
+@keyframes zzz{
+  0%  { opacity:0; transform:translate(0,0) scale(.7) }
+  22% { opacity:.9 }
+  100%{ opacity:0; transform:translate(16px,-34px) scale(1.15) }
+}
+
+/* челюсть — открывается, пока говорит */
+.jaw{ transform-origin:100px 104px; transform:scaleY(.35); }
+body.talking .jaw{ animation:talk .26s steps(2,end) infinite; }
+@keyframes talk{ 0%{transform:scaleY(.3)} 100%{transform:scaleY(1.25)} }
+
+/* усики */
+.antenna{ transform-origin:100px 66px; }
+body.awake .antenna{ animation:sway 4.2s ease-in-out infinite; }
+@keyframes sway{ 0%,100%{transform:rotate(-2.5deg)} 50%{transform:rotate(2.5deg)} }
+
+/* крылья: спят сложенные, просыпается — подрагивают */
+.wings{ transform-origin:100px 140px; opacity:.55; }
+body.awake .wings{ opacity:.8; animation:flutter 2.9s ease-in-out infinite; }
+@keyframes flutter{ 0%,100%{transform:scaleX(1)} 50%{transform:scaleX(1.06)} }
+
+/* рука: во сне лежит, проснулся — тычет вверх в лампу */
+.arm{ transform-origin:132px 148px; transform:rotate(52deg); transition:transform .5s cubic-bezier(.34,1.56,.64,1); }
+body.awake .arm{ transform:rotate(-6deg); }
+body.awake .arm.jab{ animation:jab .42s ease-in-out 3; }
+@keyframes jab{ 0%,100%{transform:rotate(-6deg)} 50%{transform:rotate(-19deg)} }
+
+/* ── Низ: адрес и подсказки ─────────────────────────── */
+
+.foot{ display:flex; flex-direction:column; align-items:center; gap:10px; width:100%; max-width:380px; }
+
+.note{ font-size:13px; line-height:1.5; color:var(--haze-dim); max-width:300px; }
+
+.url{
+  appearance:none; border:1px dashed rgba(184,169,217,.3); background:none;
+  color:var(--haze); font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:13px; padding:11px 14px; border-radius:10px; cursor:pointer;
+  min-height:var(--tap); width:100%; word-break:break-all;
+}
+.url:active{ background:rgba(184,169,217,.07); }
+
+.mute{ font-size:12px; color:var(--haze-dim); opacity:.65; }
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation:none !important; transition-duration:.01ms !important; }
+  .arm{ transform:rotate(-6deg); }
+}
+</style>
+</head>
+<body>
+
+  <!-- Звук вкл/выкл. aria-pressed=true значит «выключен» (перечёркнут) -->
+  <button class="snd" id="snd" type="button" aria-pressed="false" aria-label="Выключить звук" title="Звук">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/>
+      <path class="wave" d="M16.5 8.8a4.5 4.5 0 0 1 0 6.4"/>
+      <path class="slash" d="M3 3l18 18"/>
+    </svg>
+  </button>
+
+  <!-- Лампа-кнопка -->
+  <button class="lamp" id="lamp" type="button">
+    <span class="cord" aria-hidden="true"></span>
+    <span class="bulb-wrap">
+      <span class="glow" aria-hidden="true"></span>
+      <svg class="bulb" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <radialGradient id="gb" cx="42%" cy="34%">
+            <stop offset="0%"  stop-color="#fff6e0"/>
+            <stop offset="55%" stop-color="var(--amber-hot)"/>
+            <stop offset="100%" stop-color="var(--amber)"/>
+          </radialGradient>
+        </defs>
+        <path d="M32 6c-10 0-18 7.6-18 17 0 6.2 3.3 10.4 6 13.6 1.8 2.2 2.8 3.6 2.8 5.9h18.4c0-2.3 1-3.7 2.8-5.9 2.7-3.2 6-7.4 6-13.6 0-9.4-8-17-18-17z"
+              fill="url(#gb)"/>
+        <rect x="22" y="44"   width="20" height="4" rx="2" fill="#6e6486"/>
+        <rect x="23" y="49.5" width="18" height="4" rx="2" fill="#6e6486"/>
+        <rect x="25" y="55"   width="14" height="4" rx="2" fill="#57506b"/>
+      </svg>
+    </span>
+    <span class="label" id="label">Открыть расписание</span>
+  </button>
+
+  <!-- Персонаж -->
+  <div class="stage">
+    <div class="bubble" id="bubble" aria-live="polite"></div>
+    <p class="hint" id="hint">тапни, чтобы разбудить</p>
+
+    <svg class="moth" viewBox="0 0 200 210" role="img" aria-label="Сонный мотылёк">
+      <!-- храп -->
+      <g class="zzz" fill="var(--haze-dim)" font-family="system-ui" font-weight="700">
+        <text x="140" y="70" font-size="15">z</text>
+        <text x="146" y="62" font-size="19">z</text>
+        <text x="152" y="54" font-size="23">z</text>
+      </g>
+
+      <g class="body-g">
+        <!-- крылья -->
+        <g class="wings" fill="var(--moth-dk)">
+          <ellipse cx="66"  cy="138" rx="34" ry="26" transform="rotate(-18 66 138)"/>
+          <ellipse cx="134" cy="138" rx="34" ry="26" transform="rotate(18 134 138)"/>
+        </g>
+
+        <!-- тело -->
+        <ellipse cx="100" cy="150" rx="30" ry="34" fill="var(--moth)"/>
+
+        <!-- рука -->
+        <g class="arm" id="arm">
+          <path d="M132 148 L156 128" stroke="var(--moth)" stroke-width="9" stroke-linecap="round" fill="none"/>
+          <circle cx="158" cy="126" r="7" fill="var(--moth)"/>
+        </g>
+
+        <!-- усики -->
+        <g class="antenna" stroke="var(--moth-dk)" stroke-width="3.5" stroke-linecap="round" fill="none">
+          <path d="M88 68 C 80 50, 70 46, 64 48"/>
+          <path d="M112 68 C 120 50, 130 46, 136 48"/>
+        </g>
+
+        <!-- голова -->
+        <circle cx="100" cy="92" r="34" fill="var(--moth)"/>
+
+        <!-- закрытые глаза (спит) -->
+        <g class="eye-shut" stroke="var(--ink)" stroke-width="3.2" stroke-linecap="round" fill="none">
+          <path d="M80 88 q 8 7 16 0"/>
+          <path d="M104 88 q 8 7 16 0"/>
+        </g>
+
+        <!-- открытые глаза -->
+        <g class="eye-open">
+          <circle cx="88"  cy="87" r="6.5" fill="var(--ink)"/>
+          <circle cx="112" cy="87" r="6.5" fill="var(--ink)"/>
+          <circle cx="90"  cy="85" r="2.2" fill="#fff" opacity=".85"/>
+          <circle cx="114" cy="85" r="2.2" fill="#fff" opacity=".85"/>
+          <g fill="var(--moth)">
+            <rect class="lid" x="81"  y="79" width="14" height="15" rx="2"/>
+            <rect class="lid" x="105" y="79" width="14" height="15" rx="2"/>
+          </g>
+        </g>
+
+        <!-- рот -->
+        <ellipse class="jaw" cx="100" cy="107" rx="9" ry="6" fill="var(--ink)"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Низ -->
+  <div class="foot">
+    <p class="note" id="note">Откроется в браузере — так расписание сохранится офлайн и будет работать без сети.</p>
+    <button class="url" id="url" type="button"></button>
+    <p class="mute" id="mute"></p>
+  </div>
+
+<script>
+/* ═══ НАСТРОЙКИ ═══════════════════════════════════════════════
+   Правь только этот блок. */
+const CFG = {
+  url: 'https://hleserg.github.io/insonmia/',
+
+  // Готовые озвучки. Пока их нет — голос синтезируется на месте (см. Snd.speak).
+  // Запишете живые реплики — киньте mp3 в captive/audio/ и поставьте files:true.
+  // Формат: mp3, моно, 48 кбит/с.
+  files: false,
+  audio: 'audio/',
+
+  // Резервная озвучка синтезом браузера (SpeechSynthesis).
+  // Держим выключенной: на разных телефонах голоса разные и звучит криво,
+  // а в каптив-вебвью API часто просто нет. Писк мотылька надёжнее.
+  tts: false,
+
+  // Реплики. file — имя mp3 без папки (нужно только при files:true).
+  wake: [
+    { t: 'А?! Я не спал. Я проверял глаза изнутри.',                    file: 'wake1.mp3', hold: 2600 },
+    { t: 'Так. Ты на Бессоннице. Спать тут не положено — это в названии.', file: 'wake2.mp3', hold: 3400 },
+    { t: 'Держи расписание. Жми на лампу.',                              file: 'wake3.mp3', hold: 2600 },
+  ],
+
+  // Нытьё. at — секунды после того, как персонаж договорил.
+  nags: [
+    { at: 9,  t: 'Ну? Лампа вот. Светится же.',                        file: 'nag1.mp3' },
+    { at: 22, t: 'Я могу так всю ночь. Буквально. У меня в названии.', file: 'nag2.mp3' },
+    { at: 40, t: 'Ладно, не мешаю. Лампа никуда не денется.',          file: 'nag3.mp3' },
+  ],
+};
+/* ═══════════════════════════════════════════════════════════ */
+
+const $ = (id) => document.getElementById(id);
+const body = document.body;
+const bubble = $('bubble'), lamp = $('lamp'), arm = $('arm');
+let awake = false, timers = [], talkTimer = 0;
+
+$('url').textContent = CFG.url.replace(/^https?:\/\//, '');
+
+/* ── Звук ──────────────────────────────────────────────────────
+   Всё синтезируется на месте: на каптиве качать неоткуда, а mp3
+   с озвучкой пока нет. Голос — «писк» в духе Animal Crossing:
+   по блипу на слог, с вибрато. Плюс щелчок лампы, её гул и звоночек.
+
+   Автоплей запрещён до первого тапа — поэтому AudioContext
+   создаётся внутри wake(), а wake() зовётся из pointerdown. */
+const Snd = (() => {
+  let ctx = null, master = null, humGain = null, noiseBuf = null;
+  let muted = false;
+  try { muted = localStorage.getItem('insomnia.captive.muted') === '1'; } catch (e) {}
+
+  function ensure(){
+    if (ctx) return ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { ctx = new AC(); } catch (e) { return null; }
+    master = ctx.createGain();
+    master.gain.value = muted ? 0 : 0.9;
+    master.connect(ctx.destination);
+    return ctx;
+  }
+
+  // iOS/Android умеют отдать контекст в состоянии suspended — будим его
+  function resume(){
+    if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+  }
+
+  function noise(){
+    if (noiseBuf) return noiseBuf;
+    const n = Math.floor(ctx.sampleRate * 0.5);
+    noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return noiseBuf;
+  }
+
+  function blip(t, freq, dur, o){
+    o = o || {};
+    const vol = o.vol == null ? 0.16 : o.vol;
+    const osc = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+    osc.type = o.type || 'triangle';
+    osc.frequency.setValueAtTime(freq, t);
+    if (o.glide && o.glide !== 1) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(50, freq * o.glide), t + dur);
+    }
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(Math.min(8000, freq * 6), t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(lp); lp.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  }
+
+  /* Голос: слог = гласная. Возвращает длительность в мс,
+     чтобы челюсть перестала жевать ровно тогда, когда он замолчал. */
+  const VOWELS = /[аеёиоуыэюяАЕЁИОУЫЭЮЯaeiouyAEIOUY]/g;
+  function speak(text){
+    const c = ensure();
+    if (!c) return 0;
+    resume();
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const base = 430;          // мотылёк мелкий — голос высокий
+    const step = 0.098;        // ~10 слогов в секунду
+    let t = c.currentTime + 0.03, i = 0;
+
+    words.forEach((w, wi) => {
+      const syl = (w.match(VOWELS) || ['x']).length;
+      const last = wi === words.length - 1;
+      for (let s = 0; s < syl; s++) {
+        const tail = last && s === syl - 1;
+        const q = /[?]$/.test(w);
+        // вибрато + лёгкий разброс, чтобы речь не звучала метрономом
+        const wobble = Math.sin(i * 1.7) * 34 + (Math.random() * 40 - 20);
+        const f = base + wobble + (tail ? (q ? 130 : -90) : 0);
+        blip(t, f, 0.075, { vol: 0.13, glide: tail ? (q ? 1.18 : 0.82) : 1 });
+        t += step; i++;
+      }
+      t += 0.045;                              // пауза между словами
+      if (/[,—:;]$/.test(w)) t += 0.12;        // запятая — вдох
+      if (/[.!?…]$/.test(w)) t += 0.20;        // точка — пауза подлиннее
+    });
+    return Math.round((t - c.currentTime) * 1000);
+  }
+
+  function clack(){                            // щелчок выключателя
+    const c = ensure(); if (!c) return; resume();
+    const t = c.currentTime;
+    const src = c.createBufferSource(); src.buffer = noise();
+    const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    src.connect(hp); hp.connect(g); g.connect(master);
+    src.start(t); src.stop(t + 0.06);
+    blip(t, 180, 0.06, { type: 'square', vol: 0.07, glide: 0.5 });
+  }
+
+  function yawn(){                             // зевок: шум через «поющий» фильтр
+    const c = ensure(); if (!c) return; resume();
+    const t = c.currentTime + 0.05;
+    const src = c.createBufferSource(); src.buffer = noise(); src.loop = true;
+    // Q пониже: узкий фильтр съедал почти всю энергию шума и зевок не было слышно
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3;
+    bp.frequency.setValueAtTime(320, t);
+    bp.frequency.exponentialRampToValueAtTime(1100, t + 0.45);
+    bp.frequency.exponentialRampToValueAtTime(260, t + 1.0);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.35, t + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.05);
+    src.connect(bp); bp.connect(g); g.connect(master);
+    src.start(t); src.stop(t + 1.1);
+  }
+
+  function chime(){                            // звоночек на нытьё
+    const c = ensure(); if (!c) return; resume();
+    const t = c.currentTime;
+    blip(t,        988, 0.50, { type: 'sine', vol: 0.09 });
+    blip(t + 0.11, 1319, 0.60, { type: 'sine', vol: 0.07 });
+  }
+
+  function lampOn(){                           // тёплый гул горящей лампы
+    const c = ensure(); if (!c || humGain) return; resume();
+    humGain = c.createGain(); humGain.gain.value = 0.0001;
+    humGain.connect(master);
+    const o1 = c.createOscillator(); o1.type = 'sine'; o1.frequency.value = 100;
+    const o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = 200.7;
+    const g2 = c.createGain(); g2.gain.value = 0.35;
+    o1.connect(humGain); o2.connect(g2); g2.connect(humGain);
+    // мерцание в такт CSS-анимации лампы
+    const lfo = c.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.18;
+    const lg = c.createGain(); lg.gain.value = 0.004;
+    lfo.connect(lg); lg.connect(humGain.gain);
+    o1.start(); o2.start(); lfo.start();
+    // тихо: это фон под голосом, а не гудение трансформатора
+    humGain.gain.exponentialRampToValueAtTime(0.014, c.currentTime + 1.2);
+  }
+
+  function setMuted(v){
+    muted = !!v;
+    if (master) master.gain.value = muted ? 0 : 0.9;
+    try { localStorage.setItem('insomnia.captive.muted', muted ? '1' : '0'); } catch (e) {}
+  }
+  function isMuted(){ return muted; }
+
+  function stop(){                             // перед уходом на сайт
+    if (!ctx) return;
+    try { ctx.close(); } catch (e) {}
+    ctx = null; master = null; humGain = null; noiseBuf = null;
+  }
+
+  // Звук — украшение. Если WebAudio капризничает (старый вебвью, экономия
+  // батареи, закрытый контекст), страница обязана жить дальше: иначе
+  // исключение из wake() убивает и реплики, и переход на сайт.
+  const api = { speak, clack, yawn, chime, lampOn, setMuted, isMuted, stop, resume, ensure };
+  Object.keys(api).forEach(k => {
+    const fn = api[k];
+    api[k] = function(){ try { return fn.apply(null, arguments); } catch (e) { return 0; } };
+  });
+  return api;
+})();
+
+/* — Готовые mp3 (если появятся) ————————————————— */
+
+const cache = new Map();
+function preload(file){
+  if (!CFG.files || !file || cache.has(file)) return;
+  const a = new Audio(CFG.audio + file);
+  a.preload = 'auto';
+  a.addEventListener('error', () => cache.set(file, null), { once:true });
+  cache.set(file, a);
+}
+
+let unlocked = false;
+function unlockAudio(){
+  if (unlocked) return;
+  unlocked = true;
+  Snd.ensure(); Snd.resume();               // создаём контекст внутри жеста
+  [...CFG.wake, ...CFG.nags].forEach(p => preload(p.file));
+}
+
+/* Говорим: mp3 → если нет, писк мотылька → если и его нет, просто текст. */
+function say(line){
+  bubble.textContent = line.t;
+  bubble.classList.add('show');
+
+  const a = CFG.files ? cache.get(line.file) : null;
+  if (a && a.readyState >= 2) {
+    startTalking();
+    a.currentTime = 0;
+    a.play().then(() => { a.onended = stopTalking; }).catch(() => synth(line.t));
+    return;
+  }
+  synth(line.t);
+}
+
+function startTalking(){
+  clearTimeout(talkTimer);
+  body.classList.add('talking');
+}
+function stopTalking(){
+  clearTimeout(talkTimer);
+  body.classList.remove('talking');
+}
+
+function synth(text){
+  startTalking();
+  const guess = Math.max(1600, text.length * 78);   // если звука нет вообще
+
+  if (CFG.tts && 'speechSynthesis' in window) {
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ru-RU'; u.rate = 1.05; u.pitch = 1.25;
+      u.onend = stopTalking;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+      talkTimer = setTimeout(stopTalking, guess + 4000); // страховка: onend не всегда приходит
+      return;
+    } catch (e) {}
+  }
+
+  const ms = Snd.speak(text);
+  talkTimer = setTimeout(stopTalking, ms || guess);
+}
+
+/* — Пробуждение ————————————————————————————————— */
+
+// Тап, которым разбудили, не должен заодно уводить на сайт:
+// pointerdown приходит раньше click, и без этого флага персонаж
+// не успевал сказать ни слова.
+let swallowClick = false;
+
+function wake(){
+  if (awake) return;
+  awake = true;
+  unlockAudio();
+
+  swallowClick = true;
+  timers.push(setTimeout(() => { swallowClick = false; }, 700));
+
+  Snd.clack();
+  Snd.lampOn();
+  timers.push(setTimeout(() => Snd.yawn(), 260));
+
+  body.classList.add('awake');
+  const hint = $('hint'); if (hint) hint.remove();
+  $('mute').textContent = 'Если тихо — проверь беззвучный режим. Читать можно и так.';
+
+  let delay = 420;                    // даём зевку отзвучать
+  CFG.wake.forEach((line, i) => {
+    timers.push(setTimeout(() => {
+      say(line);
+      if (i === CFG.wake.length - 1) armNags();
+    }, delay));
+    delay += line.hold;
+  });
+
+  timers.push(setTimeout(() => {
+    arm.classList.add('jab');
+    setTimeout(() => arm.classList.remove('jab'), 1400);
+  }, delay - 900));
+}
+
+function armNags(){
+  CFG.nags.forEach(n => {
+    timers.push(setTimeout(() => {
+      if (!awake) return;
+      Snd.chime();
+      say(n);
+      lamp.classList.add('beckon');
+      arm.classList.add('jab');
+      setTimeout(() => { lamp.classList.remove('beckon'); arm.classList.remove('jab'); }, 1500);
+    }, n.at * 1000));
+  });
+  // после последнего нытья — зевает, замолкает и просто моргает
+  timers.push(setTimeout(() => {
+    bubble.classList.remove('show');
+    Snd.yawn();
+  }, (CFG.nags[CFG.nags.length-1].at + 6) * 1000));
+}
+
+/* — Уход на сайт ————————————————————————————————— */
+
+function go(){
+  timers.forEach(clearTimeout);
+  clearTimeout(talkTimer);
+  // в каптив-вебвью speechSynthesis может отсутствовать как идентификатор —
+  // `speechSynthesis?.cancel?.()` тут падал бы с ReferenceError
+  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+  Snd.stop();
+  location.href = CFG.url;
+}
+
+/* — Управление ————————————————————————————————— */
+
+// Первый тап куда угодно = будильник. Тап по лампе после — переход.
+document.addEventListener('pointerdown', () => { if (!awake) wake(); });
+
+lamp.addEventListener('click', () => {
+  if (!awake) { wake(); return; }   // если спал — сначала будим
+  if (swallowClick) return;         // это тот же тап, которым разбудили
+  go();
+});
+
+// Копирование адреса — на случай, если каптив-вебвью не пускает наружу
+$('url').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (!awake) { wake(); return; }
+  const el = e.currentTarget, was = el.textContent;
+  const done = () => {
+    el.textContent = 'скопировано — вставь в браузер';
+    setTimeout(() => { el.textContent = was; }, 1800);
+  };
+  // clipboard API живёт только в secure context, а каптив — это http://
+  try {
+    await navigator.clipboard.writeText(CFG.url);
+    done(); return;
+  } catch (err) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = CFG.url;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
+    ta.remove();
+    if (ok) { done(); return; }
+  } catch (err) {}
+  $('note').textContent = 'Набери адрес в браузере вручную: ' + CFG.url;
+});
+
+// Тумблер звука
+const sndBtn = $('snd');
+function paintSnd(){
+  const off = Snd.isMuted();
+  sndBtn.setAttribute('aria-pressed', off ? 'true' : 'false');
+  sndBtn.setAttribute('aria-label', off ? 'Включить звук' : 'Выключить звук');
+}
+paintSnd();
+sndBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  Snd.setMuted(!Snd.isMuted());
+  paintSnd();
+  if (!Snd.isMuted() && awake) Snd.chime();
+});
+// тумблер не должен будить мотылька — иначе не выключить звук заранее
+sndBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+// Клавиатура
+document.addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && !awake) { e.preventDefault(); wake(); }
+});
+</script>
+</body>
+</html>
