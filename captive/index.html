@@ -324,7 +324,7 @@ body.awake .arm.jab{ animation:jab .42s ease-in-out 3; }
 
   <!-- Низ -->
   <div class="foot">
-    <p class="note" id="note">Откроется в браузере — так расписание сохранится офлайн и будет работать без сети.</p>
+    <p class="note" id="note">Расписание раздаёт сама точка — интернет не нужен. Лучше открыть его в обычном браузере.</p>
     <button class="url" id="url" type="button"></button>
     <p class="mute" id="mute"></p>
   </div>
@@ -333,7 +333,12 @@ body.awake .arm.jab{ animation:jab .42s ease-in-out 3; }
 /* ═══ НАСТРОЙКИ ═══════════════════════════════════════════════
    Правь только этот блок. */
 const CFG = {
-  url: 'https://hleserg.github.io/insonmia/',
+  // Куда уводит лампа. Сеть на поляне автономная: интернета нет, расписание
+  // раздаёт тонкий клиент под точкой доступа.
+  //   ''                      — «оттуда же, откуда пришла заглушка»
+  //                             (сайт и каптив на одной машине — так и надо);
+  //   'http://10.0.0.2/'      — если сайт живёт отдельно от каптива.
+  url: '',
 
   // Готовые озвучки. Пока их нет — голос синтезируется на месте (см. Snd.speak).
   // Запишете живые реплики — киньте mp3 в captive/audio/ и поставьте files:true.
@@ -367,7 +372,12 @@ const body = document.body;
 const bubble = $('bubble'), lamp = $('lamp'), arm = $('arm');
 let awake = false, timers = [], talkTimer = 0;
 
-$('url').textContent = CFG.url.replace(/^https?:\/\//, '');
+// Пустой CFG.url = сайт там же, откуда пришла заглушка. Если каптив открыли
+// не по http (file://, about:), origin будет мусорным — тогда показываем
+// хотя бы честную подсказку вместо битой ссылки.
+const TARGET = CFG.url || (/^https?:$/.test(location.protocol) ? location.origin + '/' : '');
+
+$('url').textContent = TARGET ? TARGET.replace(/^https?:\/\//, '') : 'адрес не задан';
 
 /* ── Звук ──────────────────────────────────────────────────────
    Всё синтезируется на месте: на каптиве качать неоткуда, а mp3
@@ -661,7 +671,7 @@ function go(){
   // `speechSynthesis?.cancel?.()` тут падал бы с ReferenceError
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
   Snd.stop();
-  location.href = CFG.url;
+  if (TARGET) location.href = TARGET;
 }
 
 /* — Управление ————————————————————————————————— */
@@ -679,6 +689,7 @@ lamp.addEventListener('click', () => {
 $('url').addEventListener('click', async (e) => {
   e.stopPropagation();
   if (!awake) { wake(); return; }
+  if (!TARGET) return;
   const el = e.currentTarget, was = el.textContent;
   const done = () => {
     el.textContent = 'скопировано — вставь в браузер';
@@ -686,12 +697,12 @@ $('url').addEventListener('click', async (e) => {
   };
   // clipboard API живёт только в secure context, а каптив — это http://
   try {
-    await navigator.clipboard.writeText(CFG.url);
+    await navigator.clipboard.writeText(TARGET);
     done(); return;
   } catch (err) {}
   try {
     const ta = document.createElement('textarea');
-    ta.value = CFG.url;
+    ta.value = TARGET;
     ta.setAttribute('readonly', '');
     ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
     document.body.appendChild(ta);
@@ -700,7 +711,7 @@ $('url').addEventListener('click', async (e) => {
     ta.remove();
     if (ok) { done(); return; }
   } catch (err) {}
-  $('note').textContent = 'Набери адрес в браузере вручную: ' + CFG.url;
+  $('note').textContent = 'Набери адрес в браузере вручную: ' + TARGET;
 });
 
 // Тумблер звука
