@@ -169,7 +169,8 @@ them, so render code must tolerate absence). Top-level: `days[]`, `venues[]`,
 
 - Hosted as static files (GitHub Pages, relative paths — works from a subfolder).
 - Workflows: `tests.yml` (npm test on every push/PR), `update-program.yml`
-  (cron 6h: программа + geo; runs from the DEFAULT branch only),
+  (программа + geo; **dispatch-only с 28.07.2026** — фест 2026 отгремел, крон
+  `23 */6 * * *` снят; вернуть schedule к программе 2027),
   `fetch-tiles.yml` (dispatch-only; historical name — fetches the Overpass
   basemap, not tiles). The GitHub MCP tools trigger/inspect them from the
   sandbox (`actions_run_trigger`, then job logs). CI commits data back to the
