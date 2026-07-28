@@ -24,7 +24,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     # зависший сетевой запрос не должен держать concurrency-слот часами
-    # и блокировать следующие cron-запуски
+    # и блокировать следующий ручной запуск
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
