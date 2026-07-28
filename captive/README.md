@@ -74,6 +74,20 @@ python3 -m http.server 8123 --directory captive
 Проверено в Chrome: тумблер звука не будит → первый тап будит и **не**
 переходит → реплика появляется → второй тап переходит.
 
+## Пересборка боевой копии для стенда
+
+В репозитории `CFG.url` пустой — это режим локальной отладки. Боевая копия
+для стенда собирается одной командой (домен уже заведён на DuckDNS):
+
+```sh
+sed -e "s|url: '',|url: 'https://insonmia.duckdns.org/',|" \
+    -e 's|__DOMAIN__|insonmia.duckdns.org|g' \
+    captive/index.html > /e/projects/randomRouter/splash/index.html
+```
+
+Второй `sed` нужен для запасной ссылки без JS — она в разметке и держит
+токен `__DOMAIN__`.
+
 ## Куда уводит лампа
 
 `CFG.url` пустой — и это осознанно. Страница берёт `location.origin`, то есть
