@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<!-- Каптив-вебвью (CNA) бывает урезанным вплоть до отключённого JS. Класс js
+     ставится первой же строкой; всё интерактивное (лампа, тумблер звука,
+     затемнение) навешано на него. Не отработал JS — гость видит обычную
+     яркую страницу с обычной ссылкой, а не мёртвую кнопку. -->
+<script>document.documentElement.className = 'js';</script>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Бессонница — расписание</title>
@@ -45,11 +50,13 @@ body{
   padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
   overflow:hidden;
   text-align:center;
-  /* пока спит — темнее; проснулся — светлеет */
   transition: filter .9s ease;
-  filter: brightness(.72) saturate(.7);
 }
-body.awake{ filter:none; }
+/* Пока спит — темнее; проснулся — светлеет. Затемнение навешано на html.js,
+   а не на body по умолчанию: если JS не отработал, будить мотылька некому,
+   и страница обязана остаться нормально яркой сама собой. */
+html.js body{ filter: brightness(.72) saturate(.7); }
+html.js body.awake{ filter:none; }
 
 /* ── Тумблер звука ──────────────────────────────────── */
 
@@ -219,6 +226,24 @@ body.awake .arm.jab{ animation:jab .42s ease-in-out 3; }
 
 .mute{ font-size:12px; color:var(--haze-dim); opacity:.65; }
 
+/* ── Запасной вариант без JS ────────────────────────── */
+
+.nojs{ display:block; margin-top:12px; }
+html.js .nojs{ display:none; }         /* с JS ведёт лампа, ссылка не нужна */
+
+.hint, .snd, .url{ display:none; }     /* без JS всё это мертво */
+html.js .hint{ display:block; }
+html.js .snd{ display:grid; }
+html.js .url{ display:block; }
+
+.nojs a{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-height:var(--tap); padding:0 20px;
+  border:1px solid var(--amber); border-radius:10px;
+  color:var(--amber-hot); text-decoration:none;
+  font-weight:700; letter-spacing:.06em;
+}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{ animation:none !important; transition-duration:.01ms !important; }
   .arm{ transform:rotate(-6deg); }
@@ -259,6 +284,9 @@ body.awake .arm.jab{ animation:jab .42s ease-in-out 3; }
     </span>
     <span class="label" id="label">Открыть расписание</span>
   </button>
+
+  <!-- виден только если JS не отработал (см. html.no-js) -->
+  <p class="nojs"><a href="https://__DOMAIN__/">Открыть расписание →</a></p>
 
   <!-- Персонаж -->
   <div class="stage">
