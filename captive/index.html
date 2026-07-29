@@ -373,6 +373,13 @@ const CFG = {
   // captive/README.md.
   url: '',
 
+  // Каптив без демона авторизации: пока клиент не «отпущен», портал заворачивает
+  // пробы связи на заглушку, телефон считает сеть каптивной и НЕ закрывает своё
+  // каптив-окно — а в нём PWA не ставится. Перед уходом дёргаем этот адрес,
+  // чтобы портал начал отвечать пробам успехом.
+  // Пусто = шаг пропускается (локальная отладка / каптив со своей авторизацией).
+  releaseUrl: '',
+
   // Готовые озвучки. Пока их нет — голос синтезируется на месте (см. Snd.speak).
   // Запишете живые реплики — киньте mp3 в captive/audio/ и поставьте files:true.
   // Формат: mp3, моно, 48 кбит/с.
@@ -704,7 +711,23 @@ function go(){
   // `speechSynthesis?.cancel?.()` тут падал бы с ReferenceError
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
   Snd.stop();
-  if (TARGET) location.href = TARGET;
+  if (!TARGET) return;
+  release().then(() => { location.href = TARGET; });
+}
+
+/* Просим портал «отпустить» клиента, чтобы пробы связи начали проходить и
+   каптив-окно закрылось. Не ответил или адрес не задан — всё равно уходим:
+   застрять на заглушке хуже, чем открыть сайт внутри каптив-окна. */
+function release(){
+  if (!CFG.releaseUrl) return Promise.resolve();
+  return new Promise((done) => {
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; done(); };
+    setTimeout(finish, 1200);                 // портал молчит — не ждём вечно
+    try {
+      fetch(CFG.releaseUrl, { mode: 'no-cors', cache: 'no-store' }).then(finish, finish);
+    } catch (e) { finish(); }
+  });
 }
 
 /* — Управление ————————————————————————————————— */
